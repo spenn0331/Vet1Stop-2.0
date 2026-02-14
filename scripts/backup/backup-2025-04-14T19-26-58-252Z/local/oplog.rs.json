@@ -1,0 +1,275 @@
+[
+  {
+    "lsid": {
+      "id": "3024ea79-4178-421b-819a-f9f4bf46b8c2",
+      "uid": "ddqot68vLpBUPnOuqFj2cdClv/dv/vF9ZVSwknYHEsE="
+    },
+    "txnNumber": 1,
+    "op": "i",
+    "ns": "test.news",
+    "ui": "dda8e209-b262-4818-afc2-9badd0abf52e",
+    "o": {
+      "_id": "67fd5a05d79f1f33f4c730a7",
+      "title": "DOD civilians get extension of shopping benefit in 16 commissaries",
+      "description": "DOD civilians will be able to shop in these 16 commissaries through Dec. 31.",
+      "link": "https://www.militarytimes.com/pay-benefits/mil-money/2025/04/14/dod-civilians-get-extension-of-shopping-benefit-in-16-commissaries/",
+      "source": "Military Times",
+      "category": "military",
+      "publishedAt": "2025-04-14T16:23:49.000Z",
+      "discoveredAt": "2025-04-14T18:55:01.255Z",
+      "likes": 0,
+      "reposts": 0,
+      "__v": 0
+    },
+    "o2": {
+      "_id": "67fd5a05d79f1f33f4c730a7"
+    },
+    "stmtId": 0,
+    "ts": {
+      "$timestamp": "7493244332535709713"
+    },
+    "t": 622,
+    "v": 2,
+    "wall": "2025-04-14T18:55:01.301Z",
+    "prevOpTime": {
+      "ts": {
+        "$timestamp": "0"
+      },
+      "t": -1
+    }
+  },
+  {
+    "lsid": {
+      "id": "3024ea79-4178-421b-819a-f9f4bf46b8c2",
+      "uid": "ddqot68vLpBUPnOuqFj2cdClv/dv/vF9ZVSwknYHEsE="
+    },
+    "txnNumber": 2,
+    "op": "i",
+    "ns": "test.news",
+    "ui": "dda8e209-b262-4818-afc2-9badd0abf52e",
+    "o": {
+      "_id": "67fd5b31d79f1f33f4c730ab",
+      "title": "Canada, Finland tout different paths of ‘icebreaker diplomacy’ with US",
+      "description": "Canada and Finland are jockeying for position in what could become a large U.S. investment in icebreakers.",
+      "link": "https://www.militarytimes.com/global/europe/2025/04/14/canada-finland-tout-different-paths-of-icebreaker-diplomacy-with-us/",
+      "source": "Military Times",
+      "category": "military",
+      "publishedAt": "2025-04-14T10:37:56.000Z",
+      "discoveredAt": "2025-04-14T19:00:01.383Z",
+      "likes": 0,
+      "reposts": 0,
+      "__v": 0
+    },
+    "o2": {
+      "_id": "67fd5b31d79f1f33f4c730ab"
+    },
+    "stmtId": 0,
+    "ts": {
+      "$timestamp": "7493245621025898605"
+    },
+    "t": 622,
+    "v": 2,
+    "wall": "2025-04-14T19:00:01.396Z",
+    "prevOpTime": {
+      "ts": {
+        "$timestamp": "0"
+      },
+      "t": -1
+    }
+  },
+  {
+    "lsid": {
+      "id": "3024ea79-4178-421b-819a-f9f4bf46b8c2",
+      "uid": "ddqot68vLpBUPnOuqFj2cdClv/dv/vF9ZVSwknYHEsE="
+    },
+    "txnNumber": 3,
+    "op": "i",
+    "ns": "test.news",
+    "ui": "dda8e209-b262-4818-afc2-9badd0abf52e",
+    "o": {
+      "_id": "67fd5d89d79f1f33f4c730b0",
+      "title": "The accidental Word War II victory of a little PT boat that could",
+      "description": "Under the command of Lt. Isadore Kovar, PT-137 missed a Japanese destroyer — and crippled a cruiser instead.",
+      "link": "https://www.militarytimes.com/veterans/military-history/2025/04/12/the-accidental-word-war-ii-victory-of-a-little-pt-boat-that-could/",
+      "source": "Military Times",
+      "category": "military",
+      "publishedAt": "2025-04-12T00:00:00.000Z",
+      "discoveredAt": "2025-04-14T19:10:01.388Z",
+      "likes": 0,
+      "reposts": 0,
+      "__v": 0
+    },
+    "o2": {
+      "_id": "67fd5d89d79f1f33f4c730b0"
+    },
+    "stmtId": 0,
+    "ts": {
+      "$timestamp": "7493248198006276121"
+    },
+    "t": 623,
+    "v": 2,
+    "wall": "2025-04-14T19:10:01.408Z",
+    "prevOpTime": {
+      "ts": {
+        "$timestamp": "0"
+      },
+      "t": -1
+    }
+  },
+  {
+    "lsid": {
+      "id": "3024ea79-4178-421b-819a-f9f4bf46b8c2",
+      "uid": "ddqot68vLpBUPnOuqFj2cdClv/dv/vF9ZVSwknYHEsE="
+    },
+    "txnNumber": 4,
+    "op": "i",
+    "ns": "test.news",
+    "ui": "dda8e209-b262-4818-afc2-9badd0abf52e",
+    "o": {
+      "_id": "67fd5eb5d79f1f33f4c730b4",
+      "title": "‘Warfare’ directors talk filmmaking process, capturing combat realism",
+      "description": "Directors Ray Mendoza and Alex Garland discuss everything that went into creating one of the most realistic depictions of combat ever made.",
+      "link": "https://www.militarytimes.com/news/your-military/2025/04/11/warfare-directors-talk-filmmaking-process-capturing-combat-realism/",
+      "source": "Military Times",
+      "category": "military",
+      "publishedAt": "2025-04-11T22:30:00.000Z",
+      "discoveredAt": "2025-04-14T19:15:01.243Z",
+      "likes": 0,
+      "reposts": 0,
+      "__v": 0
+    },
+    "o2": {
+      "_id": "67fd5eb5d79f1f33f4c730b4"
+    },
+    "stmtId": 0,
+    "ts": {
+      "$timestamp": "7493249486496464915"
+    },
+    "t": 623,
+    "v": 2,
+    "wall": "2025-04-14T19:15:01.256Z",
+    "prevOpTime": {
+      "ts": {
+        "$timestamp": "0"
+      },
+      "t": -1
+    }
+  },
+  {
+    "lsid": {
+      "id": "3024ea79-4178-421b-819a-f9f4bf46b8c2",
+      "uid": "ddqot68vLpBUPnOuqFj2cdClv/dv/vF9ZVSwknYHEsE="
+    },
+    "txnNumber": 5,
+    "op": "i",
+    "ns": "test.news",
+    "ui": "dda8e209-b262-4818-afc2-9badd0abf52e",
+    "o": {
+      "_id": "67fd5fe1d79f1f33f4c730b8",
+      "title": "Navy fires leaders of Maritime Expeditionary Security Squadron 4",
+      "description": "Cmdr. Brett Robblee and Command Master Chief Felix Phillips were relieved “due to a loss of confidence\" in their ability to lead, the Navy said.",
+      "link": "https://www.militarytimes.com/news/your-navy/2025/04/11/navy-fires-leaders-of-maritime-expeditionary-security-squadron-4/",
+      "source": "Military Times",
+      "category": "military",
+      "publishedAt": "2025-04-11T21:44:01.000Z",
+      "discoveredAt": "2025-04-14T19:20:01.247Z",
+      "likes": 0,
+      "reposts": 0,
+      "__v": 0
+    },
+    "o2": {
+      "_id": "67fd5fe1d79f1f33f4c730b8"
+    },
+    "stmtId": 0,
+    "ts": {
+      "$timestamp": "7493250774986653708"
+    },
+    "t": 623,
+    "v": 2,
+    "wall": "2025-04-14T19:20:01.261Z",
+    "prevOpTime": {
+      "ts": {
+        "$timestamp": "0"
+      },
+      "t": -1
+    }
+  },
+  {
+    "lsid": {
+      "id": "3024ea79-4178-421b-819a-f9f4bf46b8c2",
+      "uid": "ddqot68vLpBUPnOuqFj2cdClv/dv/vF9ZVSwknYHEsE="
+    },
+    "txnNumber": 6,
+    "op": "i",
+    "ns": "test.news",
+    "ui": "dda8e209-b262-4818-afc2-9badd0abf52e",
+    "o": {
+      "_id": "67fd610dd79f1f33f4c730bc",
+      "title": "How far will DOD take privatization on military bases?",
+      "description": "New DOD guidance has left some military advocates wondering just how far officials will go with privatizing programs and services on installations.",
+      "link": "https://www.militarytimes.com/pay-benefits/mil-money/2025/04/11/how-far-will-dod-take-privatization-on-military-bases/",
+      "source": "Military Times",
+      "category": "military",
+      "publishedAt": "2025-04-11T21:30:00.000Z",
+      "discoveredAt": "2025-04-14T19:25:01.233Z",
+      "likes": 0,
+      "reposts": 0,
+      "__v": 0
+    },
+    "o2": {
+      "_id": "67fd610dd79f1f33f4c730bc"
+    },
+    "stmtId": 0,
+    "ts": {
+      "$timestamp": "7493252063476842518"
+    },
+    "t": 623,
+    "v": 2,
+    "wall": "2025-04-14T19:25:01.250Z",
+    "prevOpTime": {
+      "ts": {
+        "$timestamp": "0"
+      },
+      "t": -1
+    }
+  },
+  {
+    "lsid": {
+      "id": "3024ea79-4178-421b-819a-f9f4bf46b8c2",
+      "uid": "ddqot68vLpBUPnOuqFj2cdClv/dv/vF9ZVSwknYHEsE="
+    },
+    "txnNumber": 7,
+    "op": "i",
+    "ns": "test.news",
+    "ui": "dda8e209-b262-4818-afc2-9badd0abf52e",
+    "o": {
+      "_id": "67fd610dd79f1f33f4c730bf",
+      "title": "Her father owned Himmler’s personal copy of ‘Mein Kampf’ — but how?",
+      "description": "John Fletcher Sisson served in the 4th Infantry Division during WWII and returned home with a unique \"trophy\" — Heinrich Himmler's \"Mein Kampf.\"",
+      "link": "https://www.militarytimes.com/veterans/military-history/2025/04/11/her-father-owned-himmlers-personal-copy-of-mein-kampf-but-how/",
+      "source": "Military Times",
+      "category": "military",
+      "publishedAt": "2025-04-11T21:00:00.000Z",
+      "discoveredAt": "2025-04-14T19:25:01.270Z",
+      "likes": 0,
+      "reposts": 0,
+      "__v": 0
+    },
+    "o2": {
+      "_id": "67fd610dd79f1f33f4c730bf"
+    },
+    "stmtId": 0,
+    "ts": {
+      "$timestamp": "7493252063476842520"
+    },
+    "t": 623,
+    "v": 2,
+    "wall": "2025-04-14T19:25:01.273Z",
+    "prevOpTime": {
+      "ts": {
+        "$timestamp": "0"
+      },
+      "t": -1
+    }
+  }
+]

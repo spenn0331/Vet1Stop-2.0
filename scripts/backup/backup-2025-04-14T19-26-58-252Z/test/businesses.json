@@ -1,0 +1,312 @@
+[
+  {
+    "_id": "67e590bd26b0b3bf99487211",
+    "name": "Victory Coffee Roasters",
+    "category": "Restaurant",
+    "subcategory": "Coffee Shop",
+    "address": "1420 W 6th St, Austin, TX 78703",
+    "lat": 30.2729,
+    "lng": -97.7554,
+    "phone": "(512) 555-1234",
+    "website": "http://victorycoffee.example.com",
+    "rating": 4.5,
+    "reviews": 128,
+    "description": "Founded by an Army veteran in 2018, Victory Coffee specializes in small-batch roasts with beans sourced from veteran-owned farms worldwide. 10% of profits support veteran causes.",
+    "hours": "6:30 AM - 7:00 PM",
+    "priceRange": 2,
+    "veteranOwnership": 100,
+    "verified": true,
+    "featured": true,
+    "photos": [
+      "coffee-shop.jpg"
+    ],
+    "tags": [
+      "coffee",
+      "pastries",
+      "breakfast",
+      "wifi"
+    ],
+    "createdAt": "2025-03-27T17:54:05.902Z",
+    "updatedAt": "2025-03-27T17:54:05.902Z",
+    "__v": 0
+  },
+  {
+    "_id": "67e590bd26b0b3bf99487212",
+    "name": "Patriot Plumbing",
+    "category": "Service",
+    "subcategory": "Plumbing",
+    "address": "2200 S Lamar Blvd, Austin, TX 78704",
+    "lat": 30.2472,
+    "lng": -97.7703,
+    "phone": "(512) 555-7890",
+    "website": "http://patriotplumbing.example.com",
+    "rating": 4.8,
+    "reviews": 75,
+    "description": "Veteran-owned plumbing service with 24/7 emergency response. Specializing in residential and commercial plumbing repairs, installations, and maintenance.",
+    "hours": "8:00 AM - 6:00 PM",
+    "priceRange": 2,
+    "veteranOwnership": 100,
+    "verified": true,
+    "featured": false,
+    "photos": [
+      "plumbing.jpg"
+    ],
+    "tags": [
+      "plumbing",
+      "repairs",
+      "emergency",
+      "maintenance"
+    ],
+    "createdAt": "2025-03-27T17:54:05.903Z",
+    "updatedAt": "2025-03-27T17:54:05.903Z",
+    "__v": 0
+  },
+  {
+    "_id": "67e590bd26b0b3bf99487213",
+    "name": "Semper Fi Security",
+    "category": "Service",
+    "subcategory": "Security",
+    "address": "8940 Research Blvd, Austin, TX 78758",
+    "lat": 30.3692,
+    "lng": -97.7295,
+    "phone": "(512) 555-4321",
+    "website": "http://semperfisecurity.example.com",
+    "rating": 4.6,
+    "reviews": 42,
+    "description": "Founded by Marine Corps veterans, offering residential and commercial security systems, monitoring, and armed guard services.",
+    "hours": "24/7",
+    "priceRange": 3,
+    "veteranOwnership": 75,
+    "verified": true,
+    "featured": false,
+    "photos": [
+      "security.jpg"
+    ],
+    "tags": [
+      "security",
+      "monitoring",
+      "guards",
+      "systems"
+    ],
+    "createdAt": "2025-03-27T17:54:05.904Z",
+    "updatedAt": "2025-03-27T17:54:05.904Z",
+    "__v": 0
+  },
+  {
+    "_id": "67e590bd26b0b3bf99487214",
+    "name": "Frontline Fitness",
+    "category": "Health",
+    "subcategory": "Gym",
+    "address": "1023 Springdale Rd, Austin, TX 78721",
+    "lat": 30.2699,
+    "lng": -97.6991,
+    "phone": "(512) 555-2468",
+    "website": "http://frontlinefitness.example.com",
+    "rating": 4.7,
+    "reviews": 93,
+    "description": "Military-style fitness center founded by Army veteran. Group classes, personal training, and specialized programs for veterans dealing with PTSD and physical disabilities.",
+    "hours": "5:00 AM - 10:00 PM",
+    "priceRange": 2,
+    "veteranOwnership": 100,
+    "verified": true,
+    "featured": false,
+    "photos": [
+      "fitness.jpg"
+    ],
+    "tags": [
+      "gym",
+      "fitness",
+      "training",
+      "classes"
+    ],
+    "createdAt": "2025-03-27T17:54:05.904Z",
+    "updatedAt": "2025-03-27T17:54:05.904Z",
+    "__v": 0
+  },
+  {
+    "_id": "67e590bd26b0b3bf99487215",
+    "name": "Liberty Law Firm",
+    "category": "Legal",
+    "subcategory": "Law Firm",
+    "address": "816 Congress Ave, Austin, TX 78701",
+    "lat": 30.2711,
+    "lng": -97.7427,
+    "phone": "(512) 555-1357",
+    "website": "http://libertylawfirm.example.com",
+    "rating": 4.9,
+    "reviews": 65,
+    "description": "Veteran-owned law firm specializing in military law, VA disability claims, and general practice. Free consultations for active duty military and veterans.",
+    "hours": "9:00 AM - 5:00 PM",
+    "priceRange": 3,
+    "veteranOwnership": 65,
+    "verified": true,
+    "featured": false,
+    "photos": [
+      "legal.jpg"
+    ],
+    "tags": [
+      "legal",
+      "law",
+      "attorney",
+      "VA claims"
+    ],
+    "createdAt": "2025-03-27T17:54:05.905Z",
+    "updatedAt": "2025-03-27T17:54:05.905Z",
+    "__v": 0
+  },
+  {
+    "_id": "67e590bd26b0b3bf99487216",
+    "name": "Valor Construction",
+    "category": "Construction",
+    "subcategory": "General Contractor",
+    "address": "4515 S Congress Ave, Austin, TX 78745",
+    "lat": 30.2149,
+    "lng": -97.7728,
+    "phone": "(512) 555-8642",
+    "website": "http://valorconstruction.example.com",
+    "rating": 4.2,
+    "reviews": 36,
+    "description": "Veteran-owned construction company handling residential and commercial projects. Special focus on accessibility modifications for disabled veterans.",
+    "hours": "7:00 AM - 6:00 PM",
+    "priceRange": 3,
+    "veteranOwnership": 80,
+    "verified": true,
+    "featured": false,
+    "photos": [
+      "construction.jpg"
+    ],
+    "tags": [
+      "construction",
+      "remodeling",
+      "commercial",
+      "accessibility"
+    ],
+    "createdAt": "2025-03-27T17:54:05.905Z",
+    "updatedAt": "2025-03-27T17:54:05.905Z",
+    "__v": 0
+  },
+  {
+    "_id": "67e590bd26b0b3bf99487217",
+    "name": "American Eagle Auto Repair",
+    "category": "Service",
+    "subcategory": "Auto Repair",
+    "address": "7601 N Lamar Blvd, Austin, TX 78752",
+    "lat": 30.3352,
+    "lng": -97.7158,
+    "phone": "(512) 555-9753",
+    "website": "http://eagleauto.example.com",
+    "rating": 4,
+    "reviews": 127,
+    "description": "Veteran-owned auto repair shop offering discounts to active military and veterans. Specializing in domestic and foreign vehicles with certified technicians.",
+    "hours": "7:30 AM - 6:00 PM",
+    "priceRange": 2,
+    "veteranOwnership": 50,
+    "verified": false,
+    "featured": false,
+    "photos": [
+      "auto.jpg"
+    ],
+    "tags": [
+      "automotive",
+      "repairs",
+      "maintenance",
+      "mechanic"
+    ],
+    "createdAt": "2025-03-27T17:54:05.905Z",
+    "updatedAt": "2025-03-27T17:54:05.905Z",
+    "__v": 0
+  },
+  {
+    "_id": "67e590bd26b0b3bf99487218",
+    "name": "Medal of Honor Brewing",
+    "category": "Restaurant",
+    "subcategory": "Brewery",
+    "address": "10615 Metric Blvd, Austin, TX 78758",
+    "lat": 30.3888,
+    "lng": -97.7163,
+    "phone": "(512) 555-3698",
+    "website": "http://mohbrewing.example.com",
+    "rating": 4.7,
+    "reviews": 210,
+    "description": "Craft brewery founded by Navy veterans. Portion of proceeds donated to veteran causes. Regular events supporting local veteran organizations.",
+    "hours": "2:00 PM - 10:00 PM",
+    "priceRange": 2,
+    "veteranOwnership": 90,
+    "verified": true,
+    "featured": false,
+    "photos": [
+      "brewery.jpg"
+    ],
+    "tags": [
+      "beer",
+      "brewery",
+      "food",
+      "entertainment"
+    ],
+    "createdAt": "2025-03-27T17:54:05.906Z",
+    "updatedAt": "2025-03-27T17:54:05.906Z",
+    "__v": 0
+  },
+  {
+    "_id": "67e590bd26b0b3bf99487219",
+    "name": "Tactical Tech Solutions",
+    "category": "Tech",
+    "subcategory": "IT Services",
+    "address": "3001 N Lamar Blvd, Austin, TX 78705",
+    "lat": 30.3029,
+    "lng": -97.7494,
+    "phone": "(512) 555-7531",
+    "website": "http://tacticaltech.example.com",
+    "rating": 4.4,
+    "reviews": 47,
+    "description": "Veteran-owned IT firm providing cybersecurity, cloud solutions, and managed services for small businesses. Training programs for veterans entering tech.",
+    "hours": "8:00 AM - 6:00 PM",
+    "priceRange": 3,
+    "veteranOwnership": 70,
+    "verified": true,
+    "featured": false,
+    "photos": [
+      "tech.jpg"
+    ],
+    "tags": [
+      "technology",
+      "IT",
+      "cybersecurity",
+      "training"
+    ],
+    "createdAt": "2025-03-27T17:54:05.906Z",
+    "updatedAt": "2025-03-27T17:54:05.906Z",
+    "__v": 0
+  },
+  {
+    "_id": "67e590bd26b0b3bf9948721a",
+    "name": "Alpha Omega Bookstore",
+    "category": "Retail",
+    "subcategory": "Books",
+    "address": "5501 N Lamar Blvd, Austin, TX 78751",
+    "lat": 30.3245,
+    "lng": -97.7269,
+    "phone": "(512) 555-2468",
+    "website": "http://aobookstore.example.com",
+    "rating": 4.3,
+    "reviews": 82,
+    "description": "Veteran-owned independent bookstore with special sections for military history and veteran authors. Regular book signings and reading groups.",
+    "hours": "10:00 AM - 8:00 PM",
+    "priceRange": 1,
+    "veteranOwnership": 100,
+    "verified": true,
+    "featured": false,
+    "photos": [
+      "bookstore.jpg"
+    ],
+    "tags": [
+      "books",
+      "reading",
+      "gifts",
+      "coffee"
+    ],
+    "createdAt": "2025-03-27T17:54:05.906Z",
+    "updatedAt": "2025-03-27T17:54:05.906Z",
+    "__v": 0
+  }
+]

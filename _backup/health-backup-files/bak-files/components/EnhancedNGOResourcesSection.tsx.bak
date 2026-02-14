@@ -1,0 +1,482 @@
+"use client";
+
+import React, { useState, useEffect, useCallback } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { 
+  ExclamationCircleIcon,
+  ArrowPathIcon,
+  FunnelIcon
+} from '@heroicons/react/24/outline';
+import { auth, db } from '@/lib/firebase';
+import { getDoc, doc } from 'firebase/firestore';
+import { 
+  NGO_DATA, 
+  NGO_FOCUS_AREAS,
+  getNGOOfTheMonth,
+  getFeaturedNGOs,
+  filterNGOs,
+  sortNGOs,
+  type NGOResource 
+} from '@/utils/ngo-data';
+
+// Import our custom components
+import NGOCardComponent from './ngo-components/NGOCardComponent';
+import FeaturedNGOSpotlight from './ngo-components/FeaturedNGOSpotlight';
+import NGOOfTheMonth from './ngo-components/NGOOfTheMonth';
+import NGOFilters from './ngo-components/NGOFilters';
+
+// User profile interface for personalization
+interface UserProfile {
+  veteranType?: string;
+  branch?: string;
+  interests?: string[];
+  location?: {
+    state?: string;
+  };
+}
+
+// NGO Detail Modal component - would be implemented separately
+interface NGODetailModalProps {
+  ngo: NGOResource | null;
+  isOpen: boolean;
+  onClose: () => void;
+  isFavorite: boolean;
+  onToggleFavorite: (id: string) => void;
+}
+
+const NGODetailModal: React.FC<NGODetailModalProps> = ({ 
+  ngo, 
+  isOpen, 
+  onClose, 
+  isFavorite, 
+  onToggleFavorite 
+}) => {
+  if (!isOpen || !ngo) return null;
+  
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+        <div className="fixed inset-0 transition-opacity" onClick={onClose}>
+          <div className="absolute inset-0 bg-gray-500 opacity-75"></div>
+        </div>
+        
+        <span className="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
+        
+        <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-3xl sm:w-full">
+          <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+            <div className="sm:flex sm:items-start">
+              <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
+                <h3 className="text-lg leading-6 font-medium text-gray-900">{ngo.name}</h3>
+                <div className="mt-2">
+                  <p className="text-sm text-gray-500">{ngo.description}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:ml-3 sm:w-auto sm:text-sm"
+            >
+              Close
+            </button>
+            <button
+              type="button"
+              onClick={() => onToggleFavorite(ngo.id)}
+              className={`mt-3 w-full inline-flex justify-center rounded-md border ${isFavorite ? 'border-red-300 bg-red-50' : 'border-gray-300 bg-white'} shadow-sm px-4 py-2 text-base font-medium ${isFavorite ? 'text-red-700' : 'text-gray-700'} hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm`}
+            >
+              {isFavorite ? 'Remove from Favorites' : 'Add to Favorites'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const ITEMS_PER_PAGE = 12; // Number of NGOs to display per page
+
+export default function EnhancedNGOResourcesSection() {
+  // State for filters
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [focusFilter, setFocusFilter] = useState<string>('all');
+  const [locationFilter, setLocationFilter] = useState<string>('all');
+  const [veteranFoundedOnly, setVeteranFoundedOnly] = useState<boolean>(false);
+  const [verifiedOnly, setVerifiedOnly] = useState<boolean>(false);
+  const [minRating, setMinRating] = useState<number>(0);
+  const [sortByOption, setSortByOption] = useState<string>('relevance');
+  
+  // User and NGO state
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [favoriteNGOs, setFavoriteNGOs] = useState<string[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
+  const [ngoData, setNgoData] = useState<NGOResource[]>([]);
+  const [selectedNGO, setSelectedNGO] = useState<NGOResource | null>(null);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState<boolean>(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  
+  // Use React Query to fetch NGO data from our MongoDB API routes
+  const { 
+    data: ngoOfMonthData, 
+    isLoading: isLoadingNGOOfMonth, 
+    error: ngoMonthError 
+  } = useQuery({
+    queryKey: ['ngoOfMonth'],
+    queryFn: getNGOOfTheMonth,
+    staleTime: 1000 * 60 * 5, // Cache for 5 minutes
+  });
+  
+  const { 
+    data: featuredNGOData, 
+    isLoading: isLoadingFeatured, 
+    error: featuredError 
+  } = useQuery({
+    queryKey: ['featuredNGOs'],
+    queryFn: getFeaturedNGOs,
+    staleTime: 1000 * 60 * 5, // Cache for 5 minutes
+  });
+
+  // Fetch the full NGO list with pagination
+  useEffect(() => {
+    async function fetchNGOs() {
+      setLoading(true);
+      setError(null);
+      try {
+        // First try to fetch from the MongoDB API
+        const response = await fetch(`/api/health-resources?category=health&subcategory=ngo&page=${currentPage}&limit=${ITEMS_PER_PAGE}`);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch NGOs: ${response.statusText}`);
+        }
+        const data = await response.json();
+        console.log('NGO API Response:', data); // Log the API response for debugging
+        setNgoData(data.ngos || []);
+        setTotalItems(data.total || 0);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'An error occurred while fetching NGO data');
+        setNgoData([]);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchNGOs();
+  }, [currentPage]);
+
+  const hasNGOMonthError = ngoMonthError ? true : false;
+  const hasFeaturedError = featuredError ? true : false;
+
+  const ngoOfMonth = ngoOfMonthData;
+  const featuredNGOs = featuredNGOData;
+
+  const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
+
+  const handlePageChange = (newPage: number) => {
+    setCurrentPage(newPage);
+    window.scrollTo(0, 0); // Scroll to top when changing pages
+  };
+
+  // Get filtered and sorted NGOs
+  const filteredNGOs = filterNGOs(ngoData, {
+    searchQuery,
+    focusFilter,
+    locationFilter,
+    veteranFoundedOnly,
+    showSpotlightOnly: false,
+    minRating,
+    showVerifiedOnly: verifiedOnly
+  });
+  
+  // Sort the filtered NGOs
+  const sortedNGOs = sortNGOs(
+    filteredNGOs,
+    sortByOption as 'rating' | 'name' | 'impact' | 'established' | 'relevance'
+  );
+
+  // Handle adding/removing NGO from favorites
+  const toggleFavorite = (ngoId: string) => {
+    setFavoriteNGOs(prev => 
+      prev.includes(ngoId)
+        ? prev.filter(id => id !== ngoId)
+        : [...prev, ngoId]
+    );
+  };
+  
+  // Handle viewing NGO details
+  const handleViewDetails = (ngo: NGOResource) => {
+    setSelectedNGO(ngo);
+    setIsDetailModalOpen(true);
+  };
+  
+  // Reset all filters - with proper type annotation
+  const resetFilters = useCallback(() => {
+    setSearchQuery('');
+    setFocusFilter('all');
+    setLocationFilter('all');
+    setVeteranFoundedOnly(false);
+    setVerifiedOnly(false);
+    setMinRating(0);
+    setSortByOption('relevance');
+  }, []);
+  
+  // Create properly typed callbacks for all state setters
+  const handleSearchQueryChange = useCallback((query: string) => {
+    setSearchQuery(query);
+  }, []);
+  
+  const handleFocusFilterChange = useCallback((focus: string) => {
+    setFocusFilter(focus);
+  }, []);
+  
+  const handleLocationFilterChange = useCallback((location: string) => {
+    setLocationFilter(location);
+  }, []);
+  
+  const handleVeteranFoundedChange = useCallback((value: boolean) => {
+    setVeteranFoundedOnly(value);
+  }, []);
+  
+  const handleVerifiedOnlyChange = useCallback((value: boolean) => {
+    setVerifiedOnly(value);
+  }, []);
+  
+  const handleMinRatingChange = useCallback((rating: number) => {
+    setMinRating(rating);
+  }, []);
+  
+  const handleSortByChange = useCallback((sort: string) => {
+    setSortByOption(sort);
+  }, []);
+
+  // Fetch user profile for personalization
+  useEffect(() => {
+    const fetchUserProfile = async () => {
+      if (auth) {
+        try {
+          const user = auth.currentUser;
+          if (user) {
+            const userDoc = await getDoc(doc(db, 'users', user.uid));
+            if (userDoc.exists()) {
+              const userData = userDoc.data() as UserProfile;
+              setUserProfile(userData);
+              
+              // Set location filter based on user's state if available
+              if (userData.location?.state && locationFilter === 'all') {
+                setLocationFilter(userData.location.state);
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching user profile:', error);
+        }
+      }
+    };
+    
+    fetchUserProfile();
+  }, []);
+  
+  // Load saved NGOs from localStorage on mount
+  useEffect(() => {
+    try {
+      const savedNGOsFromStorage = localStorage.getItem('favoriteNGOs');
+      if (savedNGOsFromStorage) {
+        setFavoriteNGOs(JSON.parse(savedNGOsFromStorage));
+      }
+    } catch (error) {
+      console.error('Error loading saved NGOs:', error);
+    }
+  }, []);
+  
+  // Save to localStorage when favoriteNGOs changes
+  useEffect(() => {
+    try {
+      localStorage.setItem('favoriteNGOs', JSON.stringify(favoriteNGOs));
+    } catch (error) {
+      console.error('Error saving NGOs to localStorage:', error);
+    }
+  }, [favoriteNGOs]);
+
+  return (
+    <div className="py-6">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="text-center mb-8">
+          <h2 className="text-3xl font-bold text-[#1A2C5B] mb-2">
+            Non-Governmental Health Resources
+          </h2>
+          <p className="text-gray-600 max-w-3xl mx-auto">
+            Explore trusted health organizations outside of VA that provide vital support to veterans. 
+            From mental health services to emergency care, these NGOs offer specialized resources for your needs.
+          </p>
+        </div>
+        
+        {/* Featured NGO Spotlight (Premium Placement) */}
+        {!isLoadingFeatured && featuredNGOs && Array.isArray(featuredNGOs) && featuredNGOs.length > 0 && (
+          <FeaturedNGOSpotlight
+            ngo={featuredNGOs[0]}
+            isFavorite={favoriteNGOs.includes((featuredNGOs[0]._id as string) || 'never')}
+            onToggleFavorite={toggleFavorite}
+            onViewDetails={handleViewDetails}
+          />
+        )}
+        
+        {/* NGO of the Month with safe checks */}
+        {!isLoadingNGOOfMonth && ngoOfMonth && (
+          <NGOOfTheMonth
+            ngo={ngoOfMonth}
+            isFavorite={ngoOfMonth.id ? favoriteNGOs.includes((ngoOfMonth._id as string) || 'never') : false}
+            onToggleFavorite={toggleFavorite}
+            onViewDetails={handleViewDetails}
+          />
+        )}
+        
+        {/* Search and Filters with properly typed callbacks */}
+        <NGOFilters
+          searchQuery={searchQuery}
+          setSearchQuery={handleSearchQueryChange}
+          focusFilter={focusFilter}
+          setFocusFilter={handleFocusFilterChange}
+          locationFilter={locationFilter}
+          setLocationFilter={handleLocationFilterChange}
+          veteranFoundedOnly={veteranFoundedOnly}
+          setVeteranFoundedOnly={handleVeteranFoundedChange}
+          verifiedOnly={verifiedOnly}
+          setVerifiedOnly={handleVerifiedOnlyChange}
+          minRating={minRating}
+          setMinRating={handleMinRatingChange}
+          sortBy={sortByOption}
+          setSortBy={handleSortByChange}
+          resetFilters={resetFilters}
+        />
+        
+        {/* Results count and sorting info */}
+        <div className="flex justify-between items-center mb-6">
+          <p className="text-sm text-gray-600">
+            Showing <span className="font-semibold">{sortedNGOs.length}</span> NGOs
+            {sortByOption !== 'relevance' && (
+              <span> sorted by {sortByOption}</span>
+            )}
+          </p>
+          
+          {/* Toggle view modes (could be implemented in future) */}
+          <div className="flex items-center gap-2">
+            <button className="p-2 rounded-md bg-[#1A2C5B] text-white">
+              <FunnelIcon className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+        
+        {/* Loading state */}
+        {(isLoadingNGOOfMonth || isLoadingFeatured || loading) && (
+          <div className="flex flex-col items-center justify-center p-12">
+            <ArrowPathIcon className="h-12 w-12 animate-spin text-[#1A2C5B] mb-4" />
+            <p className="text-gray-600">Loading NGO resources...</p>
+          </div>
+        )}
+        
+        {/* Error state with type-safe handling */}
+        {(hasNGOMonthError || hasFeaturedError) && (
+          <div className="bg-red-50 p-4 rounded-md mb-6">
+            <div className="flex">
+              <ExclamationCircleIcon className="h-5 w-5 text-red-400 mr-2" />
+              <p className="text-sm text-red-600">
+                There was an error loading NGO resources. Please try again later.
+              </p>
+            </div>
+            <button 
+              onClick={() => window.location.reload()}
+              className="text-red-600 font-medium underline"
+            >
+              Try Again
+            </button>
+            ))}
+          </div>
+        )}
+        
+        {/* Pagination */}
+        {totalPages > 1 && sortedNGOs.length > 0 && (
+          <div className="mt-8 flex flex-col items-center space-y-4">
+            <div className="flex space-x-2">
+              <button 
+                onClick={() => handlePageChange(currentPage - 1)} 
+                disabled={currentPage === 1}
+                className="px-3 py-1 bg-gray-200 rounded-md text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-300 transition-colors"
+              >
+                Previous
+              </button>
+              
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                <button 
+                  key={page}
+                  onClick={() => handlePageChange(page)} 
+                  className={`px-3 py-1 rounded-md ${currentPage === page ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'} transition-colors`}
+                >
+                  {page}
+                </button>
+              ))}
+              
+              <button 
+                onClick={() => handlePageChange(currentPage + 1)} 
+                disabled={currentPage === totalPages}
+                className="px-3 py-1 bg-gray-200 rounded-md text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-300 transition-colors"
+              >
+                Next
+              </button>
+            </div>
+            
+            <p className="text-gray-600 text-sm">
+              Showing {(currentPage - 1) * ITEMS_PER_PAGE + 1} to {Math.min(currentPage * ITEMS_PER_PAGE, totalItems)} of {totalItems} NGOs
+            </p>
+          </div>
+        )}
+        
+        {/* Load more button - this would connect to an API in a real implementation */}
+        {sortedNGOs.length > 9 && !(isLoadingNGOOfMonth || isLoadingFeatured || loading) && (
+          <div className="text-center mt-8">
+            <button className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-300">
+              Load More NGOs
+            </button>
+          </div>
+        )}
+        
+        {/* Detail Modal with improved type safety */}
+        <NGODetailModal
+          ngo={selectedNGO}
+          isOpen={isDetailModalOpen}
+          onClose={() => setIsDetailModalOpen(false)}
+          isFavorite={selectedNGO && selectedNGO.id ? favoriteNGOs.includes((selectedNGO._id as string) || 'never') : false}
+          onToggleFavorite={toggleFavorite}
+        />
+      </div>
+    </div>
+  );
+}
+
+interface NGOResource {
+  _id?: string;
+  id?: string;
+  title: string;
+  description: string;
+  website: string;
+  contact?: {
+    phone?: string;
+    email?: string;
+  };
+  location?: {
+    address?: string;
+    city?: string;
+    state?: string;
+    zipCode?: string;
+  };
+  category?: string;
+  subcategory?: string;
+  eligibility?: string;
+  veteranType?: string[];
+  serviceBranch?: string[];
+  tags?: string[];
+  isFeatured?: boolean;
+  spotlight?: boolean;
+  lastUpdated?: string;
+}

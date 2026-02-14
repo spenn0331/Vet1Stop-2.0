@@ -1,0 +1,255 @@
+"use client";
+
+import React from 'react';
+import Link from 'next/link';
+import {
+  HeartIcon,
+  StarIcon,
+  ArrowTopRightOnSquareIcon,
+  CheckBadgeIcon,
+  GlobeAltIcon,
+  TagIcon,
+  TrophyIcon,
+  ChartBarIcon
+} from '@heroicons/react/24/outline';
+import { HeartIcon as HeartIconSolid } from '@heroicons/react/24/solid';
+import { NGOResource } from '@/utils/ngo-data';
+
+interface NGOOfTheMonthProps {
+  ngo: NGOResource;
+  onSelect?: (ngo: NGOResource) => void;
+  className?: string;
+  isFavorite?: boolean;
+  onToggleFavorite?: (id: string) => void;
+  onViewDetails?: (ngo: NGOResource) => void;
+}
+
+/**
+ * NGO of the Month Component
+ * Displays the highest-impact NGO based on engagement metrics
+ */
+const NGOOfTheMonth: React.FC<NGOOfTheMonthProps> = ({
+  ngo,
+  onSelect,
+  className = '',
+  isFavorite = false,
+  onToggleFavorite = () => {},
+  onViewDetails
+}) => {
+  return (
+    <div className="mb-8 overflow-hidden rounded-xl shadow-md border border-[#1A2C5B] bg-gradient-to-r from-[#1A2C5B]/5 to-white">
+      {/* Header bar with NGO of the Month label */}
+      <div className="py-2 px-4 bg-[#1A2C5B] text-white flex items-center justify-between">
+        <div className="flex items-center">
+          <TrophyIcon className="h-5 w-5 mr-2" />
+          <span className="font-bold text-sm">NGO of the Month</span>
+        </div>
+        <span className="text-xs bg-white/20 px-2 py-0.5 rounded-full">Selected based on impact metrics</span>
+      </div>
+      
+      <div className="p-6">
+        <div className="flex items-center mb-4">
+          <div className="flex-shrink-0 mr-4">
+            <div className="w-16 h-16 rounded-full overflow-hidden bg-[#1A2C5B]/10 flex items-center justify-center">
+              <CheckBadgeIcon className="h-8 w-8 text-[#1A2C5B]" />
+            </div>
+          </div>
+          
+          <div>
+            <h3 className="text-xl font-bold text-[#1A2C5B] mb-1">{ngo.name}</h3>
+            <p className="text-sm text-gray-600">{ngo.metrics?.impactScore}/100 Impact Score</p>
+          </div>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+          <div className="md:col-span-8">
+            <p className="text-gray-700 mb-4">{ngo.description}</p>
+            
+            {/* Tags */}
+            <div className="flex flex-wrap gap-1 mb-4">
+              {ngo.tags && ngo.tags.length > 0 ? (
+                ngo.tags.map((tag, index) => (
+                  <span 
+                    key={index} 
+                    className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700"
+                  >
+                    <TagIcon className="h-3 w-3 mr-1" />
+                    {tag}
+                  </span>
+                ))
+              ) : (
+                <span className="text-xs text-gray-500">No tags available</span>
+              )}
+            </div>
+            
+            {/* Rating */}
+            <div className="flex items-center mb-6">
+              <div className="flex">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <StarIcon
+                    key={star}
+                    className={`h-4 w-4 ${star <= (ngo.rating || 0) ? 'text-yellow-400 fill-current' : 'text-gray-300'}`}
+                  />
+                ))}
+              </div>
+              <span className="ml-2 text-sm text-gray-600">
+                {ngo.rating?.toFixed(1)} {ngo.reviewCount ? `(${ngo.reviewCount} reviews)` : ''}
+              </span>
+            </div>
+            
+            {/* Key achievements if available */}
+            {ngo.achievements && ngo.achievements.length > 0 && (
+              <div className="mb-6">
+                <h4 className="text-sm font-semibold text-gray-700 mb-2">Why They Were Selected</h4>
+                <ul className="text-sm text-gray-600">
+                  {ngo.achievements && ngo.achievements.length > 0 ? (
+                    ngo.achievements.map((achievement, index) => (
+                      <li key={index} className="mb-1 flex items-start">
+                        <CheckBadgeIcon className="h-4 w-4 text-green-500 mr-2 mt-0.5 flex-shrink-0" />
+                        <span>{achievement}</span>
+                      </li>
+                    ))
+                  ) : (
+                    <li className="mb-1 flex items-start">
+                      <CheckBadgeIcon className="h-4 w-4 text-green-500 mr-2 mt-0.5 flex-shrink-0" />
+                      <span>Outstanding service to veterans</span>
+                    </li>
+                  )}
+                </ul>
+              </div>
+            )}
+            
+            {/* Action buttons */}
+            <div className="flex flex-wrap gap-3">
+              <button
+                onClick={() => onViewDetails ? onViewDetails(ngo) : onSelect?.(ngo)}
+                className="text-blue-600 hover:text-blue-800 transition-colors font-medium text-sm flex items-center gap-1 border border-[#1A2C5B] text-sm font-medium rounded-md shadow-sm text-[#1A2C5B] bg-white hover:bg-[#1A2C5B]/5 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#1A2C5B]"
+              >
+                View Details
+              </button>
+              
+              {ngo.link || ngo.contact?.website ? (
+                <Link 
+                  href={ngo.link || ngo.contact?.website || '#'} 
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-[#1A2C5B] hover:bg-[#1A2C5B]/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#1A2C5B]"
+                >
+                  Visit Website
+                  <ArrowTopRightOnSquareIcon className="ml-2 h-4 w-4" />
+                </Link>
+              ) : null}
+              
+              <button 
+                className={`inline-flex items-center px-4 py-2 border text-sm font-medium rounded-md ${
+                  isFavorite
+                    ? 'text-[#B22234] border-[#B22234]/30 bg-[#B22234]/5'
+                    : 'text-gray-700 border-gray-300 bg-white hover:bg-gray-50'
+                } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#1A2C5B]`}
+                onClick={() => onToggleFavorite?.(ngo.id || ngo._id?.toString() || '')}
+              >
+                {isFavorite ? (
+                  <>
+                    <HeartIconSolid className="mr-2 h-4 w-4 text-[#B22234]" />
+                    Saved
+                  </>
+                ) : (
+                  <>
+                    <HeartIcon className="mr-2 h-4 w-4" />
+                    Save
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+          
+          <div className="md:col-span-4">
+            {/* Impact Metrics Card */}
+            <div className="bg-white p-4 rounded-md shadow-sm border border-[#1A2C5B]/20 mb-4">
+              <h4 className="text-sm font-semibold text-[#1A2C5B] mb-3 flex items-center">
+                <ChartBarIcon className="h-4 w-4 mr-1" />
+                Impact Metrics
+              </h4>
+              
+              {ngo.metrics && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-1">
+                    <ChartBarIcon className="h-4 w-4 text-blue-500" />
+                    <span className="text-sm text-gray-600">{ngo.metrics?.engagementRate || 95}% engagement</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-gray-600">Impact Score</span>
+                    <span className="text-sm font-semibold text-[#1A2C5B]">{ngo.metrics.impactScore}/100</span>
+                  </div>
+                  
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-gray-600">Engagement Rate</span>
+                    <span className="text-sm font-semibold text-[#1A2C5B]">{Math.round((ngo.metrics?.engagementRate || 0.95) * 100)}%</span>
+                  </div>
+                  
+                  {ngo.metrics.fundingEfficiency && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-gray-600">Funding Efficiency</span>
+                      <span className="text-sm font-semibold text-[#1A2C5B]">{Math.round(ngo.metrics.fundingEfficiency * 100)}%</span>
+                    </div>
+                  )}
+                  
+                  {ngo.metrics.veteransSupportedCount && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-gray-600">Veterans Supported</span>
+                      <span className="text-sm font-semibold text-[#1A2C5B]">
+                        {ngo.metrics.veteransSupportedCount.toLocaleString()}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            
+            {/* Contact Information */}
+            {ngo.contact && (
+              <div className="bg-white p-4 rounded-md shadow-sm border border-[#1A2C5B]/20">
+                <h4 className="text-sm font-semibold text-[#1A2C5B] mb-3">Contact Information</h4>
+                
+                {ngo.contact.phone && (
+                  <div className="mb-2">
+                    <div className="text-xs text-gray-500">Phone</div>
+                    <a 
+                      href={`tel:${ngo.contact.phone}`} 
+                      className="text-sm text-blue-600 hover:underline"
+                    >
+                      {ngo.contact.phone}
+                    </a>
+                  </div>
+                )}
+                
+                {ngo.contact.email && (
+                  <div>
+                    <div className="text-xs text-gray-500">Email</div>
+                    <a 
+                      href={`mailto:${ngo.contact.email}`} 
+                      className="text-sm text-blue-600 hover:underline break-all"
+                    >
+                      {ngo.contact.email}
+                    </a>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Add a wrapper div with the className prop
+const NGOOfTheMonthWithWrapper: React.FC<NGOOfTheMonthProps> = (props) => {
+  return (
+    <div className={`bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-6 border border-blue-100 shadow-sm ${props.className}`}>
+      <NGOOfTheMonth {...props} />
+    </div>
+  );
+};
+
+export default NGOOfTheMonthWithWrapper;

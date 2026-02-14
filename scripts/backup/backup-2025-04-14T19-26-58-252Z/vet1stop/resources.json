@@ -1,0 +1,40 @@
+[
+  {
+    "_id": "67f88c2c2968737b762817dc",
+    "title": "GI Bill Benefits",
+    "description": "Information about education benefits for veterans",
+    "url": "https://www.va.gov/education/about-gi-bill-benefits/",
+    "category": "education",
+    "subcategory": "benefits",
+    "source": "government",
+    "sourceName": "VA",
+    "dateAdded": "2025-04-11T03:27:40.284Z",
+    "dateUpdated": "2025-04-11T03:27:40.284Z",
+    "featured": true,
+    "isPremiumContent": false,
+    "tags": [
+      "education",
+      "benefits",
+      "gi bill"
+    ]
+  },
+  {
+    "_id": "67f88c2c2968737b762817dd",
+    "title": "VA Healthcare",
+    "description": "Information about healthcare services for veterans",
+    "url": "https://www.va.gov/health-care/",
+    "category": "health",
+    "subcategory": "general",
+    "source": "government",
+    "sourceName": "VA",
+    "dateAdded": "2025-04-11T03:27:40.284Z",
+    "dateUpdated": "2025-04-11T03:27:40.284Z",
+    "featured": true,
+    "isPremiumContent": false,
+    "tags": [
+      "health",
+      "healthcare",
+      "services"
+    ]
+  }
+]

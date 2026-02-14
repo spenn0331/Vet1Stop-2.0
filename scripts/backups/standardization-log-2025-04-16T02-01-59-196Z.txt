@@ -1,0 +1,105 @@
+================================================================================
+STARTING RESOURCE STANDARDIZATION PROCESS - 4/15/2025, 10:01:59 PM
+================================================================================
+
+Connecting to MongoDB...
+Connected successfully to MongoDB
+
+STEP 1: Creating backups
+--------------------------------------------------
+Creating backups in: C:\Users\penny\Desktop\Vet1Stop\scripts\backups\backup-2025-04-16T02-01-59-196Z
+Backing up resources collection...
+- Backed up 397 documents to C:\Users\penny\Desktop\Vet1Stop\scripts\backups\backup-2025-04-16T02-01-59-196Z\resources.json
+Backing up healthResources collection...
+- No documents found in healthResources collection
+Backing up educationResources collection...
+- No documents found in educationResources collection
+Backing up lifeLeisureResources collection...
+- No documents found in lifeLeisureResources collection
+All backups created successfully
+
+STEP 2: Recording initial document counts
+--------------------------------------------------
+- resources: 397 documents
+- healthResources: 0 documents
+- educationResources: 0 documents
+- lifeLeisureResources: 0 documents
+
+STEP 3: Standardizing resources
+--------------------------------------------------
+
+Processing resources collection...
+Found 397 documents to standardize
+Processing batch 1/40 (documents 1-10)
+Processing batch 2/40 (documents 11-20)
+Processing batch 3/40 (documents 21-30)
+Processing batch 4/40 (documents 31-40)
+Processing batch 5/40 (documents 41-50)
+Processing batch 6/40 (documents 51-60)
+Processing batch 7/40 (documents 61-70)
+Processing batch 8/40 (documents 71-80)
+Processing batch 9/40 (documents 81-90)
+Processing batch 10/40 (documents 91-100)
+Processing batch 11/40 (documents 101-110)
+Processing batch 12/40 (documents 111-120)
+Processing batch 13/40 (documents 121-130)
+Processing batch 14/40 (documents 131-140)
+Processing batch 15/40 (documents 141-150)
+Processing batch 16/40 (documents 151-160)
+Processing batch 17/40 (documents 161-170)
+Processing batch 18/40 (documents 171-180)
+Processing batch 19/40 (documents 181-190)
+Processing batch 20/40 (documents 191-200)
+Processing batch 21/40 (documents 201-210)
+Processing batch 22/40 (documents 211-220)
+Processing batch 23/40 (documents 221-230)
+Processing batch 24/40 (documents 231-240)
+Processing batch 25/40 (documents 241-250)
+Processing batch 26/40 (documents 251-260)
+Processing batch 27/40 (documents 261-270)
+Processing batch 28/40 (documents 271-280)
+Processing batch 29/40 (documents 281-290)
+Processing batch 30/40 (documents 291-300)
+Processing batch 31/40 (documents 301-310)
+Processing batch 32/40 (documents 311-320)
+Processing batch 33/40 (documents 321-330)
+Processing batch 34/40 (documents 331-340)
+Processing batch 35/40 (documents 341-350)
+Processing batch 36/40 (documents 351-360)
+Processing batch 37/40 (documents 361-370)
+Processing batch 38/40 (documents 371-380)
+Processing batch 39/40 (documents 381-390)
+Processing batch 40/40 (documents 391-397)
+Completed standardization of 397/397 documents in resources collection
+
+Processing healthResources collection...
+Found 0 documents to standardize
+Completed standardization of 0/0 documents in healthResources collection
+
+Processing educationResources collection...
+Found 0 documents to standardize
+Completed standardization of 0/0 documents in educationResources collection
+
+Processing lifeLeisureResources collection...
+Found 0 documents to standardize
+Completed standardization of 0/0 documents in lifeLeisureResources collection
+
+STEP 4: Verifying document counts after standardization
+--------------------------------------------------
+- resources: 397 documents (initial: 397)
+- healthResources: 0 documents (initial: 0)
+- educationResources: 0 documents (initial: 0)
+- lifeLeisureResources: 0 documents (initial: 0)
+
+All document counts match initial counts. No data was lost.
+
+STEP 5: Validating standardized schema
+--------------------------------------------------
+Validating schema for resources collection (5 samples):
+- 5/5 samples passed validation
+- All validated documents in resources follow the standardized schema
+Validating schema for healthResources collection (0 samples):
+- No documents found in healthResources collection
+Validating schema for educationResources collection (0 samples):
+- No documents found in educationResources collection
+Validating schema for lifeLeisureResources collection (0 samples):

@@ -1,0 +1,153 @@
+"use client";
+
+import React from 'react';
+import {
+  HeartIcon,
+  ShareIcon,
+  StarIcon,
+  CheckBadgeIcon
+} from '@heroicons/react/24/outline';
+import { HeartIcon as HeartIconSolid } from '@heroicons/react/24/solid';
+import { HealthResource } from '../ResourceDetailView';
+
+// Action Buttons Component
+export function ActionButtons({ 
+  resource,
+  isSaved, 
+  onSave, 
+  onShare, 
+  shareSuccess
+}: { 
+  resource: HealthResource,
+  isSaved: boolean, 
+  onSave: () => void, 
+  onShare: () => void, 
+  shareSuccess: boolean 
+}) {
+  return (
+    <div className="flex gap-2">
+      <button
+        onClick={onSave}
+        className={`p-2 rounded-full ${isSaved ? 'bg-red-50' : 'hover:bg-gray-100'}`}
+        aria-label={isSaved ? 'Remove from saved' : 'Save resource'}
+      >
+        {isSaved ? (
+          <HeartIconSolid className="h-6 w-6 text-red-500" />
+        ) : (
+          <HeartIcon className="h-6 w-6 text-gray-600" />
+        )}
+      </button>
+      
+      <button
+        onClick={onShare}
+        className="p-2 rounded-full hover:bg-gray-100"
+        aria-label="Share resource"
+      >
+        <ShareIcon className="h-6 w-6 text-gray-600" />
+      </button>
+      
+      {shareSuccess && (
+        <span className="text-sm text-green-600 self-center">Copied to clipboard!</span>
+      )}
+    </div>
+  );
+}
+
+// Rating Input Component
+export function RatingInput({ 
+  onRate, 
+  currentRating, 
+  disabled = false 
+}: { 
+  onRate: (rating: number) => void, 
+  currentRating: number | null,
+  disabled?: boolean
+}) {
+  return (
+    <div className="flex items-center">
+      {[1, 2, 3, 4, 5].map((star) => (
+        <button
+          key={star}
+          type="button"
+          disabled={disabled}
+          onClick={() => onRate(star)}
+          className={`h-8 w-8 focus:outline-none ${disabled ? 'cursor-not-allowed' : ''}`}
+          aria-label={`Rate ${star} stars`}
+        >
+          <StarIcon
+            className={`h-7 w-7 ${star <= (currentRating || 0) ? 'text-yellow-500 fill-current' : 'text-gray-300'}`}
+          />
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// Feedback Success Component
+export function FeedbackSuccess() {
+  return (
+    <div className="flex items-center text-green-600">
+      <CheckBadgeIcon className="h-5 w-5 mr-2" />
+      <span>Thank you for your feedback!</span>
+    </div>
+  );
+}
+
+// Resource Description Component
+export function ResourceDescription({ 
+  description, 
+  expanded, 
+  onToggleExpand 
+}: { 
+  description: string, 
+  expanded: boolean, 
+  onToggleExpand: () => void 
+}) {
+  return (
+    <div className="mb-6">
+      <h3 className="text-lg font-semibold text-gray-900 mb-2">About This Resource</h3>
+      <p className="text-gray-700 mb-4 break-words">
+        {expanded ? description : `${description.substring(0, 200)}${description.length > 200 ? '...' : ''}`}
+      </p>
+      {description && description.length > 200 && (
+        <button
+          type="button"
+          onClick={onToggleExpand}
+          className="text-[#1A2C5B] hover:text-[#1A2C5B]/80 text-sm font-medium focus:outline-none"
+        >
+          {expanded ? 'Show less' : 'Read more'}
+        </button>
+      )}
+    </div>
+  );
+}
+
+// Resource Not Found Component
+export function ResourceNotFound({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="p-6 text-center">
+      <svg 
+        xmlns="http://www.w3.org/2000/svg" 
+        className="h-16 w-16 text-yellow-500 mx-auto mb-4"
+        viewBox="0 0 24 24" 
+        fill="none"
+      >
+        <path 
+          d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" 
+          stroke="currentColor" 
+          strokeWidth="2" 
+          strokeLinecap="round" 
+          strokeLinejoin="round"
+        />
+      </svg>
+      <h3 className="text-lg font-medium text-gray-900 mb-2">Resource Not Found</h3>
+      <p className="text-gray-600 mb-4">The requested resource could not be found or has been removed.</p>
+      <button
+        className="px-3 py-1.5 bg-[#1A2C5B] text-white rounded-md hover:bg-[#1A2C5B]/90"
+        onClick={onClose}
+      >
+        Close
+      </button>
+    </div>
+  );
+}

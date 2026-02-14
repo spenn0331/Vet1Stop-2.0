@@ -1,0 +1,276 @@
+"use client";
+
+import { useState, useCallback } from 'react';
+import { HealthResource } from '../../../types/consolidated-health-types';
+
+// Import category mapping with expanded categories for all symptom types
+const CATEGORY_MAPPING: Record<string, string[]> = {
+  'mental': ['Mental Health', 'Crisis Services', 'Family Support', 'Wellness Programs', 'Peer Support', 'Counseling', 'PTSD', 'Depression', 'Anxiety', 'Veteran Support', 'NGO', 'Community Support'],
+  'physical': ['Physical Health', 'Specialized Care', 'Rehabilitation', 'Medical Services', 'Wellness Programs', 'NGO', 'Adaptive Sports', 'Pain Management', 'Physical Therapy', 'Veteran Support'],
+  'life': ['Family Support', 'Wellness Programs', 'Specialized Care', 'Community Support', 'Social Services', 'NGO', 'Financial Assistance', 'Housing Support', 'Employment Services', 'Veteran Support'],
+  'crisis': ['Crisis Services', 'Mental Health', 'Emergency Services', 'Suicide Prevention', 'Immediate Support', 'NGO', 'Hotlines', 'Peer Support', 'Veteran Support']
+};
+
+/**
+ * Custom hook for matching resources based on user selections
+ * Handles filtering, sorting, and recommendation logic
+ */
+export function useResourceMatcher(allResources: HealthResource[]) {
+  // State for tracking API requests
+  const [isLoading, setIsLoading] = useState(false);
+  
+  /**
+   * Filter resources locally based on user selections
+   * This is our primary resource matching logic since the MongoDB connection is having issues
+   * @param resources - All available resources
+   * @param categoryId - Selected symptom category
+   * @param symptoms - Selected symptoms
+   * @param severityLevel - Selected severity level
+   * @returns Filtered resources
+   */
+  const filterResourcesLocally = (
+    resources: HealthResource[],
+    categoryId: string,
+    symptoms: string[],
+    severityLevel: string | null
+  ): HealthResource[] => {
+    // Log the filtering parameters for debugging
+    console.log(`Filtering resources locally for category: ${categoryId}, symptoms: ${symptoms.join(',')}, severity: ${severityLevel}`);
+    
+    // Create a unique seed based on the inputs to ensure different results for different selections
+    // This is the key to ensuring we get different resources for different symptom/severity combinations
+    const selectionSeed = `${categoryId}_${symptoms.sort().join(',')}_${severityLevel}_${Date.now() % 1000}`;
+    const seedNum = selectionSeed.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    
+    // Use the seed to shuffle the resources array
+    const shuffledResources = [...resources].sort((a, b) => {
+      // Create a deterministic but different ordering based on the seed
+      const aVal = ((a.id?.charCodeAt(0) || 0) + seedNum) % 100;
+      const bVal = ((b.id?.charCodeAt(0) || 0) + seedNum) % 100;
+      return aVal - bVal;
+    });
+    
+    console.log(`Shuffled resources using seed: ${seedNum}`);
+    
+    // Get the selected category mapping
+    const categoryTags = CATEGORY_MAPPING[categoryId] || [];
+    
+    // Filter resources based on selections with improved matching
+    // Use our shuffled resources instead of the original array
+    const filtered = shuffledResources.filter(resource => {
+      // Check if resource has any of the categories we're looking for
+      const hasMatchingCategory = resource.categories?.some(cat => 
+        categoryTags.includes(cat)
+      ) || false;
+      
+      // Check if resource tags match any of the symptoms
+      const hasMatchingSymptoms = symptoms.length === 0 || 
+        (resource.tags && resource.tags.some(tag => 
+          symptoms.some(symptom => 
+            tag.toLowerCase().includes(symptom.toLowerCase()) || 
+            symptom.toLowerCase().includes(tag.toLowerCase())
+          )
+        ));
+      
+      // Check resource title/description for symptom keywords
+      const hasSymptomKeywordsInContent = symptoms.length === 0 || 
+        symptoms.some(symptom => 
+          resource.title?.toLowerCase().includes(symptom.toLowerCase()) || 
+          resource.description?.toLowerCase().includes(symptom.toLowerCase())
+        );
+      
+      // Special handling for mental health category to ensure we get all relevant NGOs
+      if (categoryId === 'mental') {
+        // For mental health, be very inclusive to catch all relevant NGOs
+        const isMentalHealthNGO = 
+          (resource.category === 'NGO' || resource.subcategory === 'ngo') && 
+          (resource.categories?.some(cat => cat.toLowerCase().includes('mental')) || 
+           resource.title?.toLowerCase().includes('mental') || 
+           resource.description?.toLowerCase().includes('mental'));
+        
+        // Always include mental health NGOs regardless of other criteria
+        if (isMentalHealthNGO) {
+          return true;
+        }
+      }
+      
+      // For severe/crisis severity levels, be more inclusive but still prioritize quality
+      if (severityLevel === 'severe' || severityLevel === 'crisis') {
+        // Include verified resources that match category
+        if (resource.isVerified && hasMatchingCategory) {
+          return true;
+        }
+        // Also include resources that match symptoms or category
+        return hasMatchingCategory || hasMatchingSymptoms || hasSymptomKeywordsInContent;
+      }
+      
+      // For other severity levels, use very broad matching
+      return hasMatchingCategory || hasMatchingSymptoms || hasSymptomKeywordsInContent;
+    });
+    
+    // Sort by relevance (verified first, then rating)
+    const sorted = [...filtered].sort((a, b) => {
+      // First priority: Verified resources
+      if (a.isVerified && !b.isVerified) return -1;
+      if (!a.isVerified && b.isVerified) return 1;
+      
+      // Second priority: Rating
+      return (b.rating || 0) - (a.rating || 0);
+    });
+    
+    return sorted;
+  };
+  
+  /**
+   * Balance resources by organization type
+   * Ensures a mix of VA and NGO resources with better distribution
+   * @param resources - All filtered resources
+   * @param categoryId - Selected symptom category (for logging)
+   * @param symptoms - Selected symptoms (for logging)
+   * @param severityLevel - Selected severity level (for logging)
+   * @returns Balanced resources
+   */
+  const balanceResourcesByOrganization = (
+    resources: HealthResource[],
+    categoryId: string,
+    symptoms: string[],
+    severityLevel: string | null
+  ): HealthResource[] => {
+    // Separate resources by organization type with more precise categorization
+    const vaResources = resources.filter((resource: HealthResource) => {
+      const org = resource.organization?.toLowerCase() || '';
+      const title = resource.title?.toLowerCase() || '';
+      return org.includes('va') || 
+             org.includes('veterans affairs') ||
+             title.includes('va ') ||
+             title.includes('veterans affairs') ||
+             org.includes('veterans health') ||
+             title.includes('veterans health');
+    });
+    
+    const ngoResources = resources.filter((resource: HealthResource) => {
+      const org = resource.organization?.toLowerCase() || '';
+      const title = resource.title?.toLowerCase() || '';
+      return !org.includes('va') && 
+             !org.includes('veterans affairs') &&
+             !title.includes('va ') &&
+             !title.includes('veterans affairs') &&
+             !org.includes('veterans health') &&
+             !title.includes('veterans health');
+    });
+    
+    console.log(`Found ${vaResources.length} VA resources and ${ngoResources.length} NGO resources before balancing`);
+    
+    // Define limits for each type with improved balancing
+    const totalResourceLimit = 30; // Increased from 20 to 30
+    const vaResourceLimit = Math.floor(totalResourceLimit * 0.3); // 30% VA resources
+    const ngoResourceLimit = Math.floor(totalResourceLimit * 0.6); // 60% NGO resources
+    
+    // Ensure we have at least some resources of each type
+    // This prevents showing all resources from one category
+    const minVaResources = Math.min(3, vaResources.length); // At least 3 VA resources if available
+    const minNgoResources = Math.min(5, ngoResources.length); // At least 5 NGO resources if available
+    
+    // Select resources up to the limits, ensuring minimums
+    const selectedVaResources = vaResources.slice(0, Math.max(vaResourceLimit, minVaResources));
+    const selectedNgoResources = ngoResources.slice(0, Math.max(ngoResourceLimit, minNgoResources));
+    
+    // Fill remaining slots with other resources if needed
+    const otherResources = [...vaResources.slice(selectedVaResources.length), ...ngoResources.slice(selectedNgoResources.length)];
+    const remainingSlots = totalResourceLimit - selectedVaResources.length - selectedNgoResources.length;
+    const selectedOtherResources = otherResources.slice(0, remainingSlots);
+    
+    // Combine all resources with NGOs first for better visibility
+    const combinedResources = [...selectedNgoResources, ...selectedVaResources, ...selectedOtherResources];
+    
+    // Log the resource count for debugging
+    console.log(`Returning ${combinedResources.length} resources: ${selectedNgoResources.length} NGO, ${selectedVaResources.length} VA, ${selectedOtherResources.length} other`);
+    
+    // Add a debug field to track which query produced each resource
+    return combinedResources.map((resource: HealthResource) => ({
+      ...resource,
+      _debug: `${categoryId}_${symptoms.join(',')}_${severityLevel}_${Date.now() % 1000}`
+    }));
+  };
+  
+  /**
+   * Find resources based on user selections
+   * @param categoryId - Selected symptom category
+   * @param symptoms - Selected symptoms
+   * @param severityLevel - Selected severity level
+   * @returns Promise with matched resources
+   */
+  const findMatchingResources = useCallback(async (
+    categoryId: string | null,
+    symptoms: string[],
+    severityLevel: string | null
+  ): Promise<HealthResource[]> => {
+    if (!categoryId) return [];
+    
+    setIsLoading(true);
+    
+    try {
+      // First try to fetch from API
+      let resources: HealthResource[] = [];
+      
+      try {
+        const params = new URLSearchParams();
+        params.append('symptomCategory', categoryId);
+        if (symptoms.length > 0) {
+          params.append('symptoms', symptoms.join(','));
+        }
+        if (severityLevel) {
+          params.append('severityLevel', severityLevel);
+        }
+        
+        // Add a unique parameter to ensure different results for different selections
+        // This is critical for ensuring we get different resources for different symptoms/severity
+        const uniqueId = `${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+        params.append('uniqueId', uniqueId);
+        
+        // Log the API request for debugging
+        console.log(`Fetching resources from API: /api/health-resources?${params.toString()}`);
+        
+        const response = await fetch(`/api/health-resources?${params.toString()}`);
+        
+        if (response.ok) {
+          const data = await response.json();
+          console.log('API response:', data);
+          
+          // Check if data has the expected structure
+          if (data.data && Array.isArray(data.data)) {
+            resources = data.data;
+            console.log(`Received ${resources.length} resources from API`);
+          } else {
+            console.error('API response missing data array:', data);
+            // Fallback to local filtering if API response is malformed
+            resources = filterResourcesLocally(allResources, categoryId, symptoms, severityLevel);
+          }
+        } else {
+          console.error('API request failed:', response.status, response.statusText);
+          // Fallback to local filtering if API fails
+          resources = filterResourcesLocally(allResources, categoryId, symptoms, severityLevel);
+        }
+      } catch (error) {
+        console.error('Error fetching resources from API:', error);
+        // Fallback to local filtering
+        resources = filterResourcesLocally(allResources, categoryId, symptoms, severityLevel);
+      }
+      
+      // Apply resource balancing to ensure a good mix of VA and NGO resources
+      const balancedResources = balanceResourcesByOrganization(resources, categoryId, symptoms, severityLevel);
+      
+      return balancedResources;
+    } finally {
+      // Add a small delay to simulate API latency
+      setTimeout(() => {
+        setIsLoading(false);
+      }, 1000);
+    }
+  }, [allResources]);
+  
+  return {
+    findMatchingResources,
+    isLoading
+  };
+}

@@ -1,0 +1,333 @@
+"use client";
+
+import React, { useState, useEffect } from 'react';
+import { usePathway } from '@/context/PathwayContext';
+import { Pathway } from '@/types/pathway';
+import Link from 'next/link';
+import { DocumentTextIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline';
+import type { PathwayStep as PathwayStepType, RelatedResource } from '@/types/pathway';
+import EnhancedPathwayContent from './EnhancedPathwayContent';
+import ResourceCard from '../ResourceCard';
+import { HealthResource } from '@/types/health';
+import { HealthResource as ModelsHealthResource } from '@/models/healthResource';
+import { adaptToModelResource } from '@/types/health-resource-adapter';
+import ResourceFetcher from '../../utils/resource-fetcher';
+
+// Import modular components
+import PathwayStepHeader from './components/PathwayStepHeader';
+import PathwayResources from './components/PathwayResources';
+import PathwayNavigation from './components/PathwayNavigation';
+
+// Enhanced type for related resources that includes standardized MongoDB schema fields
+type EnhancedRelatedResource = RelatedResource & {
+  resourceType?: string;
+  tags?: string[];
+  category?: string;
+  contact?: {
+    website?: string;
+    phone?: string;
+    email?: string;
+  };
+  location?: {
+    city?: string;
+    state?: string;
+  };
+};
+
+/**
+ * For markdown content rendering with fallback to regular text
+ * This is kept here for backward compatibility but should eventually be moved to a separate utility
+ */
+const MarkdownContent = ({ content }: { content: string }) => {
+  try {
+    // Use a simple HTML renderer with line break conversion
+    return <div dangerouslySetInnerHTML={{ __html: content.replace(/\n/g, '<br>') }} />;
+  } catch (error) {
+    console.error('Error rendering markdown:', error);
+    return <div className="whitespace-pre-wrap">{content}</div>;
+  }
+};
+
+/**
+ * Helper function to capitalize first letter of a string
+ */
+const capitalizeFirstLetter = (str: string): string => {
+  if (!str) return '';
+  return str.charAt(0).toUpperCase() + str.slice(1);
+};
+
+/**
+ * Helper function to get appropriate badge color based on resource type
+ */
+const getResourceTypeBadgeColor = (resourceType: string): string => {
+  const typeColors: { [key: string]: string } = {
+    'article': 'bg-blue-100 text-blue-800',
+    'guide': 'bg-purple-100 text-purple-800',
+    'tool': 'bg-green-100 text-green-800',
+    'video': 'bg-red-100 text-red-800',
+    'form': 'bg-yellow-100 text-yellow-800',
+    'contact': 'bg-indigo-100 text-indigo-800',
+    'event': 'bg-pink-100 text-pink-800',
+    'webinar': 'bg-teal-100 text-teal-800',
+    'podcast': 'bg-orange-100 text-orange-800',
+    'service': 'bg-cyan-100 text-cyan-800',
+    'benefit': 'bg-emerald-100 text-emerald-800',
+    'program': 'bg-violet-100 text-violet-800',
+    // Resource provider types
+    'federal': 'bg-blue-100 text-blue-800',
+    'va': 'bg-blue-100 text-blue-800',
+    'state': 'bg-green-100 text-green-800',
+    'local': 'bg-purple-100 text-purple-800',
+    'nonprofit': 'bg-orange-100 text-orange-800',
+    'ngo': 'bg-orange-100 text-orange-800'
+  };
+  
+  return typeColors[resourceType.toLowerCase()] || 'bg-gray-100 text-gray-800';
+};
+
+/**
+ * PathwayStep component for displaying pathway steps with enhanced content and navigation
+ */
+export default function PathwayStep() {
+  const { activePath, currentStep, completeStep, isLoading, goToStep } = usePathway();
+  const [resources, setResources] = useState<HealthResource[]>([]);
+  const [isLoadingResources, setIsLoadingResources] = useState(false);
+  const [isCompleted, setIsCompleted] = useState(false);
+  
+  // Create a function to render progress dots
+  const renderProgressDots = () => {
+    if (!activePath) return null;
+    
+    const totalSteps = activePath.steps.length;
+    const currentIndex = activePath.steps.findIndex(s => s.id === currentStep?.id);
+    
+    return (
+      <div className="flex items-center justify-center space-x-2 mb-4">
+        {activePath.steps.map((step, index) => (
+          <div 
+            key={step.id}
+            className={`h-2.5 w-2.5 rounded-full transition-colors ${index === currentIndex ? 'bg-blue-600' : index < currentIndex ? 'bg-blue-300' : 'bg-gray-200'}`}
+            aria-label={`Step ${index + 1}${index === currentIndex ? ' (current)' : ''}`}
+          />
+        ))}
+      </div>
+    );
+  };
+
+  // Get current pathway and index for navigation
+  const pathway = activePath;
+  const currentStepIndex = pathway?.steps.findIndex(s => s.id === currentStep?.id) ?? 0;
+
+  // Function to handle navigation between steps
+  const setCurrentStepId = (stepId: string) => {
+    if (goToStep) {
+      goToStep(stepId);
+    }
+  };
+
+  // Handle next step navigation
+  const handleNextStep = () => {
+    if (currentStep && currentStep.nextStepId) {
+      goToStep(currentStep.nextStepId);
+    } else if (currentStep && currentStep.nextStepOptions) {
+      console.log('Decision point reached:', currentStep.nextStepOptions);
+      // Handle decision point (future enhancement)
+    }
+  };
+
+  // Handle previous step navigation
+  const handlePrevStep = () => {
+    // Find the previous step based on order
+    if (activePath && currentStep) {
+      const steps = activePath.steps.sort((a, b) => a.order - b.order);
+      const currentIndex = steps.findIndex(step => step.id === currentStep.id);
+
+      if (currentIndex > 0) {
+        goToStep(steps[currentIndex - 1].id);
+      }
+    }
+  };
+
+  // Function to determine if there's a next step available
+  const hasNextStep = () => {
+    if (!currentStep) return false;
+    return Boolean(currentStep.nextStepId) || Boolean(currentStep.nextStepOptions);
+  };
+
+  // Function to determine if there's a previous step available
+  const hasPrevStep = () => {
+    if (!activePath || !currentStep) return false;
+    const steps = activePath.steps.sort((a, b) => a.order - b.order);
+    const currentIndex = steps.findIndex(step => step.id === currentStep.id);
+    return currentIndex > 0;
+  };
+
+  // Handle step completion
+  const handleCompleteStep = () => {
+    if (currentStep) {
+      completeStep(currentStep.id);
+    }
+  };
+
+  // Function to fetch related resources for the current step
+  const fetchRelatedResources = async () => {
+    // Safety check for undefined or empty resourceIds
+    if (!currentStep || !currentStep.resourceIds || !Array.isArray(currentStep.resourceIds) || currentStep.resourceIds.length === 0) {
+      setResources([]);
+      setIsLoadingResources(false);
+      return;
+    }
+
+    setIsLoadingResources(true);
+
+    try {
+      // Use ResourceFetcher utility to get resources
+      const data = await ResourceFetcher.fetchResourcesByIds(
+        currentStep.resourceIds,
+        activePath?.title || '',
+        `step_resources_${currentStep.id}`
+      );
+      
+      setResources(data);
+    } catch (error) {
+      console.error('Error fetching resources:', error);
+      setResources([]);
+    } finally {
+      setIsLoadingResources(false);
+    }
+  };
+
+  // Update isCompleted state when step changes
+  useEffect(() => {
+    if (!currentStep) {
+      setIsCompleted(false);
+      return;
+    }
+    
+    // Check if the current step is completed
+    const completedSteps = localStorage.getItem('completedSteps');
+    if (completedSteps) {
+      try {
+        const stepsArray = JSON.parse(completedSteps);
+        setIsCompleted(Array.isArray(stepsArray) && stepsArray.includes(currentStep.id));
+      } catch (error) {
+        console.error('Error parsing completed steps:', error);
+        setIsCompleted(false);
+      }
+    } else {
+      setIsCompleted(false);
+    }
+  }, [currentStep]);
+  
+  // Fetch resources when current step changes
+  useEffect(() => {
+    // Don't attempt to fetch if there's no currentStep
+    if (!currentStep) return;
+    
+    // Call our fetchRelatedResources function
+    fetchRelatedResources();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStep]);
+
+  if (isLoading) {
+    return (
+      <div className="py-8 text-center">
+        <div className="animate-pulse mb-4 h-6 w-48 bg-gray-200 rounded mx-auto"></div>
+        <p className="text-gray-500">Loading pathway...</p>
+      </div>
+    );
+  }
+
+  if (!activePath) {
+    return (
+      <div className="py-8 text-center">
+        <div className="animate-pulse mb-4 h-6 w-48 bg-gray-200 rounded mx-auto"></div>
+        <p className="text-gray-500">Loading pathway...</p>
+      </div>
+    );
+  }
+  
+  if (!currentStep) {
+    return (
+      <div className="py-8 text-center">
+        <h2 className="text-xl font-semibold text-[#1A2C5B] mb-2">{activePath.title}</h2>
+        <p className="text-gray-500">Loading step details...</p>
+      </div>
+    );
+  }
+  
+  return (
+    <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
+      {/* Use the PathwayStepHeader component */}
+      <PathwayStepHeader
+        title={currentStep?.title || ''}
+        estimatedTimeMinutes={currentStep?.estimatedTimeMinutes}
+        currentStepIndex={currentStepIndex}
+        totalSteps={activePath?.steps.length || 0}
+        pathwayTitle={activePath?.title}
+        renderProgressDots={renderProgressDots}
+      />
+      
+      {currentStep.estimatedTimeMinutes && (
+        <p className="text-sm text-gray-600 mb-4">
+          Estimated time: {currentStep.estimatedTimeMinutes} minutes
+        </p>
+      )}
+      
+      {/* Use our new enhanced content component */}
+      <EnhancedPathwayContent
+        stepId={currentStep.id}
+        detailedContent={currentStep.detailedContent}
+        description={currentStep.description}
+        title={currentStep.title}
+      />
+      
+      {/* Display resources based on what's available */}
+      <PathwayResources 
+        relatedResources={currentStep?.relatedResources}
+        resources={(!currentStep?.relatedResources || currentStep.relatedResources.length === 0) ? resources : undefined}
+        pathwayTitle={activePath?.title}
+        isLoading={(!currentStep?.relatedResources || currentStep.relatedResources.length === 0) && isLoadingResources}
+      />
+      
+      {/* Step navigation buttons */}
+      <PathwayNavigation 
+        hasPrevStep={hasPrevStep()}
+        hasNextStep={hasNextStep()}
+        isCompleted={isCompleted}
+        onPrevStep={handlePrevStep}
+        onNextStep={handleNextStep}
+        onCompleteStep={handleCompleteStep}
+      />
+    </div>
+  );
+}
+
+// PathwayDecision component for handling branching
+function PathwayDecision() {
+  const { currentStep, makeDecision } = usePathway();
+  
+  if (!currentStep?.nextStepOptions) return null;
+  
+  const { nextStepOptions: decision } = currentStep;
+  
+  return (
+    <div className="mt-4">
+      <h3 className="text-lg font-medium text-[#1A2C5B] mb-3">
+        {decision.question}
+      </h3>
+      
+      <div className="space-y-3">
+        {decision.options.map((option) => (
+          <button
+            key={option.id}
+            onClick={() => makeDecision(decision.id, option.id)}
+            className="w-full text-left px-4 py-3 border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+          >
+            {option.text}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}

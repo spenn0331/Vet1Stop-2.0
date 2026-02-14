@@ -1,0 +1,375 @@
+"use client";
+
+import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import NeedsBasedNavigation, { HEALTH_NEEDS } from './NeedsBasedNavigation';
+import NeedsRefinement, { HEALTH_CONCERNS } from './NeedsRefinement';
+import ResourceFinderSection from './ResourceFinderSection';
+import { Button } from '@/components/ui/button';
+import { ArrowUturnLeftIcon, AdjustmentsHorizontalIcon } from '@heroicons/react/24/outline';
+
+// Define the explorer view states
+type ExplorerView = 'needs' | 'questionnaire' | 'refinement' | 'resources';
+
+export default function HealthResourceExplorer() {
+  // State for the current view in the explorer flow
+  const [currentView, setCurrentView] = useState<ExplorerView>('needs');
+  
+  // State for the selected health need and concerns
+  const [selectedNeedId, setSelectedNeedId] = useState<string | null>(null);
+  const [selectedConcernIds, setSelectedConcernIds] = useState<string[]>([]);
+  
+  // State for search and filter parameters to pass to ResourceFinderSection
+  const [searchParams, setSearchParams] = useState({
+    searchTerm: '',
+    category: 'all',
+    tags: [] as string[],
+    keywords: [] as string[],
+    needsBasedAPI: false,
+    concerns: ''
+  });
+  
+  // Add questionnaire state
+  const [questionnaireAnswers, setQuestionnaireAnswers] = useState<Record<string, string>>({});
+  const [questionnaireProgress, setQuestionnaireProgress] = useState(0);
+  
+  // Helper function to get current progress percentage
+  const getProgressPercentage = () => {
+    switch (currentView) {
+      case 'needs': return 25;
+      case 'questionnaire': return 25 + (questionnaireProgress * 25);
+      case 'refinement': return 75; 
+      case 'resources': return 100;
+      default: return 0;
+    }
+  };
+
+  // Helper function to get current step label
+  const getCurrentStepLabel = () => {
+    switch (currentView) {
+      case 'needs': return 'Step 1: Identify Your Health Need';
+      case 'questionnaire': return 'Step 2: Tell Us More About Your Situation';
+      case 'refinement': return 'Step 3: Select Specific Concerns';
+      case 'resources': return 'Step 4: View Recommended Resources';
+      default: return '';
+    }
+  };
+
+  // Handle need selection
+  const handleNeedSelection = (needId: string) => {
+    setSelectedNeedId(needId);
+    
+    // If the need is Mental Health, show questionnaire first
+    if (needId === 'mental-health') {
+      setCurrentView('questionnaire');
+      setQuestionnaireProgress(0);
+    } else {
+      // For other health needs, go straight to refinement
+      setCurrentView('refinement');
+    }
+  };
+  
+  // Handle questionnaire advancement
+  const handleQuestionnaireAnswer = (questionId: string, answer: string) => {
+    // Save answer
+    setQuestionnaireAnswers(prev => ({
+      ...prev,
+      [questionId]: answer
+    }));
+    
+    // Calculate progress based on mental health questionnaire having 3 questions
+    const newProgress = (Object.keys(questionnaireAnswers).length + 1) / 3;
+    setQuestionnaireProgress(Math.min(newProgress, 1));
+    
+    // If all questions answered, move to refinement
+    if (newProgress >= 1) {
+      // Convert questionnaire answers to concern tags
+      const derivedTags: string[] = [];
+      
+      if (questionnaireAnswers['sleep'] === 'poor') {
+        derivedTags.push('insomnia', 'sleep-issues');
+      }
+      
+      if (questionnaireAnswers['mood'] === 'low') {
+        derivedTags.push('depression', 'mood-disorder');
+      }
+      
+      if (questionnaireAnswers['anxiety'] === 'high') {
+        derivedTags.push('anxiety', 'stress');
+      }
+      
+      // Move to refinement with pre-selected concerns based on questionnaire
+      setCurrentView('refinement');
+      
+      // Pre-select concerns based on questionnaire answers
+      if (derivedTags.length > 0) {
+        // Find concern IDs that match our derived tags
+        const matchingConcernIds = HEALTH_CONCERNS
+          .filter(concern => 
+            concern.tags.some(tag => derivedTags.includes(tag))
+          )
+          .map(concern => concern.id);
+          
+        setSelectedConcernIds(matchingConcernIds);
+      }
+    }
+  };
+
+  // Reset to needs view
+  const resetToNeeds = () => {
+    setCurrentView('needs');
+    setSelectedNeedId(null);
+    setSelectedConcernIds([]);
+    setQuestionnaireAnswers({});
+    setQuestionnaireProgress(0);
+  };
+  
+  // Return to refinement view from resources view
+  const backToRefinement = () => {
+    setCurrentView('refinement');
+    setSelectedConcernIds([]);
+  };
+  
+  // Animation variants for view transitions
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: { 
+      opacity: 1,
+      transition: { duration: 0.5 }
+    },
+    exit: { 
+      opacity: 0,
+      transition: { duration: 0.3 }
+    }
+  };
+  
+  return (
+    <div className="w-full max-w-7xl mx-auto">
+      {/* Progress indicator */}
+      <div className="mb-6">
+        <div className="flex justify-between text-sm text-gray-600 mb-1">
+          <span>{getCurrentStepLabel()}</span>
+          <span>{getProgressPercentage()}% Complete</span>
+        </div>
+        <div className="w-full bg-gray-200 rounded-full h-2.5">
+          <div 
+            className="bg-[#3C3B6E] h-2.5 rounded-full transition-all duration-500 ease-in-out" 
+            style={{width: `${getProgressPercentage()}%`}}
+          ></div>
+        </div>
+      </div>
+      
+      {/* Navigation buttons */}
+      {currentView !== 'needs' && (
+        <div className="mb-6 flex justify-between">
+          <Button
+            onClick={currentView === 'refinement' ? resetToNeeds : backToRefinement}
+            className="text-[#1A2C5B] hover:bg-blue-50 bg-transparent"
+          >
+            <ArrowUturnLeftIcon className="h-4 w-4 mr-2" />
+            {currentView === 'refinement' ? 'Back to Needs' : 'Back to Concerns'}
+          </Button>
+          
+          {currentView === 'resources' && (
+            <Button
+              onClick={() => setCurrentView('needs')}
+              className="text-[#1A2C5B] border border-[#1A2C5B] hover:bg-blue-50 bg-white"
+            >
+              <AdjustmentsHorizontalIcon className="h-4 w-4 mr-2" />
+              Modify Search
+            </Button>
+          )}
+        </div>
+      )}
+      
+      {/* Main content with view transitions */}
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={currentView}
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
+          exit="exit"
+          className="bg-white rounded-lg shadow-md p-6 md:p-8"
+        >
+          {currentView === 'needs' && (
+            <NeedsBasedNavigation 
+              onSelectNeed={handleNeedSelection} 
+            />
+          )}
+          
+          {currentView === 'questionnaire' && (
+            <div className="space-y-6 animate-fade-in">
+              <h2 className="text-2xl font-bold text-[#1A2C5B] mb-4">Mental Health Assessment</h2>
+              <p className="text-gray-600 mb-6">
+                To provide you with the most relevant resources, please answer a few quick questions about how you've been feeling lately.
+              </p>
+              
+              {/* Question 1 - Sleep */}
+              <div className={`mb-6 ${questionnaireProgress >= 0.33 ? 'opacity-50' : ''}`}>
+                <h3 className="font-medium text-lg mb-3">How has your sleep been over the past 2 weeks?</h3>
+                <div className="flex flex-wrap gap-3">
+                  {['good', 'fair', 'poor'].map(answer => (
+                    <button
+                      key={answer}
+                      onClick={() => handleQuestionnaireAnswer('sleep', answer)}
+                      disabled={questionnaireProgress >= 0.33}
+                      className={`px-4 py-2 border rounded-md transition-colors ${
+                        questionnaireAnswers['sleep'] === answer 
+                          ? 'bg-[#3C3B6E] text-white border-[#3C3B6E]' 
+                          : 'border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      {answer === 'good' && 'Good - I sleep well most nights'}
+                      {answer === 'fair' && 'Fair - I have some trouble sleeping'}
+                      {answer === 'poor' && 'Poor - I struggle to sleep most nights'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              
+              {/* Question 2 - Mood (only show if Q1 answered) */}
+              {questionnaireAnswers['sleep'] && (
+                <div className={`mb-6 ${questionnaireProgress >= 0.66 ? 'opacity-50' : ''}`}>
+                  <h3 className="font-medium text-lg mb-3">How would you describe your mood lately?</h3>
+                  <div className="flex flex-wrap gap-3">
+                    {['good', 'variable', 'low'].map(answer => (
+                      <button
+                        key={answer}
+                        onClick={() => handleQuestionnaireAnswer('mood', answer)}
+                        disabled={questionnaireProgress >= 0.66}
+                        className={`px-4 py-2 border rounded-md transition-colors ${
+                          questionnaireAnswers['mood'] === answer 
+                            ? 'bg-[#3C3B6E] text-white border-[#3C3B6E]' 
+                            : 'border-gray-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        {answer === 'good' && 'Good - I feel positive most days'}
+                        {answer === 'variable' && 'Variable - My mood fluctuates'}
+                        {answer === 'low' && 'Low - I often feel down or depressed'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              {/* Question 3 - Anxiety (only show if Q2 answered) */}
+              {questionnaireAnswers['mood'] && (
+                <div className="mb-6">
+                  <h3 className="font-medium text-lg mb-3">How would you rate your anxiety or stress levels?</h3>
+                  <div className="flex flex-wrap gap-3">
+                    {['low', 'moderate', 'high'].map(answer => (
+                      <button
+                        key={answer}
+                        onClick={() => handleQuestionnaireAnswer('anxiety', answer)}
+                        className={`px-4 py-2 border rounded-md transition-colors ${
+                          questionnaireAnswers['anxiety'] === answer 
+                            ? 'bg-[#3C3B6E] text-white border-[#3C3B6E]' 
+                            : 'border-gray-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        {answer === 'low' && 'Low - I feel relaxed most of the time'}
+                        {answer === 'moderate' && 'Moderate - I feel stressed sometimes'}
+                        {answer === 'high' && 'High - I feel anxious or on edge often'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              <div className="mt-8 flex justify-between">
+                <Button onClick={resetToNeeds} className="border border-gray-300 bg-white text-gray-600 hover:bg-gray-50">
+                  Go Back
+                </Button>
+                {questionnaireAnswers['anxiety'] && (
+                  <Button 
+                    onClick={() => setCurrentView('refinement')}
+                    className="bg-[#B22234] hover:bg-red-700 text-white"
+                  >
+                    Continue to Concerns
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+          
+          {currentView === 'refinement' && selectedNeedId && (
+            <NeedsRefinement 
+              selectedNeedId={selectedNeedId || ''}
+              onBack={resetToNeeds}
+              onConcernsSelected={(concernIds, allTags) => {
+                setSelectedConcernIds(concernIds);
+                setCurrentView('resources');
+                
+                // Update search parameters based on selected concerns
+                if (concernIds.length > 0) {
+                  // Use the expanded tag list directly from NeedsRefinement
+                  console.log('Setting up search with concerns:', concernIds);
+                  console.log('Using expanded tags:', allTags);
+                  
+                  // Update search params for our custom API endpoint
+                  // The new API endpoint will handle these parameters better for needs-based filtering
+                  setSearchParams(prev => ({
+                    ...prev,
+                    searchTerm: '', // Don't use search term directly
+                    tags: Array.from(new Set(allTags)), // Remove duplicates using Array.from
+                    needsBasedAPI: true, // Flag to use our needs-based API
+                    concerns: Array.from(new Set(allTags)).join(',') // Pass concerns as comma-separated list
+                  }));
+                }
+              }}
+            />
+          )}
+          
+          {currentView === 'resources' && (
+            <motion.div
+              className="max-w-screen-xl mx-auto"
+              key="resources-view"
+              variants={containerVariants}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+            >
+              <div className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div>
+                  <Button
+                    onClick={backToRefinement}
+                    className="text-[#1A2C5B] hover:text-[#0D1831] bg-transparent hover:bg-gray-100 flex items-center gap-1 mb-2"
+                  >
+                    <ArrowUturnLeftIcon className="h-4 w-4" />
+                    <span>Back to Concerns</span>
+                  </Button>
+                  <h2 className="text-2xl font-bold text-[#1A2C5B]">
+                    {selectedNeedId ? HEALTH_NEEDS.find(need => need.id === selectedNeedId)?.title : ''} Resources
+                  </h2>
+                  <p className="text-sm text-gray-600">
+                    Focused on: {selectedConcernIds.map(id => {
+                      const concern = HEALTH_CONCERNS.find(c => c.id === id);
+                      return concern ? concern.title : '';
+                    }).filter(Boolean).join(', ')}
+                  </p>
+                </div>
+                <Button
+                  onClick={resetToNeeds}
+                  className="bg-slate-100 hover:bg-slate-200 text-[#1A2C5B] flex items-center gap-2"
+                >
+                  <AdjustmentsHorizontalIcon className="h-4 w-4" />
+                  <span>Modify Search</span>
+                </Button>
+              </div>
+              
+              <ResourceFinderSection
+                initialSearchTerm={searchParams.searchTerm}
+                initialCategory={searchParams.category}
+                initialTags={searchParams.tags}
+                initialConcerns={searchParams.concerns}
+                useNeedsBasedAPI={searchParams.needsBasedAPI}
+                isFromNeedsNavigation={true}
+              />
+            </motion.div>
+          )}
+        </motion.div>
+      </AnimatePresence>
+    </div>
+  );
+}

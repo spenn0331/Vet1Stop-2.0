@@ -1,0 +1,726 @@
+/**
+ * Enhanced Resource Finder Section
+ * 
+ * A comprehensive resource finder with improved filtering,
+ * search, and display options for veterans.
+ */
+
+"use client";
+
+import React, { useState, useEffect, useCallback } from 'react';
+import { 
+  MagnifyingGlassIcon,
+  AdjustmentsHorizontalIcon,
+  MapPinIcon,
+  CheckIcon,
+  XMarkIcon,
+  ArrowPathIcon,
+  UserIcon,
+  BuildingLibraryIcon,
+  HeartIcon,
+  BookmarkIcon
+} from '@heroicons/react/24/outline';
+import { useRouter, useSearchParams } from 'next/navigation';
+
+// Import the existing ResourceFinderSection for its functionality
+import ResourceFinderSection from './ResourceFinderSection';
+
+// Resource type interface
+interface Resource {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  provider: string;
+  providerType: 'va' | 'ngo' | 'other';
+  location?: {
+    city?: string;
+    state?: string;
+    distance?: number;
+  };
+  contact?: {
+    phone?: string;
+    website?: string;
+    email?: string;
+  };
+  eligibility?: string[];
+  tags?: string[];
+  rating?: number;
+  isFeatured?: boolean;
+  isVerified?: boolean;
+  lastUpdated?: string;
+}
+
+export default function EnhancedResourceFinderSection() {
+  // State for filters
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [selectedProviderType, setSelectedProviderType] = useState<string[]>([]);
+  const [selectedLocation, setSelectedLocation] = useState('');
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [savedResources, setSavedResources] = useState<string[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [resources, setResources] = useState<Resource[]>([]);
+  const [filteredResources, setFilteredResources] = useState<Resource[]>([]);
+  const [userLocation, setUserLocation] = useState<{state: string, city?: string} | null>(null);
+  
+  // Advanced filters
+  const [advancedFilters, setAdvancedFilters] = useState({
+    eligibility: [] as string[],
+    tags: [] as string[],
+    rating: 0,
+    distance: 50,
+    verifiedOnly: false
+  });
+  
+  // Router and search params
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  
+  // Categories for filtering
+  const categories = [
+    { value: 'all', label: 'All Categories' },
+    { value: 'mental-health', label: 'Mental Health' },
+    { value: 'primary-care', label: 'Primary Care' },
+    { value: 'specialty-care', label: 'Specialty Care' },
+    { value: 'emergency', label: 'Emergency Services' },
+    { value: 'rehabilitation', label: 'Rehabilitation' },
+    { value: 'preventive', label: 'Preventive Care' },
+    { value: 'telehealth', label: 'Telehealth' },
+    { value: 'pharmacy', label: 'Pharmacy' },
+    { value: 'dental', label: 'Dental Care' },
+    { value: 'vision', label: 'Vision Care' },
+    { value: 'womens-health', label: 'Women\'s Health' }
+  ];
+  
+  // Provider types for filtering
+  const providerTypes = [
+    { value: 'va', label: 'VA Facilities', icon: <BuildingLibraryIcon className="h-5 w-5" /> },
+    { value: 'ngo', label: 'Non-Profit Organizations', icon: <HeartIcon className="h-5 w-5" /> },
+    { value: 'other', label: 'Other Providers', icon: <UserIcon className="h-5 w-5" /> }
+  ];
+  
+  // Eligibility options for advanced filtering
+  const eligibilityOptions = [
+    { value: 'all-veterans', label: 'All Veterans' },
+    { value: 'service-connected', label: 'Service-Connected Disability' },
+    { value: 'combat', label: 'Combat Veterans' },
+    { value: 'post-911', label: 'Post-9/11 Veterans' },
+    { value: 'vietnam', label: 'Vietnam Era Veterans' },
+    { value: 'family', label: 'Family Members' }
+  ];
+  
+  // Initialize from URL params
+  useEffect(() => {
+    if (searchParams) {
+      const query = searchParams.get('query');
+      const category = searchParams.get('category');
+      const providerType = searchParams.get('providerType');
+      const location = searchParams.get('location');
+      
+      if (query) setSearchQuery(query);
+      if (category) setSelectedCategory(category);
+      if (providerType) setSelectedProviderType(providerType.split(','));
+      if (location) setSelectedLocation(location);
+    }
+  }, [searchParams]);
+  
+  // Get user location from profile or browser
+  useEffect(() => {
+    // Simulated user profile check
+    const checkUserProfile = async () => {
+      // In a real implementation, this would check the user's profile
+      // For demo purposes, we'll set a default location
+      setUserLocation({ state: 'Pennsylvania', city: 'Philadelphia' });
+    };
+    
+    checkUserProfile();
+  }, []);
+  
+  // Load resources (simulated)
+  useEffect(() => {
+    const loadResources = async () => {
+      setIsLoading(true);
+      
+      try {
+        // In a real implementation, this would fetch from an API
+        // For demo purposes, we'll use a timeout to simulate loading
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Sample resources data
+        const sampleResources: Resource[] = [
+          {
+            id: '1',
+            title: 'VA Medical Center - Philadelphia',
+            description: 'Comprehensive healthcare services for Veterans',
+            category: 'primary-care',
+            provider: 'Department of Veterans Affairs',
+            providerType: 'va',
+            location: {
+              city: 'Philadelphia',
+              state: 'PA',
+              distance: 5.2
+            },
+            contact: {
+              phone: '215-823-5800',
+              website: 'https://www.va.gov/philadelphia-health-care/',
+              email: 'info@philadelphia.va.gov'
+            },
+            eligibility: ['all-veterans'],
+            tags: ['primary-care', 'mental-health', 'specialty-care'],
+            rating: 4.2,
+            isFeatured: true,
+            isVerified: true,
+            lastUpdated: '2025-03-15'
+          },
+          {
+            id: '2',
+            title: 'Veterans Crisis Line',
+            description: 'Confidential crisis support for Veterans and their families',
+            category: 'mental-health',
+            provider: 'Department of Veterans Affairs',
+            providerType: 'va',
+            contact: {
+              phone: '988 (Press 1)',
+              website: 'https://www.veteranscrisisline.net/',
+            },
+            eligibility: ['all-veterans', 'family'],
+            tags: ['crisis', 'mental-health', 'suicide-prevention'],
+            rating: 4.8,
+            isFeatured: true,
+            isVerified: true,
+            lastUpdated: '2025-04-01'
+          },
+          {
+            id: '3',
+            title: 'Team Red, White & Blue',
+            description: 'Enriching Veterans\'s lives through physical and social activity',
+            category: 'mental-health',
+            provider: 'Team RWB',
+            providerType: 'ngo',
+            location: {
+              city: 'Philadelphia',
+              state: 'PA',
+              distance: 3.7
+            },
+            contact: {
+              website: 'https://www.teamrwb.org/',
+              email: 'info@teamrwb.org'
+            },
+            eligibility: ['all-veterans'],
+            tags: ['fitness', 'social', 'wellness'],
+            rating: 4.7,
+            isVerified: true,
+            lastUpdated: '2025-02-20'
+          },
+          {
+            id: '4',
+            title: 'Wounded Warrior Project',
+            description: 'Programs and services for post-9/11 Veterans',
+            category: 'rehabilitation',
+            provider: 'Wounded Warrior Project',
+            providerType: 'ngo',
+            contact: {
+              phone: '888-997-2586',
+              website: 'https://www.woundedwarriorproject.org/',
+            },
+            eligibility: ['post-911', 'service-connected'],
+            tags: ['rehabilitation', 'mental-health', 'support'],
+            rating: 4.5,
+            isVerified: true,
+            lastUpdated: '2025-03-10'
+          },
+          {
+            id: '5',
+            title: 'Veterans Dental Clinic',
+            description: 'Affordable dental care for Veterans',
+            category: 'dental',
+            provider: 'Community Dental Alliance',
+            providerType: 'other',
+            location: {
+              city: 'Philadelphia',
+              state: 'PA',
+              distance: 7.1
+            },
+            contact: {
+              phone: '215-555-1234',
+              website: 'https://www.communitydentalalliance.org/',
+            },
+            eligibility: ['all-veterans'],
+            tags: ['dental', 'affordable'],
+            rating: 4.0,
+            isVerified: false,
+            lastUpdated: '2025-01-15'
+          }
+        ];
+        
+        setResources(sampleResources);
+        setFilteredResources(sampleResources);
+      } catch (error) {
+        console.error('Error loading resources:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    loadResources();
+  }, []);
+  
+  // Filter resources based on search and filters
+  useEffect(() => {
+    if (resources.length === 0) return;
+    
+    let filtered = [...resources];
+    
+    // Apply search query
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(resource => 
+        resource.title.toLowerCase().includes(query) || 
+        resource.description.toLowerCase().includes(query) ||
+        resource.tags?.some(tag => tag.toLowerCase().includes(query))
+      );
+    }
+    
+    // Apply category filter
+    if (selectedCategory && selectedCategory !== 'all') {
+      filtered = filtered.filter(resource => 
+        resource.category === selectedCategory ||
+        resource.tags?.includes(selectedCategory)
+      );
+    }
+    
+    // Apply provider type filter
+    if (selectedProviderType.length > 0) {
+      filtered = filtered.filter(resource => 
+        selectedProviderType.includes(resource.providerType)
+      );
+    }
+    
+    // Apply location filter
+    if (selectedLocation) {
+      filtered = filtered.filter(resource => 
+        resource.location?.state === selectedLocation ||
+        resource.location?.city === selectedLocation
+      );
+    }
+    
+    // Apply advanced filters
+    if (advancedFilters.eligibility.length > 0) {
+      filtered = filtered.filter(resource => 
+        resource.eligibility?.some(elig => 
+          advancedFilters.eligibility.includes(elig)
+        )
+      );
+    }
+    
+    if (advancedFilters.tags.length > 0) {
+      filtered = filtered.filter(resource => 
+        resource.tags?.some(tag => 
+          advancedFilters.tags.includes(tag)
+        )
+      );
+    }
+    
+    if (advancedFilters.rating > 0) {
+      filtered = filtered.filter(resource => 
+        (resource.rating || 0) >= advancedFilters.rating
+      );
+    }
+    
+    if (advancedFilters.verifiedOnly) {
+      filtered = filtered.filter(resource => resource.isVerified);
+    }
+    
+    // Sort by featured and then by rating
+    filtered.sort((a, b) => {
+      if (a.isFeatured && !b.isFeatured) return -1;
+      if (!a.isFeatured && b.isFeatured) return 1;
+      return (b.rating || 0) - (a.rating || 0);
+    });
+    
+    setFilteredResources(filtered);
+  }, [resources, searchQuery, selectedCategory, selectedProviderType, selectedLocation, advancedFilters]);
+  
+  // Toggle saved resource
+  const toggleSavedResource = (resourceId: string) => {
+    setSavedResources(prev => 
+      prev.includes(resourceId)
+        ? prev.filter(id => id !== resourceId)
+        : [...prev, resourceId]
+    );
+  };
+  
+  // Toggle advanced filters
+  const toggleAdvancedFilters = () => {
+    setShowAdvancedFilters(prev => !prev);
+  };
+  
+  // Update advanced filters
+  const updateAdvancedFilter = (filterType: string, value: any) => {
+    setAdvancedFilters(prev => ({
+      ...prev,
+      [filterType]: value
+    }));
+  };
+  
+  // Reset all filters
+  const resetFilters = () => {
+    setSearchQuery('');
+    setSelectedCategory('all');
+    setSelectedProviderType([]);
+    setSelectedLocation('');
+    setAdvancedFilters({
+      eligibility: [],
+      tags: [],
+      rating: 0,
+      distance: 50,
+      verifiedOnly: false
+    });
+  };
+  
+  // Resource card component
+  const ResourceCard = ({ resource }: { resource: Resource }) => {
+    const isSaved = savedResources.includes(resource.id);
+    
+    return (
+      <div className="bg-white rounded-lg shadow-md overflow-hidden border border-gray-200 hover:shadow-lg transition-shadow duration-300">
+        {/* Card Header */}
+        <div className="bg-gray-50 px-4 py-3 border-b border-gray-200 flex justify-between items-center">
+          <div className="flex items-center">
+            {resource.providerType === 'va' && (
+              <BuildingLibraryIcon className="h-5 w-5 text-blue-600 mr-2" />
+            )}
+            {resource.providerType === 'ngo' && (
+              <HeartIcon className="h-5 w-5 text-red-600 mr-2" />
+            )}
+            {resource.providerType === 'other' && (
+              <UserIcon className="h-5 w-5 text-gray-600 mr-2" />
+            )}
+            <span className="text-sm font-medium text-gray-600">{resource.provider}</span>
+          </div>
+          <button
+            onClick={() => toggleSavedResource(resource.id)}
+            className={`p-1 rounded-full ${isSaved ? 'text-blue-600 hover:text-blue-800' : 'text-gray-400 hover:text-gray-600'}`}
+            aria-label={isSaved ? 'Unsave resource' : 'Save resource'}
+          >
+            <BookmarkIcon className="h-5 w-5" />
+          </button>
+        </div>
+        
+        {/* Card Content */}
+        <div className="p-4">
+          <div className="flex justify-between items-start">
+            <h3 className="text-lg font-medium text-gray-900 mb-1">{resource.title}</h3>
+            {resource.isVerified && (
+              <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full flex items-center">
+                <CheckIcon className="h-3 w-3 mr-1" />
+                Verified
+              </span>
+            )}
+          </div>
+          
+          <p className="text-sm text-gray-600 mb-3">{resource.description}</p>
+          
+          {/* Location */}
+          {resource.location && (
+            <div className="flex items-center text-sm text-gray-500 mb-3">
+              <MapPinIcon className="h-4 w-4 mr-1" />
+              <span>
+                {resource.location.city}, {resource.location.state}
+                {resource.location.distance && ` (${resource.location.distance} miles)`}
+              </span>
+            </div>
+          )}
+          
+          {/* Tags */}
+          {resource.tags && resource.tags.length > 0 && (
+            <div className="flex flex-wrap gap-1 mb-3">
+              {resource.tags.map(tag => (
+                <span 
+                  key={tag} 
+                  className="bg-blue-50 text-blue-700 text-xs px-2 py-1 rounded-full"
+                >
+                  {tag}
+                </span>
+              ))}
+            </div>
+          )}
+          
+          {/* Eligibility */}
+          {resource.eligibility && resource.eligibility.length > 0 && (
+            <div className="mb-3">
+              <span className="text-xs font-medium text-gray-500">Eligibility: </span>
+              <span className="text-xs text-gray-600">
+                {resource.eligibility.map(e => {
+                  const option = eligibilityOptions.find(opt => opt.value === e);
+                  return option ? option.label : e;
+                }).join(', ')}
+              </span>
+            </div>
+          )}
+          
+          {/* Contact Info */}
+          <div className="mt-4 pt-3 border-t border-gray-200">
+            {resource.contact?.website && (
+              <a 
+                href={resource.contact.website}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block text-sm text-blue-600 hover:text-blue-800 mb-1"
+              >
+                Visit Website
+              </a>
+            )}
+            {resource.contact?.phone && (
+              <a 
+                href={`tel:${resource.contact.phone.replace(/[^0-9]/g, '')}`}
+                className="block text-sm text-blue-600 hover:text-blue-800"
+              >
+                {resource.contact.phone}
+              </a>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="py-6">
+      <div className="max-w-6xl mx-auto">
+        <h2 className="text-2xl font-bold text-[#1A2C5B] mb-4 text-center">
+          Find Health Resources
+        </h2>
+        <p className="text-gray-600 mb-8 text-center max-w-3xl mx-auto">
+          Search and filter health resources tailored to your specific needs.
+        </p>
+        
+        {/* Search and Basic Filters */}
+        <div className="bg-white rounded-lg shadow-md p-4 mb-6">
+          {/* Search Bar */}
+          <div className="relative mb-4">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <MagnifyingGlassIcon className="h-5 w-5 text-gray-400" aria-hidden="true" />
+            </div>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+              placeholder="Search for health resources..."
+              aria-label="Search for health resources"
+            />
+          </div>
+          
+          {/* Basic Filters */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            {/* Category Filter */}
+            <div>
+              <label htmlFor="category-filter" className="block text-sm font-medium text-gray-700 mb-1">
+                Category
+              </label>
+              <select
+                id="category-filter"
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                className="block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
+              >
+                {categories.map(category => (
+                  <option key={category.value} value={category.value}>
+                    {category.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            
+            {/* Provider Type Filter */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Provider Type
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {providerTypes.map(type => (
+                  <button
+                    key={type.value}
+                    onClick={() => {
+                      setSelectedProviderType(prev => 
+                        prev.includes(type.value)
+                          ? prev.filter(t => t !== type.value)
+                          : [...prev, type.value]
+                      );
+                    }}
+                    className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm ${
+                      selectedProviderType.includes(type.value)
+                        ? 'bg-blue-100 text-blue-800 border border-blue-300'
+                        : 'bg-gray-100 text-gray-800 border border-gray-300 hover:bg-gray-200'
+                    }`}
+                  >
+                    <span className="mr-1.5">{type.icon}</span>
+                    {type.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            
+            {/* Location Filter */}
+            <div>
+              <label htmlFor="location-filter" className="block text-sm font-medium text-gray-700 mb-1">
+                Location
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <MapPinIcon className="h-5 w-5 text-gray-400" aria-hidden="true" />
+                </div>
+                <input
+                  type="text"
+                  id="location-filter"
+                  value={selectedLocation}
+                  onChange={(e) => setSelectedLocation(e.target.value)}
+                  placeholder={userLocation ? `${userLocation.city}, ${userLocation.state}` : "Enter location"}
+                  className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                />
+              </div>
+            </div>
+          </div>
+          
+          {/* Advanced Filters Toggle */}
+          <div className="flex justify-between items-center">
+            <button
+              type="button"
+              onClick={toggleAdvancedFilters}
+              className="inline-flex items-center text-sm text-blue-600 hover:text-blue-800"
+            >
+              <AdjustmentsHorizontalIcon className="h-4 w-4 mr-1" />
+              {showAdvancedFilters ? 'Hide Advanced Filters' : 'Show Advanced Filters'}
+            </button>
+            
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="inline-flex items-center text-sm text-gray-600 hover:text-gray-800"
+            >
+              <ArrowPathIcon className="h-4 w-4 mr-1" />
+              Reset Filters
+            </button>
+          </div>
+          
+          {/* Advanced Filters Panel */}
+          {showAdvancedFilters && (
+            <div className="mt-4 pt-4 border-t border-gray-200">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {/* Eligibility Filter */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Eligibility
+                  </label>
+                  <div className="space-y-2">
+                    {eligibilityOptions.map(option => (
+                      <div key={option.value} className="flex items-center">
+                        <input
+                          id={`eligibility-${option.value}`}
+                          type="checkbox"
+                          checked={advancedFilters.eligibility.includes(option.value)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              updateAdvancedFilter('eligibility', [...advancedFilters.eligibility, option.value]);
+                            } else {
+                              updateAdvancedFilter('eligibility', advancedFilters.eligibility.filter(v => v !== option.value));
+                            }
+                          }}
+                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                        />
+                        <label htmlFor={`eligibility-${option.value}`} className="ml-2 block text-sm text-gray-700">
+                          {option.label}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                
+                {/* Rating Filter */}
+                <div>
+                  <label htmlFor="rating-filter" className="block text-sm font-medium text-gray-700 mb-2">
+                    Minimum Rating
+                  </label>
+                  <select
+                    id="rating-filter"
+                    value={advancedFilters.rating}
+                    onChange={(e) => updateAdvancedFilter('rating', Number(e.target.value))}
+                    className="block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
+                  >
+                    <option value="0">Any Rating</option>
+                    <option value="3">3+ Stars</option>
+                    <option value="4">4+ Stars</option>
+                    <option value="4.5">4.5+ Stars</option>
+                  </select>
+                </div>
+                
+                {/* Verified Only Filter */}
+                <div className="flex items-center h-full pt-6">
+                  <input
+                    id="verified-only"
+                    type="checkbox"
+                    checked={advancedFilters.verifiedOnly}
+                    onChange={(e) => updateAdvancedFilter('verifiedOnly', e.target.checked)}
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  />
+                  <label htmlFor="verified-only" className="ml-2 block text-sm text-gray-700">
+                    Show Verified Resources Only
+                  </label>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+        
+        {/* Results Section */}
+        <div>
+          {/* Results Header */}
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-lg font-medium text-gray-900">
+              {isLoading ? 'Loading resources...' : `${filteredResources.length} Resources Found`}
+            </h3>
+            
+            <div className="text-sm text-gray-500">
+              {userLocation && (
+                <span className="flex items-center">
+                  <MapPinIcon className="h-4 w-4 mr-1" />
+                  Showing resources near {userLocation.city}, {userLocation.state}
+                </span>
+              )}
+            </div>
+          </div>
+          
+          {/* Results Grid */}
+          {isLoading ? (
+            <div className="flex justify-center items-center py-12">
+              <ArrowPathIcon className="h-8 w-8 text-blue-600 animate-spin" />
+            </div>
+          ) : filteredResources.length === 0 ? (
+            <div className="bg-white rounded-lg shadow-md p-8 text-center">
+              <XMarkIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No resources found</h3>
+              <p className="text-gray-600 mb-4">
+                Try adjusting your search criteria or filters to find more resources.
+              </p>
+              <button
+                type="button"
+                onClick={resetFilters}
+                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                Reset All Filters
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredResources.map(resource => (
+                <ResourceCard key={resource.id} resource={resource} />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

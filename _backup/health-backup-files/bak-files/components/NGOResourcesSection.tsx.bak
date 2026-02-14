@@ -1,0 +1,587 @@
+"use client";
+
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import Link from 'next/link';
+import { useQuery } from '@tanstack/react-query';
+import { MagnifyingGlassIcon, MapIcon, CheckCircleIcon, AdjustmentsHorizontalIcon, FireIcon, InformationCircleIcon, UserGroupIcon, ArrowPathIcon, FunnelIcon } from '@heroicons/react/24/solid';
+import { XMarkIcon, HeartIcon, EnvelopeIcon, ShareIcon, ChevronDownIcon, ChevronUpIcon, ExclamationCircleIcon } from '@heroicons/react/24/outline';
+import { saveNGO, getSavedNGOs, removeNGO, SavedNGO } from '@/utils/local-storage';
+import { connectToDatabase } from '@/lib/mongodb';
+
+// Import the new components
+import StatusIndicator from './StatusIndicator';
+import FundingBadge from './FundingBadge';
+import VerificationSourceBadge from './VerificationSourceBadge';
+import StandaloneRequestModal from './StandaloneRequestModal';
+import CommunityQASection from './CommunityQASection';
+import ResourcePathway from './ResourcePathway';
+import { NGO_DATA, type NGOResource, NGO_FOCUS_AREAS } from '@/utils/ngo-data';
+import NGOSpotlightsSection from './NGOSpotlightsSection';
+import { getServiceTypeIcon, getBranchIcon, VerificationBadge, FederalBadge, NonProfitBadge } from '@/utils/service-icons';
+import NGOContactModal from './NGOContactModal';
+import NGOShareModal from './NGOShareModal';
+import HighContrastToggle from './HighContrastToggle';
+import './high-contrast-styles.css';
+
+// Import enhanced NGO components
+import FeaturedNGOSpotlight from './ngo-components/FeaturedNGOSpotlight';
+import NGOOfTheMonth from './ngo-components/NGOOfTheMonth';
+import NGOFilters from './ngo-components/NGOFilters';
+import NGOCardComponent from './ngo-components/NGOCardComponent';
+
+export default function NGOResourcesSection() {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedNgo, setSelectedNgo] = useState<NGOResource | null>(null);
+  const [showContactModal, setShowContactModal] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [showRequestInfoModal, setShowRequestInfoModal] = useState(false);
+  const [showResourcePathways, setShowResourcePathways] = useState(false);
+  const [showFiltersMobile, setShowFiltersMobile] = useState(false);
+  const [isHighContrastMode, setIsHighContrastMode] = useState(false);
+  const [expandedSuccessStories, setExpandedSuccessStories] = useState<string[]>([]);
+  const [expandedCommunityQA, setExpandedCommunityQA] = useState<string[]>([]);
+  const [ngos, setNgos] = useState<NGOResource[]>([]);
+  
+  // Constants for pagination
+  const ITEMS_PER_PAGE = 12;
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
+
+  // Enhanced state for filtering and sorting
+  const [savedNGOs, setSavedNGOs] = useState<SavedNGO[]>([]);
+  const [filters, setFilters] = useState({
+    rating: 'Any Rating',
+    veteranFounded: false,
+    showAll: true,
+    searchTerm: '',
+    serviceTypes: [] as string[],
+    serviceBranches: [] as string[],
+    veteranEras: [] as string[]
+  });
+
+  // Check if an NGO is saved
+  const isNgoSaved = useCallback((ngoId: string) => {
+    return savedNGOs.some(saved => saved.id === ngoId || saved.id === ngoId.toString());
+  }, [savedNGOs]);
+
+  // Handle NGO card actions
+  const handleToggleFavorite = useCallback((ngoId: string) => {
+    const ngo = ngos.find(n => n.id === ngoId || n._id?.toString() === ngoId);
+    if (!ngo) return;
+    
+    if (isNgoSaved(ngoId)) {
+      removeNGO(ngoId);
+    } else {
+      saveNGO({
+        id: ngoId,
+        name: ngo.name || ngo.title || '',
+        category: 'health',
+        description: ngo.description || '',
+        savedAt: new Date().toISOString()
+      });
+    }
+    
+    setSavedNGOs(getSavedNGOs());
+  }, [ngos, isNgoSaved]);
+
+  // Handle high contrast mode change
+  const handleHighContrastChange = (isHighContrast: boolean) => {
+    setIsHighContrastMode(isHighContrast);
+  };
+
+  // Fetch NGO data
+  useEffect(() => {
+    const fetchNGOs = async () => {
+      try {
+        setLoading(true);
+        
+        // Attempt to fetch from MongoDB API
+        try {
+          // Use the API endpoint for health NGO resources specifically
+          const response = await fetch('/api/ngos?category=health&subcategory=ngo&collection=healthResources');
+          if (!response.ok) throw new Error('Failed to fetch from API');
+          
+          const responseData = await response.json();
+          
+          // Check if the response has a data property (new API format)
+          if (responseData && responseData.data && Array.isArray(responseData.data)) {
+            console.log(`Received ${responseData.data.length} NGOs from API`);
+            setNgos(responseData.data);
+            setTotalItems(responseData.data.length);
+            setLoading(false);
+            return;
+          } 
+          // Check if the response has a success property (structured API response)
+          else if (responseData && responseData.success && Array.isArray(responseData.data)) {
+            console.log(`Received ${responseData.data.length} NGOs from structured API response`);
+            setNgos(responseData.data);
+            setTotalItems(responseData.data.length);
+            setLoading(false);
+            return;
+          }
+          // Check if response is an array directly (old API format)
+          else if (responseData && Array.isArray(responseData)) {
+            console.log(`Received ${responseData.length} NGOs from API (direct array)`);
+            setNgos(responseData);
+            setTotalItems(responseData.length);
+            setLoading(false);
+            return;
+          }
+          
+          throw new Error('Invalid data format from API');
+        } catch (apiError) {
+          console.warn('API fetch failed, falling back to static data:', apiError);
+        }
+        
+        // Fallback to static data
+        console.log('Using fallback static data with', NGO_DATA.length, 'NGOs');
+        setNgos(NGO_DATA);
+        setTotalItems(NGO_DATA.length);
+      } catch (err) {
+        setError('Failed to load NGO resources. Please try again later.');
+        console.error('Error fetching NGOs:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    const loadSavedNGOs = () => {
+      setSavedNGOs(getSavedNGOs());
+    };
+    
+    fetchNGOs();
+    loadSavedNGOs();
+  }, []);
+
+  // Reset all filters
+  const resetFilters = useCallback(() => {
+    setFilters({
+      rating: 'Any Rating',
+      veteranFounded: false,
+      showAll: true,
+      searchTerm: '',
+      serviceTypes: [],
+      serviceBranches: [],
+      veteranEras: []
+    });
+    setCurrentPage(1);
+  }, []);
+
+  // Filter handlers
+  const handleSearchQueryChange = useCallback((query: string) => {
+    setFilters(prev => ({ ...prev, searchTerm: query }));
+    setCurrentPage(1);
+  }, []);
+
+  const handleFocusFilterChange = useCallback((focusAreas: string[]) => {
+    setFilters(prev => ({ ...prev, serviceTypes: focusAreas }));
+    setCurrentPage(1);
+  }, []);
+
+  const handleLocationFilterChange = useCallback((locations: string[]) => {
+    setFilters(prev => ({ ...prev, serviceBranches: locations }));
+    setCurrentPage(1);
+  }, []);
+
+  const handleVeteranFoundedChange = useCallback((isVeteranFounded: boolean) => {
+    setFilters(prev => ({ ...prev, veteranFounded: isVeteranFounded }));
+    setCurrentPage(1);
+  }, []);
+
+  const handleVerifiedOnlyChange = useCallback((showAll: boolean) => {
+    setFilters(prev => ({ ...prev, showAll }));
+    setCurrentPage(1);
+  }, []);
+
+  const handleMinRatingChange = useCallback((rating: string) => {
+    setFilters(prev => ({ ...prev, rating }));
+    setCurrentPage(1);
+  }, []);
+
+  const handleSortByChange = useCallback((sortBy: string) => {
+    // Implement sorting logic here
+    setCurrentPage(1);
+  }, []);
+
+  // View NGO details
+  const handleViewDetails = useCallback((ngo: NGOResource) => {
+    console.log('Viewing details for NGO:', ngo.name || ngo.title);
+    setSelectedNgo(ngo);
+    setShowRequestInfoModal(true);
+  }, []);
+
+  // Helper functions for getting featured NGOs and NGO of the month
+  const getFeaturedNGOs = (ngoList: NGOResource[]): NGOResource[] => {
+    return ngoList.filter(ngo => ngo.spotlight === 'true' || ngo.isFeatured === true).slice(0, 3);
+  };
+
+  const getNGOOfTheMonth = (ngoList: NGOResource[]): NGOResource => {
+    const ngoOfMonth = ngoList.find(ngo => ngo.ofTheMonth === true);
+    return ngoOfMonth || ngoList[0] || NGO_DATA[0];
+  };
+
+  // Calculate filtered NGOs
+  const filteredNgos = useMemo(() => {
+    if (!ngos || ngos.length === 0) return [];
+    
+    console.log(`Filtering ${ngos.length} NGOs with current filters`);
+    
+    return ngos.filter(ngo => {
+      // Search term filter
+      const searchMatch = !filters.searchTerm || 
+        (ngo.name?.toLowerCase().includes(filters.searchTerm.toLowerCase())) ||
+        (ngo.title?.toLowerCase().includes(filters.searchTerm.toLowerCase())) ||
+        (ngo.description?.toLowerCase().includes(filters.searchTerm.toLowerCase())) ||
+        (ngo.tags?.some(tag => tag.toLowerCase().includes(filters.searchTerm.toLowerCase())));
+      
+      // Service type filter - handle both serviceTypes and resourceType fields
+      const serviceTypeMatch = filters.serviceTypes.length === 0 || 
+        filters.serviceTypes.some(type => {
+          // Check in serviceTypes array
+          if (Array.isArray(ngo.serviceTypes) && ngo.serviceTypes.includes(type)) {
+            return true;
+          }
+          // Check in resourceType field (string or array)
+          if (typeof ngo.resourceType === 'string' && ngo.resourceType.includes(type)) {
+            return true;
+          }
+          if (Array.isArray(ngo.resourceType) && ngo.resourceType.includes(type)) {
+            return true;
+          }
+          // Check in extractedServiceTypes
+          if (Array.isArray(ngo.extractedServiceTypes) && ngo.extractedServiceTypes.includes(type)) {
+            return true;
+          }
+          return false;
+        });
+      
+      // Service branch filter - handle both serviceBranches and serviceBranch fields
+      const branchMatch = filters.serviceBranches.length === 0 || 
+        filters.serviceBranches.some(branch => {
+          // Check in serviceBranches array
+          if (Array.isArray(ngo.serviceBranches) && ngo.serviceBranches.includes(branch)) {
+            return true;
+          }
+          // Check in serviceBranch field (string or array)
+          if (typeof ngo.serviceBranch === 'string' && ngo.serviceBranch.includes(branch)) {
+            return true;
+          }
+          if (Array.isArray(ngo.serviceBranch) && ngo.serviceBranch.includes(branch)) {
+            return true;
+          }
+          // Check in extractedBranches
+          if (Array.isArray(ngo.extractedBranches) && ngo.extractedBranches.includes(branch)) {
+            return true;
+          }
+          return false;
+        });
+      
+      // Veteran era filter - handle both veteranEras and veteranType fields
+      const eraMatch = filters.veteranEras.length === 0 || 
+        filters.veteranEras.some(era => {
+          // Check in veteranEras array
+          if (Array.isArray(ngo.veteranEras) && ngo.veteranEras.includes(era)) {
+            return true;
+          }
+          // Check in veteranType field (string or array)
+          if (typeof ngo.veteranType === 'string' && ngo.veteranType.includes(era)) {
+            return true;
+          }
+          if (Array.isArray(ngo.veteranType) && ngo.veteranType.includes(era)) {
+            return true;
+          }
+          // Check in extractedEras
+          if (Array.isArray(ngo.extractedEras) && ngo.extractedEras.includes(era)) {
+            return true;
+          }
+          return false;
+        });
+      
+      // Veteran founded filter
+      const veteranFoundedMatch = !filters.veteranFounded || ngo.veteranFounded;
+      
+      // Verified filter
+      const verifiedMatch = filters.showAll || ngo.verified;
+      
+      // Rating filter
+      let ratingMatch = true;
+      if (filters.rating !== 'Any Rating') {
+        const minRating = parseInt(filters.rating.split('+')[0]);
+        ratingMatch = (ngo.rating || 0) >= minRating;
+      }
+      
+      return searchMatch && serviceTypeMatch && branchMatch && eraMatch && 
+        veteranFoundedMatch && verifiedMatch && ratingMatch;
+    });
+  }, [ngos, filters]);
+
+  // Calculate total count
+  const totalCount = filteredNgos.length;
+
+  // Get paginated NGOs
+  const paginatedNgos = useMemo(() => {
+    if (!filteredNgos || filteredNgos.length === 0) return [];
+    
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    const endIndex = startIndex + ITEMS_PER_PAGE;
+    
+    console.log(`Paginating NGOs: page ${currentPage}, showing items ${startIndex}-${endIndex} of ${filteredNgos.length}`);
+    const result = filteredNgos.slice(startIndex, endIndex);
+    console.log(`Returning ${result.length} NGOs for current page`);
+    return result;
+  }, [filteredNgos, currentPage]);
+
+  return (
+    <div className={`w-full ${isHighContrastMode ? 'high-contrast-mode' : ''}`}>
+      <div className="bg-white shadow rounded-lg overflow-hidden">
+        <div className="p-6">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900">NGO Resources</h2>
+              <p className="text-gray-600 mt-1">
+                Find non-profit organizations dedicated to supporting veterans' health needs
+              </p>
+            </div>
+            
+            <div className="mt-4 md:mt-0 flex items-center">
+              <HighContrastToggle onChange={handleHighContrastChange} />
+              
+              <button
+                onClick={() => setShowResourcePathways(prev => !prev)}
+                className="ml-4 flex items-center text-blue-600 hover:text-blue-800"
+              >
+                <InformationCircleIcon className="h-5 w-5 mr-1" />
+                <span className="text-sm font-medium">Resource Pathways</span>
+              </button>
+            </div>
+          </div>
+          
+          {/* Mobile filter toggle */}
+          <div className="md:hidden mb-4">
+            <button
+              onClick={() => setShowFiltersMobile(!showFiltersMobile)}
+              className="w-full flex items-center justify-between bg-gray-100 hover:bg-gray-200 px-4 py-2 rounded-md"
+            >
+              <div className="flex items-center">
+                <FunnelIcon className="h-5 w-5 text-gray-600 mr-2" />
+                <span className="font-medium text-gray-700">Filters</span>
+              </div>
+              {showFiltersMobile ? (
+                <ChevronUpIcon className="h-5 w-5 text-gray-600" />
+              ) : (
+                <ChevronDownIcon className="h-5 w-5 text-gray-600" />
+              )}
+            </button>
+          </div>
+          
+          <div className="flex flex-col md:flex-row">
+            {/* Filters sidebar - desktop always visible, mobile toggleable */}
+            <div className={`
+              md:w-64 md:mr-8 md:block
+              ${showFiltersMobile ? 'block' : 'hidden'}
+              mb-6 md:mb-0
+            `}>
+              <NGOFilters 
+                onSearchChange={handleSearchQueryChange}
+                onFocusChange={handleFocusFilterChange}
+                onLocationChange={handleLocationFilterChange}
+                onVeteranFoundedChange={handleVeteranFoundedChange}
+                onVerifiedOnlyChange={handleVerifiedOnlyChange}
+                onMinRatingChange={handleMinRatingChange}
+                onSortByChange={handleSortByChange}
+                searchValue={filters.searchTerm}
+                selectedFocus={filters.serviceTypes}
+                selectedLocations={filters.serviceBranches}
+                isVeteranFounded={filters.veteranFounded}
+                showAllResources={filters.showAll}
+                selectedRating={filters.rating}
+              />
+            </div>
+            
+            {/* Main content area */}
+            <div className="flex-1">
+              {/* Loading state */}
+              {loading && (
+                <div className="flex flex-col items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mb-4"></div>
+                  <p className="text-gray-600">Loading NGO resources...</p>
+                </div>
+              )}
+              
+              {/* Error state */}
+              {!loading && error && (
+                <div className="bg-red-50 border border-red-200 text-red-800 rounded-lg p-4 mb-6">
+                  <div className="flex">
+                    <ExclamationCircleIcon className="h-5 w-5 text-red-600 mr-2" />
+                    <span>{error}</span>
+                  </div>
+                </div>
+              )}
+              
+              {/* Featured NGO Spotlight */}
+              {!loading && !error && ngos.length > 0 && (
+                <FeaturedNGOSpotlight 
+                  ngos={getFeaturedNGOs(ngos)}
+                  onSelect={handleViewDetails}
+                />
+              )}
+              
+              {/* NGO of the Month */}
+              {!loading && !error && ngos.length > 0 && (
+                <div className="mb-8 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-6 border border-blue-100 shadow-sm">
+                  <div className="flex items-center mb-4">
+                    <div className="bg-blue-600 text-white p-2 rounded-full mr-3">
+                      <FireIcon className="h-6 w-6" />
+                    </div>
+                    <h3 className="text-xl font-bold text-blue-800">NGO of the Month</h3>
+                  </div>
+                  
+                  <NGOOfTheMonth 
+                    ngo={getNGOOfTheMonth(ngos)} 
+                    isFavorite={isNgoSaved(getNGOOfTheMonth(ngos).id || '')}
+                    onToggleFavorite={handleToggleFavorite}
+                    onViewDetails={handleViewDetails}
+                  />
+                </div>
+              )}
+              
+              {/* NGO cards grid */}
+              {!loading && !error && filteredNgos.length > 0 && (
+                <div>
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-lg font-semibold text-gray-900">All NGO Resources</h3>
+                    <div className="text-sm text-gray-600">
+                      Showing {paginatedNgos.length} of {totalCount} resources
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+                    {paginatedNgos.map(ngo => (
+                      <NGOCardComponent
+                        key={ngo.id || ngo._id?.toString()}
+                        ngo={ngo}
+                        isFavorite={isNgoSaved(ngo.id || ngo._id?.toString() || '')}
+                        onToggleFavorite={handleToggleFavorite}
+                        onViewDetails={handleViewDetails}
+                      />
+                    ))}
+                  </div>
+                  
+                  {/* Pagination controls */}
+                  {totalCount > ITEMS_PER_PAGE && (
+                    <div className="flex justify-center mt-8">
+                      <nav className="flex items-center">
+                        <button
+                          onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                          disabled={currentPage === 1}
+                          className={`
+                            px-3 py-1 rounded-md mr-2
+                            ${currentPage === 1 
+                              ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+                              : 'bg-blue-50 text-blue-600 hover:bg-blue-100'}
+                          `}
+                        >
+                          Previous
+                        </button>
+                        
+                        <div className="flex space-x-1">
+                          {Array.from({ length: Math.ceil(totalCount / ITEMS_PER_PAGE) }).map((_, i) => (
+                            <button
+                              key={i}
+                              onClick={() => setCurrentPage(i + 1)}
+                              className={`
+                                w-8 h-8 flex items-center justify-center rounded-md
+                                ${currentPage === i + 1
+                                  ? 'bg-blue-600 text-white'
+                                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}
+                              `}
+                            >
+                              {i + 1}
+                            </button>
+                          ))}
+                        </div>
+                        
+                        <button
+                          onClick={() => setCurrentPage(prev => Math.min(prev + 1, Math.ceil(totalCount / ITEMS_PER_PAGE)))}
+                          disabled={currentPage === Math.ceil(totalCount / ITEMS_PER_PAGE)}
+                          className={`
+                            px-3 py-1 rounded-md ml-2
+                            ${currentPage === Math.ceil(totalCount / ITEMS_PER_PAGE)
+                              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                              : 'bg-blue-50 text-blue-600 hover:bg-blue-100'}
+                          `}
+                        >
+                          Next
+                        </button>
+                      </nav>
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              {/* No results state */}
+              {!loading && !error && filteredNgos.length === 0 && (
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-8 text-center">
+                  <div className="mx-auto w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                    <SearchIcon className="h-8 w-8 text-gray-400" />
+                  </div>
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">No NGO resources found</h3>
+                  <p className="text-gray-600 mb-4">
+                    We couldn't find any NGO resources matching your filters. Try adjusting your search criteria.
+                  </p>
+                  <button
+                    onClick={resetFilters}
+                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700"
+                  >
+                    <ArrowPathIcon className="h-4 w-4 mr-2" />
+                    Reset Filters
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      {/* Modals */}
+      {selectedNgo && (
+        <>
+          {showContactModal && (
+            <NGOContactModal
+              ngo={selectedNgo}
+              onClose={() => setShowContactModal(false)}
+            />
+          )}
+          
+          {showShareModal && (
+            <NGOShareModal
+              ngo={selectedNgo}
+              onClose={() => setShowShareModal(false)}
+            />
+          )}
+          
+          <StandaloneRequestModal 
+            ngo={selectedNgo || ngos[0]} 
+            isOpen={showRequestInfoModal && !!selectedNgo}
+            onClose={() => setShowRequestInfoModal(false)} 
+          />
+        </>
+      )}
+      
+      {/* Resource Pathways */}
+      {showResourcePathways && (
+        <ResourcePathway
+          onClose={() => setShowResourcePathways(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+// Helper component for search icon in no results state
+const SearchIcon = ({ className }: { className?: string }) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+  </svg>
+);

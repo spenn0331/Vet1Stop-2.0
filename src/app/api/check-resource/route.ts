@@ -1,0 +1,44 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { connectToDatabase } from '@/lib/mongodb';
+
+export async function GET(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const title = searchParams.get('title');
+    const collection = searchParams.get('collection') || 'healthResources';
+    
+    if (!title) {
+      return NextResponse.json({ 
+        success: false, 
+        message: 'Title parameter is required' 
+      }, { status: 400 });
+    }
+    
+    // Connect to MongoDB
+    const db = await connectToDatabase();
+    
+    // Search for the resource with exact title or by regex
+    const query = { 
+      title: { $regex: new RegExp(title, 'i') } 
+    };
+    
+    console.log(`Searching for "${title}" in ${collection} collection`);
+    
+    // Get the resources from the specified collection
+    const resources = await db.collection(collection).find(query).toArray();
+    
+    return NextResponse.json({
+      success: true,
+      count: resources.length,
+      resources: resources
+    });
+    
+  } catch (error) {
+    console.error('API Error:', error);
+    return NextResponse.json({ 
+      success: false, 
+      message: 'Error searching for resource', 
+      error: error instanceof Error ? error.message : String(error)
+    }, { status: 500 });
+  }
+}

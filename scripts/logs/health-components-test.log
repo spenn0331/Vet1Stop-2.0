@@ -1,0 +1,18 @@
+Health Components Test - 2025-05-05T20:33:41.065Z
+
+[2025-05-05T20:33:41.068Z] [INFO] Starting health components tests...
+[2025-05-05T20:33:41.102Z] [INFO] Testing component imports...
+[2025-05-05T20:33:41.114Z] [SUCCESS] Component StateResourcesSection.tsx has correct imports
+[2025-05-05T20:33:41.154Z] [SUCCESS] Component ResourceFinderSection.tsx has correct imports
+[2025-05-05T20:33:41.170Z] [SUCCESS] Component shared/ResourceGrid.tsx has correct imports
+[2025-05-05T20:33:41.171Z] [SUCCESS] Component shared/ResourceCard.tsx has correct imports
+[2025-05-05T20:33:41.172Z] [SUCCESS] Component StandaloneRequestModal.tsx has correct imports
+[2025-05-05T20:33:41.174Z] [INFO] Testing type consistency...
+[2025-05-05T20:33:41.175Z] [SUCCESS] Type file health-types.ts checked
+[2025-05-05T20:33:41.176Z] [SUCCESS] Type file HealthResourceTypes.ts checked
+[2025-05-05T20:33:41.177Z] [SUCCESS] Type file consolidated-health-types.ts checked
+[2025-05-05T20:33:41.178Z] [INFO] Testing modal usage in components...
+[2025-05-05T20:33:41.179Z] [SUCCESS] Component StateResourcesSection.tsx correctly uses StandaloneRequestModal
+[2025-05-05T20:33:41.180Z] [SUCCESS] Component ResourceFinderSection.tsx correctly uses StandaloneRequestModal
+[2025-05-05T20:33:41.181Z] [SUCCESS] All tests passed successfully!
+[2025-05-05T20:33:41.182Z] [INFO] Tests completed.

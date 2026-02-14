@@ -1,0 +1,361 @@
+/**
+ * Enhanced VA Benefits Section
+ * 
+ * A comprehensive view of VA healthcare benefits with improved UX,
+ * clear eligibility indicators, and direct application links.
+ */
+
+"use client";
+
+import React, { useState } from 'react';
+import { 
+  ChevronDownIcon, 
+  ChevronUpIcon, 
+  DocumentTextIcon, 
+  CheckCircleIcon,
+  ExclamationCircleIcon,
+  InformationCircleIcon,
+  ArrowTopRightOnSquareIcon
+} from '@heroicons/react/24/outline';
+import Link from 'next/link';
+
+// Import the existing VA Healthcare Benefits section
+import VAHealthcareBenefitsSection from './VAHealthcareBenefitsSection';
+
+// Define the accordion items structure
+interface AccordionItem {
+  id: string;
+  title: string;
+  description: string;
+  eligibility: string;
+  applicationUrl: string;
+  content: React.ReactNode;
+  defaultOpen: boolean;
+}
+
+export default function EnhancedVABenefitsSection() {
+  // Track which sections are open
+  const [openSections, setOpenSections] = useState<string[]>(['healthcare']);
+
+  // Toggle section open/closed state
+  const toggleSection = (sectionId: string) => {
+    setOpenSections(current => 
+      current.includes(sectionId)
+        ? current.filter(id => id !== sectionId)
+        : [...current, sectionId]
+    );
+  };
+
+  // Check if a section is open
+  const isSectionOpen = (sectionId: string) => openSections.includes(sectionId);
+
+  // VA Benefits accordion items
+  const accordionItems: AccordionItem[] = [
+    {
+      id: 'healthcare',
+      title: 'VA Healthcare',
+      description: 'Comprehensive healthcare services for eligible Veterans',
+      eligibility: 'Veterans who served in active duty and weren\'t dishonorably discharged',
+      applicationUrl: 'https://www.va.gov/health-care/apply/application/introduction',
+      content: <VAHealthcareBenefitsSection />,
+      defaultOpen: true
+    },
+    {
+      id: 'mental-health',
+      title: 'Mental Health Services',
+      description: 'Specialized mental health care for Veterans',
+      eligibility: 'Veterans enrolled in VA healthcare',
+      applicationUrl: 'https://www.va.gov/health-care/health-needs-conditions/mental-health/',
+      content: (
+        <div className="p-6">
+          <h3 className="text-lg font-medium text-gray-900 mb-4">VA Mental Health Services</h3>
+          <p className="mb-4">VA offers a wide range of mental health services to Veterans, including:</p>
+          <ul className="list-disc pl-6 mb-4 space-y-2">
+            <li>Treatment for depression, PTSD, anxiety, and other mental health conditions</li>
+            <li>Specialized programs for combat Veterans and MST survivors</li>
+            <li>Substance use disorder treatment</li>
+            <li>Suicide prevention services</li>
+            <li>Psychotherapy and counseling</li>
+            <li>Medication management</li>
+          </ul>
+          <div className="bg-blue-50 p-4 rounded-md mb-4">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <InformationCircleIcon className="h-5 w-5 text-blue-400" aria-hidden="true" />
+              </div>
+              <div className="ml-3">
+                <h3 className="text-sm font-medium text-blue-800">Veterans Crisis Line</h3>
+                <div className="text-sm text-blue-700">
+                  <p>If you're in crisis, call 988 then press 1, or text 838255.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ),
+      defaultOpen: false
+    },
+    {
+      id: 'community-care',
+      title: 'Community Care',
+      description: 'Access to care from providers in your community',
+      eligibility: 'Veterans who meet specific eligibility criteria',
+      applicationUrl: 'https://www.va.gov/COMMUNITYCARE/programs/veterans/index.asp',
+      content: (
+        <div className="p-6">
+          <h3 className="text-lg font-medium text-gray-900 mb-4">VA Community Care Program</h3>
+          <p className="mb-4">The VA Community Care Program allows eligible Veterans to receive care from community providers when:</p>
+          <ul className="list-disc pl-6 mb-4 space-y-2">
+            <li>The VA cannot provide the care you need</li>
+            <li>The VA cannot make an appointment within the designated access standards</li>
+            <li>It's in your best medical interest</li>
+            <li>The VA service line doesn't meet quality standards</li>
+          </ul>
+          <div className="bg-yellow-50 p-4 rounded-md mb-4">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <ExclamationCircleIcon className="h-5 w-5 text-yellow-400" aria-hidden="true" />
+              </div>
+              <div className="ml-3">
+                <h3 className="text-sm font-medium text-yellow-800">Important Note</h3>
+                <div className="text-sm text-yellow-700">
+                  <p>Community Care requires prior authorization from the VA in most cases.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ),
+      defaultOpen: false
+    },
+    {
+      id: 'dental',
+      title: 'Dental Care',
+      description: 'Dental services for qualifying Veterans',
+      eligibility: 'Veterans with service-connected dental disability or specific conditions',
+      applicationUrl: 'https://www.va.gov/health-care/about-va-health-benefits/dental-care/',
+      content: (
+        <div className="p-6">
+          <h3 className="text-lg font-medium text-gray-900 mb-4">VA Dental Care</h3>
+          <p className="mb-4">VA dental care eligibility is more limited than other VA healthcare benefits. You may be eligible if you:</p>
+          <ul className="list-disc pl-6 mb-4 space-y-2">
+            <li>Have a service-connected dental disability</li>
+            <li>Are a former prisoner of war</li>
+            <li>Have a 100% service-connected disability rating</li>
+            <li>Are enrolled in a VA vocational rehabilitation program</li>
+          </ul>
+          <div className="bg-blue-50 p-4 rounded-md mb-4">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <InformationCircleIcon className="h-5 w-5 text-blue-400" aria-hidden="true" />
+              </div>
+              <div className="ml-3">
+                <h3 className="text-sm font-medium text-blue-800">VA Dental Insurance Program (VADIP)</h3>
+                <div className="text-sm text-blue-700">
+                  <p>Veterans enrolled in VA healthcare and CHAMPVA beneficiaries can purchase dental insurance at reduced rates.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ),
+      defaultOpen: false
+    },
+    {
+      id: 'womens-health',
+      title: 'Women Veterans Health Care',
+      description: 'Specialized healthcare services for women Veterans',
+      eligibility: 'Women Veterans enrolled in VA healthcare',
+      applicationUrl: 'https://www.womenshealth.va.gov/',
+      content: (
+        <div className="p-6">
+          <h3 className="text-lg font-medium text-gray-900 mb-4">Women Veterans Health Care</h3>
+          <p className="mb-4">VA offers comprehensive healthcare services for women Veterans, including:</p>
+          <ul className="list-disc pl-6 mb-4 space-y-2">
+            <li>Primary care from women's health providers</li>
+            <li>Reproductive health services</li>
+            <li>Maternity care</li>
+            <li>Specialty care for conditions more common in women</li>
+            <li>Treatment and resources for military sexual trauma</li>
+            <li>Mental health services</li>
+          </ul>
+          <div className="bg-blue-50 p-4 rounded-md mb-4">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <InformationCircleIcon className="h-5 w-5 text-blue-400" aria-hidden="true" />
+              </div>
+              <div className="ml-3">
+                <h3 className="text-sm font-medium text-blue-800">Women Veterans Call Center</h3>
+                <div className="text-sm text-blue-700">
+                  <p>Call 1-855-VA-WOMEN (1-855-829-6636) for assistance with women's health services.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ),
+      defaultOpen: false
+    }
+  ];
+
+  return (
+    <div className="py-6">
+      <div className="max-w-4xl mx-auto">
+        <h2 className="text-2xl font-bold text-[#1A2C5B] mb-4 text-center">
+          VA Healthcare Benefits
+        </h2>
+        <p className="text-gray-600 mb-8 text-center max-w-3xl mx-auto">
+          Learn about VA healthcare benefits, eligibility requirements, and how to apply for services.
+        </p>
+
+        {/* Quick Apply Button */}
+        <div className="mb-8 flex justify-center">
+          <a 
+            href="https://www.va.gov/health-care/apply/application/introduction"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-[#1A2C5B] hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          >
+            Apply for VA Healthcare
+            <ArrowTopRightOnSquareIcon className="ml-2 -mr-1 h-5 w-5" aria-hidden="true" />
+          </a>
+        </div>
+        
+        {/* VA Benefits Accordion */}
+        <div className="space-y-4" data-testid="va-benefits-accordion">
+          {accordionItems.map((item) => (
+            <div 
+              key={item.id}
+              className="border border-gray-200 rounded-lg shadow-sm overflow-hidden bg-white transition-all duration-300"
+            >
+              {/* Section Header */}
+              <div className="flex flex-col md:flex-row md:items-center justify-between p-5 bg-gray-50">
+                <button
+                  type="button"
+                  onClick={() => toggleSection(item.id)}
+                  className="flex items-center justify-between w-full text-left focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 rounded-md"
+                  aria-expanded={isSectionOpen(item.id)}
+                  aria-controls={`section-${item.id}`}
+                  data-testid={`section-button-${item.id}`}
+                >
+                  <div className="flex-1">
+                    <h3 className="text-lg font-semibold text-[#1A2C5B]">{item.title}</h3>
+                    <p className="text-sm text-gray-500 mt-1">{item.description}</p>
+                  </div>
+                  <div className="ml-4 flex-shrink-0">
+                    {isSectionOpen(item.id) ? (
+                      <ChevronUpIcon className="h-6 w-6 text-[#B22234]" aria-hidden="true" />
+                    ) : (
+                      <ChevronDownIcon className="h-6 w-6 text-[#B22234]" aria-hidden="true" />
+                    )}
+                  </div>
+                </button>
+                
+                {/* Quick Apply Link (Desktop Only) */}
+                <div className="hidden md:flex mt-4 md:mt-0 md:ml-4">
+                  <a
+                    href={item.applicationUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <DocumentTextIcon className="mr-1.5 h-4 w-4 text-gray-500" aria-hidden="true" />
+                    Apply
+                  </a>
+                </div>
+              </div>
+              
+              {/* Eligibility Badge */}
+              <div className="px-5 py-2 bg-gray-50 border-t border-gray-200">
+                <div className="flex items-center">
+                  <CheckCircleIcon className="h-5 w-5 text-green-500 mr-2" aria-hidden="true" />
+                  <span className="text-sm text-gray-600">
+                    <strong className="font-medium">Eligibility:</strong> {item.eligibility}
+                  </span>
+                </div>
+              </div>
+              
+              {/* Section Content */}
+              {isSectionOpen(item.id) && (
+                <div 
+                  id={`section-${item.id}`}
+                  role="region" 
+                  aria-labelledby={`section-button-${item.id}`}
+                  className="bg-white"
+                  data-testid={`section-content-${item.id}`}
+                >
+                  {item.content}
+                  
+                  {/* Quick Apply Link (Mobile Only) */}
+                  <div className="md:hidden px-6 py-4 border-t border-gray-200">
+                    <a
+                      href={item.applicationUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full inline-flex justify-center items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                    >
+                      <DocumentTextIcon className="mr-1.5 h-5 w-5 text-gray-500" aria-hidden="true" />
+                      Apply for {item.title}
+                    </a>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+        
+        {/* Additional Resources */}
+        <div className="mt-8 bg-gray-50 rounded-lg p-6 border border-gray-200">
+          <h3 className="text-lg font-medium text-gray-900 mb-4">Additional VA Resources</h3>
+          <ul className="space-y-3">
+            <li>
+              <a 
+                href="https://www.va.gov/health-care/eligibility/" 
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-600 hover:text-blue-800 flex items-center"
+              >
+                <ArrowTopRightOnSquareIcon className="h-4 w-4 mr-2" />
+                VA Healthcare Eligibility
+              </a>
+            </li>
+            <li>
+              <a 
+                href="https://www.va.gov/find-locations/" 
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-600 hover:text-blue-800 flex items-center"
+              >
+                <ArrowTopRightOnSquareIcon className="h-4 w-4 mr-2" />
+                Find VA Locations
+              </a>
+            </li>
+            <li>
+              <a 
+                href="https://www.myhealth.va.gov/" 
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-600 hover:text-blue-800 flex items-center"
+              >
+                <ArrowTopRightOnSquareIcon className="h-4 w-4 mr-2" />
+                My HealtheVet (Online Portal)
+              </a>
+            </li>
+            <li>
+              <a 
+                href="https://www.va.gov/health-care/refill-track-prescriptions/" 
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-600 hover:text-blue-800 flex items-center"
+              >
+                <ArrowTopRightOnSquareIcon className="h-4 w-4 mr-2" />
+                Refill VA Prescriptions
+              </a>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
+}

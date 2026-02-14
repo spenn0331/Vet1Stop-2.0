@@ -1,0 +1,64 @@
+{
+  "id": "pathway-4",
+  "title": "Women's Health for Veterans",
+  "description": "A comprehensive guide to women's health services, benefits, and resources available to women veterans.",
+  "targetAudience": ["Women veterans", "Caregivers of women veterans"],
+  "icon": "women-health",
+  "steps": [
+    {
+      "id": "step-4-1",
+      "title": "Understanding Women's Health Services at VA",
+      "description": "Learn about specialized health services for women veterans at VA medical centers.",
+      "content": "# Women's Health Services at VA\n\nAs a woman veteran, you have access to comprehensive gender-specific healthcare through the VA. Every VA medical center has designated Women's Health Primary Care Providers (WH-PCPs) specifically trained in women's health.\n\n## Available Services\n\n- **General Health**: Annual examinations, health evaluations, disease prevention\n- **Reproductive Health**: Contraceptive services, menopause treatment, preconception counseling\n- **Maternity Care**: Maternity care coordination, postpartum support\n- **Cancer Screenings**: Breast cancer, cervical cancer, and other cancer screenings\n- **Mental Health**: Treatment for depression, PTSD, MST (Military Sexual Trauma)\n\n## Women Veterans Call Center\n\nFor questions about women's health services, call 1-855-VA-WOMEN (1-855-829-6636). Representatives can:\n- Answer questions about benefits\n- Help you find the nearest VA facility with women's health services\n- Connect you with your local Women Veterans Program Manager\n\n## Designated Women's Health Providers\n\nWhen you enroll in VA health care, you can request a Women's Health Primary Care Provider who specializes in women's health. These providers have received special training in women veterans' health needs.",
+      "resourceIds": ["resource-w1", "resource-w2", "resource-w3"],
+      "nextStepId": null,
+      "estimatedTimeMinutes": 15,
+      "order": 1
+    },
+    {
+      "id": "step-4-2",
+      "title": "Enrolling in VA Women's Health Services",
+      "description": "Steps to enroll in gender-specific health services at VA.",
+      "content": "# Enrolling in VA Women's Health Services\n\n## Enrollment Process\n\n1. **Verify Eligibility**: Confirm your VA health care eligibility status\n2. **Choose a Facility**: Identify the nearest VA medical center with women's health services\n3. **Request a Women's Health Provider**: Specifically ask for a provider who specializes in women's health\n4. **Schedule an Initial Appointment**: Contact your chosen facility to set up your first visit\n\n## What to Bring to Your First Appointment\n\n- DD214 (Certificate of Release or Discharge from Active Duty)\n- Photo ID\n- Insurance information (if you have other health insurance)\n- List of current medications\n- Medical records if available\n- List of health concerns to discuss\n\n## During Your First Appointment\n\n- Complete a comprehensive health assessment\n- Discuss your military service history\n- Address immediate health concerns\n- Develop a personalized health care plan\n- Learn about additional resources and services\n\n## Designating Your Women's Health Primary Care Provider\n\nAfter your initial appointment, you can formally designate your provider as your Women's Health Primary Care Provider. This ensures continuity of care and allows you to see the same provider for routine visits.",
+      "resourceIds": ["resource-w4", "resource-w5"],
+      "nextStepId": null,
+      "estimatedTimeMinutes": 20,
+      "order": 2
+    },
+    {
+      "id": "step-4-3",
+      "title": "Reproductive Health Services",
+      "description": "Information about VA benefits for reproductive health, maternity care, and infertility treatments.",
+      "content": "# Reproductive Health Services for Women Veterans\n\n## Contraceptive Services\n\n- **Counseling**: Professional advice on contraceptive options\n- **Prescription Methods**: Pills, patches, rings, injections\n- **Long-acting Methods**: IUDs, implants\n- **Emergency Contraception**: Available through VA pharmacies\n- **Permanent Methods**: Referrals for tubal ligation\n\n## Maternity Care\n\nVA covers maternity care through community providers from confirmation of pregnancy through delivery and postpartum care.\n\n- **Prenatal Care**: Regular check-ups throughout pregnancy\n- **Testing**: Ultrasounds, gestational diabetes screening, genetic testing\n- **Labor and Delivery**: Hospital care during childbirth\n- **Postpartum Care**: Follow-up visits, depression screening, breastfeeding support\n- **Seven Days of Newborn Care**: Initial care for your baby\n\n## Infertility Services\n\nVA provides a range of infertility services, including:\n\n- **Infertility Assessment**: Diagnostic testing for both veterans and their partners\n- **Medication**: Fertility drugs when medically indicated\n- **Procedures**: Intrauterine insemination (IUI)\n- **In Vitro Fertilization (IVF)**: Available for veterans with service-connected conditions causing infertility\n- **Counseling**: Emotional support through infertility journey\n\n## Menopause Management\n\n- **Evaluation**: Assessment of menopause symptoms\n- **Hormone Therapy**: When medically appropriate\n- **Non-hormonal Treatments**: Options for managing symptoms\n- **Prevention**: Screening for osteoporosis and other conditions",
+      "resourceIds": ["resource-w6", "resource-w7", "resource-w8"],
+      "nextStepId": null,
+      "estimatedTimeMinutes": 15,
+      "order": 3
+    },
+    {
+      "id": "step-4-4",
+      "title": "Mental Health Resources for Women Veterans",
+      "description": "Specialized mental health services addressing unique needs of women veterans.",
+      "content": "# Mental Health Resources for Women Veterans\n\n## Services Designed for Women Veterans\n\nThe VA offers mental health services specifically tailored to women veterans' unique experiences and needs.\n\n## Military Sexual Trauma (MST) Support\n\n- **MST-specific Treatment**: Specialized counseling and therapy\n- **Trauma-focused Therapies**: Evidence-based treatments like CPT and PE\n- **Women-only Groups**: Supportive environment with other women veterans\n- **MST Coordinators**: Dedicated staff at every VA facility\n\n*Note: MST treatment is free and does not require a service-connected disability rating. You may be eligible even if you don't qualify for other VA services.*\n\n## Depression and Anxiety Treatment\n\n- **Medication Management**: With providers sensitive to women's health needs\n- **Therapy Options**: Individual and group settings\n- **Peer Support**: Connection with other women veterans\n\n## PTSD Services\n\n- **Women's Stress Disorder Treatment Teams**: At many VA locations\n- **Residential Programs**: Including women-only programs\n- **Evidence-based Therapies**: Cognitive Processing Therapy, Prolonged Exposure\n\n## Mental Health During Pregnancy and Postpartum\n\n- **Screening**: Regular assessment during and after pregnancy\n- **Treatment**: For postpartum depression and anxiety\n- **Coordination**: Between mental health providers and maternity care\n\n## Finding the Right Support\n\nSpeak with your Women's Health Primary Care Provider about a referral to mental health services, or contact the Women Veterans Call Center at 1-855-VA-WOMEN (1-855-829-6636).",
+      "resourceIds": ["resource-w9", "resource-w10"],
+      "nextStepId": null,
+      "estimatedTimeMinutes": 20,
+      "order": 4
+    },
+    {
+      "id": "step-4-5",
+      "title": "Connecting with Other Women Veterans",
+      "description": "Resources for finding peer support and connecting with the women veteran community.",
+      "content": "# Connecting with Other Women Veterans\n\n## Women Veteran Groups and Networks\n\n### Women Veteran Support Organizations\n- **Women Veterans Alliance**: Networking, events, and resources\n- **Service Women's Action Network (SWAN)**: Advocacy and community\n- **Military Women's Coalition**: Policy advocacy and support\n- **Women Veterans Network (WoVeN)**: Peer support groups\n\n### VA Programs\n- **Women Veterans Program Managers**: At every VA medical center\n- **Center for Women Veterans**: National VA office focused on women veterans' needs\n- **Virtual Support Groups**: Online options through VA telehealth\n\n## Local Peer Support Options\n\n- **Vet Centers**: Offer women-specific counseling and group sessions\n- **VA Women's Health Centers**: Often host support groups and social events\n- **State Women Veteran Coordinators**: Connect with resources in your state\n\n## Social Media and Online Communities\n\n- **Facebook Groups**: For women veterans across all service branches\n- **Women Veteran-focused Podcasts**: Sharing stories and resources\n- **Online Forums**: Discussing shared experiences and challenges\n\n## Volunteer and Giving Back\n\n- **Peer Support Specialists**: Become certified to help other veterans\n- **Women Veteran Stand Downs**: Volunteer at or attend these resource events\n- **Mentorship Programs**: Connect with newly transitioned women veterans\n\n## Annual Conferences and Events\n\n- **Women Veterans Summit**: Educational and networking opportunities\n- **National Women Veterans United Conference**: Resources and community\n- **State-level Women Veteran Events**: Check with your state veterans affairs office\n\nRemember: Connecting with other women who understand your military experience can be an important part of your health and wellness journey.",
+      "resourceIds": ["resource-w11", "resource-w12", "resource-w13"],
+      "nextStepId": null,
+      "estimatedTimeMinutes": 15,
+      "order": 5
+    }
+  ],
+  "tags": ["women's health", "women veterans", "reproductive health", "maternity care", "mental health"],
+  "recommendedFor": ["Women veterans", "Female service members preparing to transition", "Healthcare providers working with women veterans"],
+  "estimatedDuration": 85,
+  "difficulty": "easy",
+  "featured": true
+}

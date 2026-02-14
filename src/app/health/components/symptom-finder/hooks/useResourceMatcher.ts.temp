@@ -1,0 +1,478 @@
+"use client";
+
+import { useState, useCallback } from 'react';
+import { HealthResource } from '../../../types/consolidated-health-types';
+
+// Category mapping with expanded categories for all symptom types
+const CATEGORY_MAPPING: Record<string, string[]> = {
+  'mental': ['Mental Health', 'Crisis Services', 'Family Support', 'Wellness Programs', 'Peer Support', 'Counseling', 'PTSD', 'Depression', 'Anxiety', 'Veteran Support', 'NGO', 'Community Support'],
+  'physical': ['Physical Health', 'Specialized Care', 'Rehabilitation', 'Medical Services', 'Wellness Programs', 'NGO', 'Adaptive Sports', 'Pain Management', 'Physical Therapy', 'Veteran Support'],
+  'life': ['Family Support', 'Wellness Programs', 'Specialized Care', 'Community Support', 'Social Services', 'NGO', 'Financial Assistance', 'Housing Support', 'Employment Services', 'Veteran Support'],
+  'crisis': ['Crisis Services', 'Mental Health', 'Emergency Services', 'Suicide Prevention', 'Immediate Support', 'NGO', 'Hotlines', 'Peer Support', 'Veteran Support']
+};
+
+/**
+ * Custom hook for matching resources based on user selections
+ * Handles filtering, sorting, and recommendation logic
+ */
+export function useResourceMatcher(allResources: HealthResource[]) {
+  // State for tracking API requests
+  const [isLoading, setIsLoading] = useState(false);
+  // Cache to track which resources have been shown recently
+  const [recentlyShownResources, setRecentlyShownResources] = useState<string[]>([]);
+  
+  // Reset the recently shown resources cache
+  const resetRecentlyShownResources = useCallback(() => {
+    setRecentlyShownResources([]);
+  }, []);
+  
+  // Add resources to the recently shown cache
+  const addToRecentlyShown = useCallback((resources: HealthResource[]) => {
+    setRecentlyShownResources(prev => {
+      const newIds = resources.map(r => r.id || r._id?.toString() || '').filter(Boolean);
+      const combined = [...prev, ...newIds];
+      // Keep only the most recent 30 resources
+      return combined.slice(-30);
+    });
+  }, []);
+
+  /**
+   * Deterministically shuffle an array based on a seed
+   * This ensures consistent but different ordering for the same inputs
+   */
+  const shuffleArray = <T,>(array: T[], seed: number): T[] => {
+    const result = [...array];
+    const seedRandom = (min: number, max: number): number => {
+      const x = Math.sin(seed++) * 10000;
+      return Math.floor((x - Math.floor(x)) * (max - min + 1)) + min;
+    };
+    
+    for (let i = result.length - 1; i > 0; i--) {
+      const j = seedRandom(0, i);
+      [result[i], result[j]] = [result[j], result[i]];
+    }
+    
+    return result;
+  };
+
+  /**
+   * Filter resources locally based on user selections
+   * This is a fallback when the API request fails
+   */
+  const filterResourcesLocally = (
+    resources: HealthResource[],
+    categoryId: string,
+    symptoms: string[],
+    severityLevel: string | null,
+    uniqueId?: string
+  ): HealthResource[] => {
+    if (!resources || resources.length === 0) return [];
+    
+    console.log(`Filtering resources locally for category: ${categoryId}, symptoms: ${symptoms.join(',')}, severity: ${severityLevel}`);
+    
+    // Create a pseudo-random but deterministic seed from uniqueId or generate one
+    const seed = uniqueId ? 
+      uniqueId.split('').reduce((a, b) => a + b.charCodeAt(0), 0) : 
+      Date.now() % 10000;
+    
+    // Avoid showing recently shown resources if possible
+    const preferredResources = resources.filter(r => {
+      const resourceId = r.id || r._id?.toString() || '';
+      return !recentlyShownResources.includes(resourceId);
+    });
+    
+    // Use all resources if we don't have enough preferred resources
+    const resourcePool = preferredResources.length >= 10 ? preferredResources : resources;
+    
+    // First pass: Strict filtering for exact matches
+    let filtered = resourcePool.filter((resource: HealthResource) => {
+      // Check if resource matches the category (multiple ways)
+      const hasMatchingCategory = 
+        !categoryId || 
+        resource.category?.toLowerCase() === categoryId.toLowerCase() || 
+        (resource.categories && Array.isArray(resource.categories) && 
+          resource.categories.some((cat: string) => cat.toLowerCase() === categoryId.toLowerCase())) || 
+        (resource.tags && Array.isArray(resource.tags) && 
+          resource.tags.some((tag: string) => tag.toLowerCase() === categoryId.toLowerCase()));
+      
+      // Check if resource tags contain any of the symptoms
+      const hasMatchingSymptoms = symptoms.length === 0 || 
+        (resource.tags && Array.isArray(resource.tags) && 
+          resource.tags.some((tag: string) => 
+            symptoms.some(symptom => 
+              tag.toLowerCase().includes(symptom.toLowerCase()) || 
+              symptom.toLowerCase().includes(tag.toLowerCase())
+            )
+          ));
+      
+      // Check resource title/description for symptom keywords
+      const hasSymptomKeywordsInContent = symptoms.length === 0 || 
+        symptoms.some(symptom => 
+          resource.title?.toLowerCase().includes(symptom.toLowerCase()) || 
+          resource.description?.toLowerCase().includes(symptom.toLowerCase())
+        );
+      
+      // Special handling for mental health category
+      if (categoryId === 'mental') {
+        // For mental health, be very inclusive to catch all relevant resources
+        const isMentalHealthResource = 
+          (resource.categories && Array.isArray(resource.categories) && 
+            resource.categories.some((cat: string) => cat.toLowerCase().includes('mental'))) || 
+          resource.title?.toLowerCase().includes('mental') || 
+          resource.description?.toLowerCase().includes('mental') ||
+          (resource.tags && Array.isArray(resource.tags) && 
+            resource.tags.some((tag: string) => tag.toLowerCase().includes('mental')));
+        
+        // Always include mental health resources regardless of other criteria
+        if (isMentalHealthResource) {
+          return true;
+        }
+      }
+      
+      // Special handling for physical health category
+      if (categoryId === 'physical') {
+        // For physical health, be inclusive for chronic conditions
+        const isPhysicalHealthResource = 
+          (resource.categories && Array.isArray(resource.categories) && 
+            resource.categories.some((cat: string) => 
+              ['physical', 'health', 'medical', 'wellness'].some(term => cat.toLowerCase().includes(term))
+            )) || 
+          (resource.tags && Array.isArray(resource.tags) && 
+            resource.tags.some((tag: string) => 
+              ['physical', 'health', 'medical', 'wellness'].some(term => tag.toLowerCase().includes(term))
+            ));
+        
+        if (isPhysicalHealthResource && (hasMatchingSymptoms || hasSymptomKeywordsInContent)) {
+          return true;
+        }
+      }
+      
+      // For severe/crisis severity levels, be more inclusive
+      if (severityLevel === 'severe' || severityLevel === 'crisis') {
+        // Include verified resources that match category
+        if (resource.isVerified && hasMatchingCategory) {
+          return true;
+        }
+        // Also include resources that match symptoms or category
+        return hasMatchingCategory || hasMatchingSymptoms || hasSymptomKeywordsInContent;
+      }
+      
+      // For other severity levels, use standard matching
+      return hasMatchingCategory && (hasMatchingSymptoms || hasSymptomKeywordsInContent);
+    });
+    
+    // If strict filtering returns too few results, use relaxed filtering
+    if (filtered.length < 10) {
+      console.log(`Strict filtering returned only ${filtered.length} results, using relaxed filtering`);
+      
+      // Second pass: Relaxed filtering for broader matches
+      filtered = resourcePool.filter((resource: HealthResource) => {
+        // Much more relaxed category matching
+        const hasRelatedCategory = 
+          !categoryId || 
+          resource.category?.toLowerCase().includes(categoryId.toLowerCase()) || 
+          categoryId.toLowerCase().includes(resource.category?.toLowerCase() || '') ||
+          (resource.categories && Array.isArray(resource.categories) && 
+            resource.categories.some((cat: string) => 
+              cat.toLowerCase().includes(categoryId.toLowerCase()) || 
+              categoryId.toLowerCase().includes(cat.toLowerCase())
+            )) || 
+          (resource.tags && Array.isArray(resource.tags) && 
+            resource.tags.some((tag: string) => 
+              tag.toLowerCase().includes(categoryId.toLowerCase()) || 
+              categoryId.toLowerCase().includes(tag.toLowerCase())
+            ));
+        
+        // Relaxed symptom matching
+        const hasRelatedSymptoms = symptoms.length === 0 || 
+          symptoms.some(symptom => 
+            resource.title?.toLowerCase().includes(symptom.toLowerCase()) || 
+            resource.description?.toLowerCase().includes(symptom.toLowerCase()) ||
+            (resource.tags && Array.isArray(resource.tags) && 
+              resource.tags.some((tag: string) => 
+                tag.toLowerCase().includes(symptom.toLowerCase()) || 
+                symptom.toLowerCase().includes(tag.toLowerCase())
+              )
+            )
+          );
+        
+        // For mental health, include any mental health resource
+        if (categoryId === 'mental' && 
+            (resource.title?.toLowerCase().includes('mental') || 
+             resource.description?.toLowerCase().includes('mental') ||
+             (resource.tags && Array.isArray(resource.tags) && 
+               resource.tags.some((tag: string) => tag.toLowerCase().includes('mental'))))){
+          return true;
+        }
+        
+        // For physical health, include any physical health resource
+        if (categoryId === 'physical' && 
+            (resource.title?.toLowerCase().includes('physical') || 
+             resource.description?.toLowerCase().includes('physical') ||
+             (resource.tags && Array.isArray(resource.tags) && 
+               resource.tags.some((tag: string) => tag.toLowerCase().includes('physical'))))){
+          return true;
+        }
+        
+        return hasRelatedCategory || hasRelatedSymptoms || resource.isVerified;
+      });
+    }
+    
+    // If we still don't have enough resources, include any resources for the category
+    if (filtered.length < 5 && categoryId) {
+      console.log(`Relaxed filtering returned only ${filtered.length} results, using category-only filtering`);
+      
+      // Third pass: Category-only filtering as a last resort
+      const categoryFiltered = resourcePool.filter((resource: HealthResource) => {
+        return resource.category?.toLowerCase().includes(categoryId.toLowerCase()) || 
+               categoryId.toLowerCase().includes(resource.category?.toLowerCase() || '') ||
+               (resource.categories && Array.isArray(resource.categories) && 
+                 resource.categories.some((cat: string) => cat.toLowerCase().includes(categoryId.toLowerCase())));
+      });
+      
+      // Add any new resources from category filtering
+      const newResources = categoryFiltered.filter(r => !filtered.some(f => f.id === r.id));
+      filtered = [...filtered, ...newResources];
+    }
+    
+    // If we STILL don't have enough resources, include top-rated resources
+    if (filtered.length < 5) {
+      console.log(`Category filtering returned only ${filtered.length} results, adding top-rated resources`);
+      
+      // Fourth pass: Add top-rated resources
+      const topRated = resourcePool
+        .filter(r => !filtered.some(f => f.id === r.id))
+        .sort((a, b) => (b.rating || 0) - (a.rating || 0))
+        .slice(0, 10);
+      
+      filtered = [...filtered, ...topRated];
+    }
+    
+    // Use the seed to deterministically shuffle the results
+    // This ensures different but consistent ordering for the same inputs
+    const shuffledResults = shuffleArray(filtered, seed);
+    
+    // Add the selected resources to the recently shown cache
+    addToRecentlyShown(shuffledResults.slice(0, 8));
+    
+    return shuffledResults;
+  };
+
+  /**
+   * Balance resources by organization type
+   * Ensures a mix of VA and NGO resources with better distribution
+   */
+  const balanceResourcesByOrganization = (
+    resources: HealthResource[],
+    categoryId: string,
+    symptoms: string[],
+    severityLevel: string | null
+  ): HealthResource[] => {
+    // If no resources provided, return empty array
+    if (!resources || resources.length === 0) {
+      console.log('No resources to balance');
+      return [];
+    }
+    
+    console.log(`Balancing ${resources.length} resources by organization type`);
+    
+    // Separate resources by organization type with more precise categorization
+    const vaResources = resources.filter((resource: HealthResource) => {
+      const org = (resource.organization || '').toLowerCase();
+      const title = (resource.title || '').toLowerCase();
+      const category = (resource.category || '').toLowerCase();
+      const resourceType = (resource.resourceType || '').toLowerCase();
+      
+      return org.includes('va') || 
+             org.includes('veterans affairs') ||
+             title.includes('va ') ||
+             title.includes('veterans affairs') ||
+             org.includes('veterans health') ||
+             title.includes('veterans health') ||
+             resourceType === 'va' ||
+             category === 'va';
+    });
+    
+    const ngoResources = resources.filter((resource: HealthResource) => {
+      const org = (resource.organization || '').toLowerCase();
+      const title = (resource.title || '').toLowerCase();
+      const category = (resource.category || '').toLowerCase();
+      const resourceType = (resource.resourceType || '').toLowerCase();
+      
+      return (!org.includes('va') && 
+             !org.includes('veterans affairs') &&
+             !title.includes('va ') &&
+             !title.includes('veterans affairs') &&
+             !org.includes('veterans health') &&
+             !title.includes('veterans health')) ||
+             resourceType === 'ngo' ||
+             category === 'ngo';
+    });
+    
+    console.log(`Found ${vaResources.length} VA resources and ${ngoResources.length} NGO resources`);
+    
+    // Define limits for each type with improved balancing
+    const totalResourceLimit = 30; // Increased from 20 to 30
+    const vaResourceLimit = Math.floor(totalResourceLimit * 0.3); // 30% VA resources
+    const ngoResourceLimit = Math.floor(totalResourceLimit * 0.7); // 70% NGO resources
+    
+    // Ensure we have at least some resources of each type
+    const minVaResources = Math.min(3, vaResources.length); // At least 3 VA resources if available
+    const minNgoResources = Math.min(5, ngoResources.length); // At least 5 NGO resources if available
+    
+    // If we don't have enough of either type, add some from the other type
+    let selectedVaResources = vaResources.slice(0, Math.max(vaResourceLimit, minVaResources));
+    let selectedNgoResources = ngoResources.slice(0, Math.max(ngoResourceLimit, minNgoResources));
+    
+    // If we don't have enough VA resources, add some from the NGO resources
+    if (selectedVaResources.length < minVaResources && resources.length > 0) {
+      console.log(`Not enough VA resources, adding some from other resources`);
+      // Add some resources from the NGO list to the VA list
+      const additionalVaResources = resources
+        .filter(r => !selectedVaResources.includes(r) && !selectedNgoResources.includes(r))
+        .slice(0, minVaResources - selectedVaResources.length);
+      
+      selectedVaResources = [...selectedVaResources, ...additionalVaResources];
+    }
+    
+    // If we don't have enough NGO resources, add some from the VA resources
+    if (selectedNgoResources.length < minNgoResources && resources.length > 0) {
+      console.log(`Not enough NGO resources, adding some from other resources`);
+      // Add some resources from the VA list to the NGO list
+      const additionalNgoResources = resources
+        .filter(r => !selectedVaResources.includes(r) && !selectedNgoResources.includes(r))
+        .slice(0, minNgoResources - selectedNgoResources.length);
+      
+      selectedNgoResources = [...selectedNgoResources, ...additionalNgoResources];
+    }
+    
+    // Fill remaining slots with other resources if needed
+    const otherResources = resources.filter(r => 
+      !selectedVaResources.includes(r) && !selectedNgoResources.includes(r)
+    );
+    
+    const remainingSlots = totalResourceLimit - selectedVaResources.length - selectedNgoResources.length;
+    const selectedOtherResources = otherResources.slice(0, remainingSlots);
+    
+    // Combine all resources with NGOs first for better visibility
+    const combinedResources = [...selectedNgoResources, ...selectedVaResources, ...selectedOtherResources];
+    
+    console.log(`Returning ${combinedResources.length} balanced resources: ${selectedNgoResources.length} NGO, ${selectedVaResources.length} VA, ${selectedOtherResources.length} other`);
+    
+    return combinedResources;
+  };
+
+  /**
+   * Find resources based on user selections
+   */
+  const findMatchingResources = useCallback(async (
+    categoryId: string | null,
+    symptoms: string[],
+    severityLevel: string | null,
+    selectionHash?: string
+  ): Promise<HealthResource[]> => {
+    if (!categoryId) return [];
+    
+    setIsLoading(true);
+    
+    try {
+      // First try to fetch from API
+      let resources: HealthResource[] = [];
+      
+      try {
+        // Create a more flexible set of parameters to match the symptom-finder endpoint
+        const params = new URLSearchParams();
+        
+        // Add category as both category and searchTerm for broader matching
+        if (categoryId) {
+          params.append('category', categoryId);
+          params.append('searchTerm', categoryId);
+        }
+        
+        // Add symptoms individually as tags for better matching
+        if (symptoms.length > 0) {
+          // Add each symptom as a separate tag
+          symptoms.forEach(symptom => {
+            params.append('tags', symptom);
+          });
+          
+          // Also add as a combined search term for broader matching
+          params.append('searchTerm', symptoms.join(' '));
+        }
+        
+        // Set severity level - both as minRating and severity for compatibility
+        if (severityLevel) {
+          // Convert severity level to a numeric value
+          let severityValue = 0;
+          let minRating = 0;
+          switch (severityLevel) {
+            case 'mild': severityValue = 1; minRating = 3; break;
+            case 'moderate': severityValue = 3; minRating = 3.5; break;
+            case 'severe': severityValue = 4; minRating = 4; break;
+            case 'crisis': severityValue = 5; minRating = 4.5; break;
+            default: severityValue = 0; minRating = 0;
+          }
+          params.append('severity', severityValue.toString());
+          params.append('minRating', minRating.toString());
+        }
+        
+        // Increase limit to ensure we get enough resources
+        params.append('limit', '30');
+        
+        // Generate a truly unique selection hash that includes timestamp and random component
+        // This ensures different results even for identical symptom selections
+        const uniqueTimestamp = Date.now();
+        const uniqueRandom = Math.random().toString(36).substring(2, 8);
+        const uniqueId = selectionHash || `${categoryId}_${symptoms.join(',')}_${severityLevel}_${uniqueTimestamp}_${uniqueRandom}`;
+        params.append('uniqueId', uniqueId);
+        
+        // Log the API request for debugging
+        console.log(`Fetching resources from API with unique hash: /api/health/symptom-finder?${params.toString()}`);
+        
+        const response = await fetch(`/api/health/symptom-finder?${params.toString()}`);
+        
+        if (response.ok) {
+          const data = await response.json();
+          
+          // Check if data has the expected structure for the symptom-finder endpoint
+          if (data.resources && Array.isArray(data.resources) && data.resources.length > 0) {
+            resources = data.resources;
+            console.log(`Received ${resources.length} resources from symptom-finder API`);
+          } else if (data.data && Array.isArray(data.data) && data.data.length > 0) {
+            // Fallback for legacy API format
+            resources = data.data;
+            console.log(`Received ${resources.length} resources from API (legacy format)`);
+          } else {
+            console.log('API returned no resources, using local filtering as fallback');
+            // Fallback to local filtering if API response is empty or malformed
+            resources = filterResourcesLocally(allResources, categoryId, symptoms, severityLevel, uniqueId);
+          }
+        } else {
+          console.error(`API request failed: ${response.status}, ${response.statusText}`);
+          // Fallback to local filtering if API fails
+          resources = filterResourcesLocally(allResources, categoryId, symptoms, severityLevel, uniqueId);
+        }
+      } catch (error) {
+        console.error('Error fetching resources from API:', error);
+        // Fallback to local filtering if API request throws an error
+        resources = filterResourcesLocally(allResources, categoryId, symptoms, severityLevel);
+      }
+      
+      // Balance resources by organization type
+      const balancedResources = balanceResourcesByOrganization(resources, categoryId, symptoms, severityLevel);
+      
+      setIsLoading(false);
+      return balancedResources;
+    } catch (error) {
+      console.error('Error in findMatchingResources:', error);
+      setIsLoading(false);
+      return [];
+    }
+  }, [allResources, filterResourcesLocally, setIsLoading]);
+
+  return {
+    findMatchingResources,
+    isLoading,
+    resetRecentlyShownResources
+  };
+}

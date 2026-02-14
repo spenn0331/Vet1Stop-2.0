@@ -1,0 +1,24 @@
+"use client";
+
+import { PhoneIcon } from '@heroicons/react/24/solid';
+import Link from 'next/link';
+
+export default function CrisisBanner() {
+  return (
+    <div className="fixed top-0 left-0 right-0 bg-[#B22234] text-white z-50 shadow-md">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex justify-between items-center">
+        <div className="flex items-center">
+          <PhoneIcon className="h-5 w-5 mr-2 text-[#EAB308]" />
+          <span className="font-bold text-lg">Veterans Crisis Line: Dial 988 then Press 1</span>
+        </div>
+        <Link 
+          href="#crisis-resources" 
+          className="px-4 py-2 bg-[#EAB308] hover:bg-[#F7CE46] text-gray-900 font-semibold rounded-md transition-all duration-200 flex-shrink-0 shadow focus:ring-2 focus:ring-[#EAB308]/50 focus:outline-none"
+          aria-label="Get immediate crisis support for veterans"
+        >
+          Get Help Now
+        </Link>
+      </div>
+    </div>
+  );
+}

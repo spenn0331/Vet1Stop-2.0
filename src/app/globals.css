@@ -1,0 +1,283 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --foreground-rgb: 0, 0, 0;
+  --background-start-rgb: 250, 250, 250;
+  --background-end-rgb: 255, 255, 255;
+  --primary-color: 30, 66, 159; /* blue shade */
+  --primary-light-color: 59, 130, 246; /* lighter blue */
+  --accent-color: 234, 179, 8; /* gold/yellow */
+  --accent-light-color: 250, 204, 21; /* lighter gold */
+  --text-primary: 31, 41, 55; /* dark gray for readability */
+}
+
+body {
+  color: rgb(var(--foreground-rgb));
+  background: linear-gradient(
+      to bottom,
+      rgb(var(--background-start-rgb)),
+      rgb(var(--background-end-rgb))
+    )
+    rgb(var(--background-start-rgb));
+}
+
+/* Custom utility classes */
+@layer components {
+  /* Button styles */
+  .btn-primary {
+    @apply px-4 py-2 bg-blue-700 text-white font-medium rounded-md hover:bg-blue-800 transition-colors;
+  }
+  
+  .btn-secondary {
+    @apply px-4 py-2 bg-transparent border border-blue-700 text-blue-700 font-medium rounded-md hover:bg-blue-50 transition-colors;
+  }
+  
+  .btn-accent {
+    @apply px-4 py-2 bg-yellow-500 text-blue-900 font-medium rounded-md hover:bg-yellow-400 transition-colors;
+  }
+  
+  /* Card styles */
+  .card {
+    @apply bg-white rounded-lg shadow-md overflow-hidden border border-gray-200 transition-all hover:shadow-lg;
+  }
+  
+  /* Section styles */
+  .section-container {
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-16;
+  }
+  
+  /* Typography */
+  .heading-lg {
+    @apply text-3xl md:text-4xl font-bold text-gray-900;
+  }
+  
+  .heading-md {
+    @apply text-2xl md:text-3xl font-bold text-gray-900;
+  }
+  
+  .heading-sm {
+    @apply text-xl font-bold text-gray-900;
+  }
+  
+  /* Form elements */
+  .input-field {
+    @apply w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500;
+  }
+  
+  /* Accessibility */
+  .sr-only {
+    @apply absolute w-px h-px p-0 -m-px overflow-hidden whitespace-nowrap border-0;
+  }
+}
+
+/* Additional custom styles */
+.text-shadow {
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.text-shadow-lg {
+  text-shadow: 0 4px 8px rgba(0, 0, 0, 0.25);
+}
+
+/* Accessibility improvements */
+*:focus-visible {
+  outline: 2px solid rgb(var(--primary-light-color));
+  outline-offset: 2px;
+}
+
+/* High contrast links */
+a:not([class]) {
+  color: #1e40af;
+  text-decoration: underline;
+}
+
+a:not([class]):hover {
+  text-decoration: none;
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Responsive font sizing */
+@media (max-width: 640px) {
+  html {
+    font-size: 14px;
+  }
+}
+
+@media (min-width: 1536px) {
+  html {
+    font-size: 18px;
+  }
+}
+
+/* Enhanced Pathway Styles */
+.pathway-content h2 {
+  color: rgb(var(--primary-color));
+  font-weight: 600;
+  font-size: 1.5rem;
+  margin-top: 1.5rem;
+  margin-bottom: 1rem;
+  border-bottom: 2px solid rgba(var(--primary-color), 0.2);
+  padding-bottom: 0.5rem;
+}
+
+.pathway-content h3 {
+  color: rgb(var(--primary-color));
+  font-weight: 500;
+  font-size: 1.25rem;
+  margin-top: 1.25rem;
+  margin-bottom: 0.75rem;
+}
+
+.pathway-content ul {
+  list-style-type: disc;
+  padding-left: 1.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.pathway-content ol {
+  list-style-type: decimal;
+  padding-left: 1.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.pathway-content li {
+  margin-bottom: 0.5rem;
+  position: relative;
+}
+
+.pathway-content strong {
+  color: rgb(var(--primary-color));
+  font-weight: 600;
+}
+
+.pathway-content a {
+  color: rgb(var(--primary-light-color));
+  text-decoration: underline;
+  transition: color 0.2s ease;
+}
+
+.pathway-content a:hover {
+  color: rgb(var(--primary-color));
+}
+
+/* VA form highlight styling */
+.pathway-content a[href*="va.gov"], .pathway-content .va-form-link {
+  background-color: rgba(var(--primary-color), 0.1);
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  font-weight: 600;
+  text-decoration: none;
+  border: 1px solid rgba(var(--primary-color), 0.2);
+  color: rgb(var(--primary-color));
+  display: inline-flex;
+  align-items: center;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.pathway-content a[href*="va.gov"]::before, .pathway-content .va-form-link::before {
+  content: "📄 ";
+  margin-right: 0.25rem;
+}
+
+.pathway-content a[href*="va.gov"]:hover, .pathway-content .va-form-link:hover {
+  background-color: rgba(var(--primary-color), 0.2);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(var(--primary-color), 0.1);
+}
+
+/* Box highlight for key information */
+.pathway-content p:has(strong:first-child) {
+  background-color: rgba(var(--accent-color), 0.1);
+  padding: 0.75rem 1rem;
+  border-radius: 0.25rem;
+  border-left: 3px solid rgb(var(--accent-color));
+  margin: 1rem 0;
+}
+
+/* Timeline visualization for steps */
+.pathway-steps-visualization {
+  display: flex;
+  gap: 0.5rem;
+  margin: 1.5rem 0;
+  overflow-x: auto;
+  padding-bottom: 1rem;
+}
+
+.pathway-step-dot {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  position: relative;
+}
+
+.pathway-step-dot::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 2rem;
+  width: calc(100% - 2rem);
+  height: 2px;
+  background-color: rgba(var(--primary-color), 0.3);
+}
+
+.pathway-step-dot:last-child::after {
+  display: none;
+}
+
+/* Related resources styling */
+.related-resource-card {
+  border: 1px solid rgba(var(--primary-color), 0.2);
+  border-radius: 0.5rem;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  transition: all 0.2s ease;
+  background-color: white;
+}
+
+.related-resource-card:hover {
+  border-color: rgba(var(--primary-color), 0.5);
+  box-shadow: 0 4px 6px -1px rgba(var(--primary-color), 0.1), 0 2px 4px -1px rgba(var(--primary-color), 0.06);
+  transform: translateY(-2px);
+}
+
+.related-resource-card h4 {
+  color: rgb(var(--primary-color));
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.related-resource-card p {
+  color: rgb(75, 85, 99);
+  font-size: 0.875rem;
+  margin-bottom: 0.75rem;
+}
+
+.related-resource-card .resource-link {
+  display: inline-flex;
+  align-items: center;
+  color: rgb(var(--primary-light-color));
+  font-weight: 500;
+  font-size: 0.875rem;
+  text-decoration: none;
+}
+
+.related-resource-card .resource-link:hover {
+  text-decoration: underline;
+}
+
+.related-resource-card .resource-link svg {
+  width: 1rem;
+  height: 1rem;
+  margin-left: 0.25rem;
+}

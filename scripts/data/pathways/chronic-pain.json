@@ -1,0 +1,64 @@
+{
+  "id": "pathway-5",
+  "title": "Chronic Pain Management",
+  "description": "A comprehensive journey through understanding, treating, and living with chronic pain as a veteran, with both VA and community resources.",
+  "targetAudience": ["Veterans with chronic pain", "Veterans with service-connected injuries", "Caregivers"],
+  "icon": "pain-management",
+  "steps": [
+    {
+      "id": "step-5-1",
+      "title": "Understanding Your Chronic Pain",
+      "description": "Learn about different types of chronic pain and how to communicate effectively with healthcare providers.",
+      "content": "# Understanding Your Chronic Pain\n\n## Types of Chronic Pain Common Among Veterans\n\n- **Musculoskeletal Pain**: Joint pain, back pain, neck pain from physical strain or injuries\n- **Neuropathic Pain**: Burning, shooting pain from nerve damage\n- **Headaches and Migraines**: Often related to TBI, stress, or neck injuries\n- **Phantom Limb Pain**: Sensations from amputated limbs\n- **Widespread Pain**: Conditions like fibromyalgia affecting multiple body systems\n\n## The Impact of Chronic Pain\n\nChronic pain affects many aspects of life:\n- Physical functioning and mobility\n- Sleep quality\n- Mental health (depression, anxiety)\n- Relationships and social life\n- Ability to work or perform daily activities\n\n## Communicating About Pain\n\n### How to Describe Your Pain to Providers\n\nUse these descriptors to help your healthcare team understand your experience:\n\n- **Location**: Where exactly is the pain?\n- **Intensity**: Rate your pain on a scale of 0-10\n- **Quality**: Describe the sensation (sharp, dull, burning, throbbing)\n- **Timing**: When does it occur? Is it constant or intermittent?\n- **Aggravating Factors**: What makes it worse?\n- **Relieving Factors**: What helps reduce the pain?\n- **Impact**: How does it affect your daily activities?\n\n### Pain Journals and Tracking\n\nKeeping a pain journal can help identify patterns and triggers. Record:\n- Daily pain levels\n- Activities\n- Medications taken\n- Sleep quality\n- Stress levels\n- Diet\n\nBring this information to your healthcare appointments to provide a more complete picture of your pain experience.",
+      "resourceIds": ["resource-p1", "resource-p2"],
+      "nextStepId": null,
+      "estimatedTimeMinutes": 15,
+      "order": 1
+    },
+    {
+      "id": "step-5-2",
+      "title": "Getting Help Through the VA Pain Management System",
+      "description": "Navigate the VA's specialized pain management services and understand your treatment options.",
+      "content": "# VA Pain Management Services\n\n## Specialized Pain Care at VA\n\nThe VA offers a comprehensive approach to pain management through its Stepped Care Model:\n\n- **Primary Care**: Initial assessment and basic pain management\n- **Pain Specialty Teams**: Multidisciplinary approach for complex cases\n- **Pain Rehabilitation Programs**: Intensive treatment for severe chronic pain\n\n## Accessing VA Pain Services\n\n1. **Start with Your Primary Care Provider**\n   - Discuss your pain concerns\n   - Request a pain assessment\n   - Get referrals to specialists if needed\n\n2. **Pain Clinic Referral Process**\n   - Complete pain assessments and questionnaires\n   - May need medical records from service or private providers\n   - Typically involves a comprehensive evaluation\n\n3. **Types of Pain Specialists**\n   - Pain Medicine Physicians\n   - Physical Therapists\n   - Occupational Therapists\n   - Psychologists specializing in pain\n   - Pharmacists\n   - Complementary and Integrative Health practitioners\n\n## Service-Connected Disability for Pain Conditions\n\nIf your chronic pain is related to your military service, you may be eligible for disability compensation:\n\n- **File a Claim**: Submit VA Form 21-526EZ\n- **Gather Evidence**: Medical records, buddy statements\n- **Attend C&P Exam**: VA evaluation of your condition\n- **Rating Decision**: Determines your disability percentage\n\n## Community Care Options\n\nIf VA facilities cannot provide timely care or are too far from your home, you may qualify for community care through the VA Community Care Network.",
+      "resourceIds": ["resource-p3", "resource-p4", "resource-p5"],
+      "nextStepId": null,
+      "estimatedTimeMinutes": 20,
+      "order": 2
+    },
+    {
+      "id": "step-5-3",
+      "title": "Medication and Medical Treatments",
+      "description": "Understand medication options and medical interventions for chronic pain.",
+      "content": "# Medication and Medical Treatments for Chronic Pain\n\n## Medication Options\n\n### Non-Opioid Pain Medications\n- **NSAIDs** (ibuprofen, naproxen): For inflammation and mild to moderate pain\n- **Acetaminophen**: For mild to moderate pain without inflammation\n- **Antidepressants**: Some effectively treat nerve pain and improve sleep\n- **Anticonvulsants**: Often helpful for nerve pain\n- **Topical Treatments**: Lidocaine patches, capsaicin creams\n- **Muscle Relaxants**: For pain involving muscle spasms\n\n### Responsible Opioid Use (When Prescribed)\n- Reserved for specific cases when other options are insufficient\n- Requires close monitoring and regular follow-up\n- Includes education on risks, safe storage, and disposal\n- Often includes an Opioid Safety Agreement\n\n## Interventional Procedures\n\n### Injections and Nerve Blocks\n- **Epidural Steroid Injections**: For spinal pain with nerve involvement\n- **Facet Joint Injections**: For arthritis in spine joints\n- **Nerve Blocks**: Temporarily block pain signals\n- **Trigger Point Injections**: For focal muscle pain\n\n### Advanced Interventions\n- **Radiofrequency Ablation**: Uses heat to reduce nerve pain signals\n- **Spinal Cord Stimulation**: Implanted device that modifies pain signals\n- **Intrathecal Pain Pumps**: Delivers pain medication directly to spinal fluid\n\n## Rehabilitation Therapies\n\n- **Physical Therapy**: Exercises to improve function and reduce pain\n- **Occupational Therapy**: Techniques to perform daily activities with less pain\n- **Aquatic Therapy**: Exercises in water to reduce joint stress\n\n## Discussing Treatment Options with Your Provider\n\n- Bring a list of previously tried treatments and their effects\n- Ask about risks, benefits, and alternatives for each option\n- Discuss realistic goals and expectations\n- Create a plan to evaluate treatment effectiveness",
+      "resourceIds": ["resource-p6", "resource-p7"],
+      "nextStepId": null,
+      "estimatedTimeMinutes": 20,
+      "order": 3
+    },
+    {
+      "id": "step-5-4",
+      "title": "Complementary and Integrative Health Approaches",
+      "description": "Explore evidence-based complementary approaches offered through VA and community providers.",
+      "content": "# Complementary and Integrative Health for Chronic Pain\n\nVA offers many evidence-based complementary and integrative health (CIH) approaches as part of its Whole Health System of care.\n\n## Available CIH Approaches\n\n### Movement Practices\n- **Tai Chi**: Gentle flowing movements to improve balance and reduce pain\n- **Yoga**: Adaptable postures, breathing, and meditation\n- **Qi Gong**: Energy-focused movements and breathing techniques\n\n### Mind-Body Practices\n- **Meditation and Mindfulness**: Techniques to change pain perception\n- **Guided Imagery**: Visualization to manage pain\n- **Biofeedback**: Learning to control physiological responses\n- **Hypnosis**: Focused attention to modify pain experience\n\n### Manual Therapies\n- **Chiropractic Care**: Spinal manipulation and alignment\n- **Massage Therapy**: Manipulation of soft tissues\n- **Acupuncture**: Insertion of thin needles at specific points\n\n## Accessing CIH Services at VA\n\n- Request a referral from your primary care provider\n- Ask about the Whole Health program at your VA facility\n- Inquire about group classes and individual therapies\n- Some services may be available through telehealth\n\n## Community CIH Providers\n\n- Ask about VA Community Care referrals if services aren't available at your facility\n- Check with your insurance (if you have non-VA coverage) about covered services\n- Many communities offer sliding scale payment options for these services\n\n## Integrating CIH with Conventional Care\n\n- Always inform all your providers about all treatments you're using\n- Keep a journal of how different approaches affect your pain\n- Combine approaches based on what works best for your specific pain condition\n- Be patient - some approaches take time to show benefits",
+      "resourceIds": ["resource-p8", "resource-p9", "resource-p10"],
+      "nextStepId": null,
+      "estimatedTimeMinutes": 15,
+      "order": 4
+    },
+    {
+      "id": "step-5-5",
+      "title": "Self-Management Strategies",
+      "description": "Learn practical skills and daily habits to manage chronic pain and improve quality of life.",
+      "content": "# Self-Management Strategies for Chronic Pain\n\n## Daily Pain Management Techniques\n\n### Pacing Activities\n- Break tasks into smaller, manageable segments\n- Alternate periods of activity with rest\n- Gradually increase activity tolerance over time\n- Avoid boom-and-bust cycles of overactivity followed by flare-ups\n\n### Ergonomics and Body Mechanics\n- Use proper posture and body alignment\n- Modify your environment to reduce strain\n- Use assistive devices when helpful\n- Practice proper lifting techniques\n\n### Sleep Hygiene\n- Maintain a consistent sleep schedule\n- Create a comfortable sleep environment\n- Develop relaxing bedtime routines\n- Address pain that interrupts sleep\n\n## Lifestyle Approaches\n\n### Nutrition for Pain Management\n- Anti-inflammatory diet patterns\n- Adequate hydration\n- Weight management if appropriate\n- Consider limiting foods that may trigger inflammation\n\n### Physical Activity\n- Low-impact exercises like walking, swimming\n- Gentle stretching and mobility work\n- Gradually build strength and endurance\n- Find activities you enjoy and can maintain\n\n### Stress Management\n- Regular relaxation practices\n- Deep breathing exercises\n- Engaging in meaningful activities\n- Social connections and support\n\n## Building Your Pain Management Toolkit\n\n- Identify 5-10 strategies that work for your specific pain\n- Practice these regularly, not just during flare-ups\n- Create an emergency plan for severe pain episodes\n- Track what works and what doesn't\n\n## Pain Self-Management Programs\n\n- VA offers structured programs like:\n  - MOVE! Weight Management Program\n  - Pain Self-Management Groups\n  - Cognitive Behavioral Therapy for Chronic Pain\n- Community programs like the Chronic Pain Self-Management Program\n\nRemember: Self-management complements medical care but doesn't replace it. Continue working with your healthcare team while building your self-management skills.",
+      "resourceIds": ["resource-p11", "resource-p12"],
+      "nextStepId": null,
+      "estimatedTimeMinutes": 20,
+      "order": 5
+    }
+  ],
+  "tags": ["chronic pain", "pain management", "veterans health", "rehabilitation", "complementary health"],
+  "recommendedFor": ["Veterans with chronic pain", "Veterans with service-connected injuries", "Healthcare providers", "Family caregivers"],
+  "estimatedDuration": 90,
+  "difficulty": "medium",
+  "featured": true
+}

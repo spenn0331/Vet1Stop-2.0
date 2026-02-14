@@ -1,0 +1,223 @@
+"use client";
+
+import React, { useState } from 'react';
+import {
+  PhoneIcon,
+  EnvelopeIcon,
+  GlobeAltIcon,
+  MapPinIcon,
+  ClipboardIcon,
+  CheckCircleIcon
+} from '@heroicons/react/24/outline';
+import { HealthResource } from '../ResourceDetailView';
+
+interface InteractiveContactSectionProps {
+  resource: HealthResource;
+}
+
+/**
+ * InteractiveContactSection Component
+ * Enhanced contact section with interactive copy-to-clipboard and direct action buttons
+ */
+export const InteractiveContactSection: React.FC<InteractiveContactSectionProps> = ({ resource }) => {
+  // Track copy success states
+  const [copied, setCopied] = useState<Record<string, boolean>>({
+    phone: false,
+    email: false,
+    website: false,
+    address: false
+  });
+  
+  // Normalize resource contact information for consistent access
+  const contact = resource.contact || {};
+  const phone = contact.phone || resource.phone || '';
+  const email = contact.email || resource.email || '';
+  const website = contact.website || resource.website || '';
+  
+  // Normalize location information
+  const location = resource.location || {};
+  const address = location.address || '';
+  const city = location.city || '';
+  const state = location.state || '';
+  const zipCode = location.zipCode || '';
+  
+  // Formatted address string
+  const fullAddress = [
+    address,
+    city && state ? `${city}, ${state}` : (city || state),
+    zipCode
+  ].filter(Boolean).join(' ');
+  
+  // Copy to clipboard function with visual feedback
+  const copyToClipboard = (text: string, field: keyof typeof copied) => {
+    if (!text) return;
+    
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(prev => ({ ...prev, [field]: true }));
+      
+      // Reset copy success message after 2 seconds
+      setTimeout(() => {
+        setCopied(prev => ({ ...prev, [field]: false }));
+      }, 2000);
+    });
+  };
+  
+  return (
+    <div className="mb-6">
+      <h3 className="text-lg font-semibold text-[#1A2C5B] mb-3">
+        Contact Information
+      </h3>
+      
+      <div className="space-y-4">
+        {/* Phone number with actions */}
+        {phone && (
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              <div className="bg-blue-100 p-2 rounded-full mr-3">
+                <PhoneIcon className="h-5 w-5 text-blue-700" />
+              </div>
+              <span className="text-gray-700">{phone}</span>
+            </div>
+            
+            <div className="flex space-x-2">
+              <button 
+                onClick={() => copyToClipboard(phone, 'phone')}
+                className="p-1.5 text-gray-500 hover:text-[#1A2C5B] hover:bg-gray-100 rounded-full transition-colors"
+                aria-label="Copy phone number"
+              >
+                {copied.phone ? (
+                  <CheckCircleIcon className="h-5 w-5 text-green-600" />
+                ) : (
+                  <ClipboardIcon className="h-5 w-5" />
+                )}
+              </button>
+              
+              <a 
+                href={`tel:${phone.replace(/[^0-9+]/g, '')}`}
+                className="p-1.5 text-white bg-[#1A2C5B] hover:bg-[#1A2C5B]/90 rounded-full transition-colors"
+                aria-label="Call this number"
+              >
+                <PhoneIcon className="h-5 w-5" />
+              </a>
+            </div>
+          </div>
+        )}
+        
+        {/* Email with actions */}
+        {email && (
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              <div className="bg-amber-100 p-2 rounded-full mr-3">
+                <EnvelopeIcon className="h-5 w-5 text-amber-700" />
+              </div>
+              <span className="text-gray-700">{email}</span>
+            </div>
+            
+            <div className="flex space-x-2">
+              <button 
+                onClick={() => copyToClipboard(email, 'email')}
+                className="p-1.5 text-gray-500 hover:text-[#1A2C5B] hover:bg-gray-100 rounded-full transition-colors"
+                aria-label="Copy email address"
+              >
+                {copied.email ? (
+                  <CheckCircleIcon className="h-5 w-5 text-green-600" />
+                ) : (
+                  <ClipboardIcon className="h-5 w-5" />
+                )}
+              </button>
+              
+              <a 
+                href={`mailto:${email}`}
+                className="p-1.5 text-white bg-[#B22234] hover:bg-[#B22234]/90 rounded-full transition-colors"
+                aria-label="Send email"
+              >
+                <EnvelopeIcon className="h-5 w-5" />
+              </a>
+            </div>
+          </div>
+        )}
+        
+        {/* Website with actions */}
+        {website && (
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              <div className="bg-purple-100 p-2 rounded-full mr-3">
+                <GlobeAltIcon className="h-5 w-5 text-purple-700" />
+              </div>
+              <span className="text-gray-700 truncate max-w-[230px]">{website}</span>
+            </div>
+            
+            <div className="flex space-x-2">
+              <button 
+                onClick={() => copyToClipboard(website, 'website')}
+                className="p-1.5 text-gray-500 hover:text-[#1A2C5B] hover:bg-gray-100 rounded-full transition-colors"
+                aria-label="Copy website URL"
+              >
+                {copied.website ? (
+                  <CheckCircleIcon className="h-5 w-5 text-green-600" />
+                ) : (
+                  <ClipboardIcon className="h-5 w-5" />
+                )}
+              </button>
+              
+              <a 
+                href={website.startsWith('http') ? website : `https://${website}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-1.5 text-white bg-[#1A2C5B] hover:bg-[#1A2C5B]/90 rounded-full transition-colors"
+                aria-label="Visit website"
+              >
+                <GlobeAltIcon className="h-5 w-5" />
+              </a>
+            </div>
+          </div>
+        )}
+        
+        {/* Address with actions */}
+        {fullAddress && (
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              <div className="bg-green-100 p-2 rounded-full mr-3">
+                <MapPinIcon className="h-5 w-5 text-green-700" />
+              </div>
+              <span className="text-gray-700">{fullAddress}</span>
+            </div>
+            
+            <div className="flex space-x-2">
+              <button 
+                onClick={() => copyToClipboard(fullAddress, 'address')}
+                className="p-1.5 text-gray-500 hover:text-[#1A2C5B] hover:bg-gray-100 rounded-full transition-colors"
+                aria-label="Copy address"
+              >
+                {copied.address ? (
+                  <CheckCircleIcon className="h-5 w-5 text-green-600" />
+                ) : (
+                  <ClipboardIcon className="h-5 w-5" />
+                )}
+              </button>
+              
+              <a 
+                href={`https://maps.google.com/?q=${encodeURIComponent(fullAddress)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-1.5 text-white bg-[#EAB308] hover:bg-[#EAB308]/90 rounded-full transition-colors"
+                aria-label="View on map"
+              >
+                <MapPinIcon className="h-5 w-5" />
+              </a>
+            </div>
+          </div>
+        )}
+      </div>
+      
+      {/* No contact information available */}
+      {!phone && !email && !website && !fullAddress && (
+        <div className="p-3 bg-gray-50 rounded-lg text-gray-500 text-center">
+          No contact information available
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default InteractiveContactSection;

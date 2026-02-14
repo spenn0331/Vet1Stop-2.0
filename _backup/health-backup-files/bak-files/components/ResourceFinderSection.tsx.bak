@@ -1,0 +1,711 @@
+"use client";
+
+import React, { useState, useEffect, useCallback } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { 
+  MagnifyingGlassIcon,
+  ChevronDownIcon,
+  ArrowPathIcon,
+  ExclamationTriangleIcon
+} from '@heroicons/react/24/outline';
+import { useRouter, useSearchParams } from 'next/navigation';
+import StateFilterPanel from './StateFilterPanel';
+// Import AdvancedFilterPanel and its types properly
+import AdvancedFilterPanel, { 
+  type AdvancedFilters,
+} from '@/components/resource-filters/AdvancedFilterPanel';
+import ResourceDetailView from './ResourceDetailView';
+import VirtualizedResourceGrid from './VirtualizedResourceGrid';
+import CacheManager from '@/utils/cache-manager';
+import LazyImage from '@/components/ui/LazyImage';
+
+// Firebase imports
+import { auth, db } from '@/lib/firebase';
+import { getDoc, doc } from 'firebase/firestore';
+import { logEvent } from 'firebase/analytics';
+import { analytics } from '@/lib/firebase';
+import { HealthResource } from './ResourceDetailView';
+
+// Define interface for StateFilterPanel props
+interface StateFilterPanelProps {
+  selectedState: string;
+  onStateChange: (state: string) => void;
+}
+
+// Define user profile interface
+interface UserProfile {
+  veteranType?: string;
+  branch?: string;
+  interests?: string[];
+  location?: {
+    state?: string;
+  };
+  state?: string;
+}
+
+// Define categories structure
+const categories = [
+  { value: 'all', label: 'All Categories' },
+  { value: 'mental-health', label: 'Mental Health' },
+  { value: 'primary-care', label: 'Primary Care' },
+  { value: 'specialty-care', label: 'Specialty Care' },
+  { value: 'emergency', label: 'Emergency Services' },
+  { value: 'rehabilitation', label: 'Rehabilitation' },
+  { value: 'long-term-care', label: 'Long-term Care' },
+  { value: 'home-health', label: 'Home Health' },
+  { value: 'pharmacy', label: 'Pharmacy' },
+  { value: 'telehealth', label: 'Telehealth' },
+  { value: 'women-health', label: 'Women Veterans Health' },
+  { value: 'dental', label: 'Dental' }
+];
+
+// Log event to Firebase Analytics
+const firebaseLogEvent = (eventName: string, params: object) => {
+  try {
+    if (analytics) {
+      logEvent(analytics, eventName, params);
+    }
+  } catch (error) {
+    console.error('Error logging event to Firebase:', error);
+  }
+};
+
+/**
+ * OptimizedResourceFinderSection component
+ * 
+ * This component implements three major optimizations:
+ * 1. Virtualized list rendering for efficient display of large resource sets
+ * 2. Advanced multi-layer caching (memory, localStorage, IndexedDB)
+ * 3. Lazy loading of images for better performance
+ */
+export default function OptimizedResourceFinderSection() {
+  // State for filters
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [locationFilter, setLocationFilter] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortOption, setSortOption] = useState('relevance');
+  const [showLocationFilter, setShowLocationFilter] = useState(false);
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [savedResources, setSavedResources] = useState<string[]>([]);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [selectedResource, setSelectedResource] = useState<HealthResource | null>(null);
+  const [resourceDetailOpen, setResourceDetailOpen] = useState(false);
+  
+  // Get query parameters
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  
+  // Advanced filters state
+  const [advancedFilters, setAdvancedFilters] = useState<AdvancedFilters>({
+    resourceTypes: [],
+    veteranTypes: [],
+    serviceBranches: [],
+    featuredOnly: false,
+    recentlyUpdated: false
+  });
+  
+  // Generate a cache key based on current filters
+  const getCacheKey = useCallback(() => {
+    return `health_resources_${selectedCategory}_${locationFilter}_${searchQuery}_${sortOption}_${JSON.stringify(advancedFilters)}`;
+  }, [selectedCategory, locationFilter, searchQuery, sortOption, advancedFilters]);
+  
+  // Initialize from URL parameters
+  useEffect(() => {
+    const categoryParam = searchParams.get('category');
+    const searchParam = searchParams.get('search');
+    const locationParam = searchParams.get('location');
+    const sortParam = searchParams.get('sort');
+    
+    if (categoryParam) setSelectedCategory(categoryParam);
+    if (searchParam) setSearchQuery(searchParam);
+    if (locationParam) setLocationFilter(locationParam);
+    if (sortParam) setSortOption(sortParam);
+  }, [searchParams]);
+  
+  // Get user profile from Firebase if logged in
+  const fetchUserProfile = async () => {
+    try {
+      // Try to get from cache first
+      const cachedProfile = await CacheManager.get<UserProfile>('user_profile');
+      if (cachedProfile) {
+        setUserProfile(cachedProfile);
+        // Set location filter based on user profile if available
+        if (cachedProfile.location?.state && locationFilter === 'all') {
+          setLocationFilter(cachedProfile.location.state);
+        }
+        return cachedProfile;
+      }
+      
+      const user = auth.currentUser;
+      if (!user) {
+        return null;
+      }
+      
+      const userDocRef = doc(db, 'users', user.uid);
+      const userDocSnap = await getDoc(userDocRef);
+      
+      if (userDocSnap.exists()) {
+        const userData = userDocSnap.data() as UserProfile;
+        setUserProfile(userData);
+        
+        // Cache user profile for 1 hour
+        await CacheManager.set<UserProfile>('user_profile', userData, {
+          expiresIn: 1000 * 60 * 60, // 1 hour
+        });
+        
+        // Set location filter based on user profile if available
+        if (userData.location?.state && locationFilter === 'all') {
+          setLocationFilter(userData.location.state);
+        }
+        return userData;
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('Error fetching user profile:', error);
+      return null;
+    }
+  };
+  
+  // Get user profile on mount and when location filter changes
+  useEffect(() => {
+    try {
+      // Make sure auth exists before using it
+      if (!auth) {
+        console.warn('Auth not available for user authentication');
+        return;
+      }
+      
+      const unsubscribe = auth.onAuthStateChanged(async (user) => {
+        if (user) {
+          // User is authenticated - load their profile
+          try {
+            const userDocRef = doc(db, 'users', user.uid);
+            const userDoc = await getDoc(userDocRef);
+            
+            if (userDoc.exists()) {
+              setUserProfile(userDoc.data() as UserProfile);
+            }
+            
+            // Log event for personalization
+            firebaseLogEvent('health_resource_finder_viewed', {
+              userId: user.uid,
+              hasProfile: userDoc.exists(),
+            });
+            
+            // Attempt to load saved resources
+            const savedResourcesString = localStorage.getItem(`savedResources_${user.uid}`);
+            if (savedResourcesString) {
+              const savedResourcesData = JSON.parse(savedResourcesString);
+              setSavedResources(savedResourcesData);
+              // Store in cache for faster access next time
+              CacheManager.set<string[]>('savedResources', savedResourcesData, {
+                expiresIn: 1000 * 60 * 60 * 24 * 7, // 1 week
+              });
+            }
+          } catch (error) {
+            console.error('Error loading user profile:', error);
+          }
+        } else {
+          // No user - check for saved resources in localStorage/cache
+          const cachedSavedResources = await CacheManager.get<string[]>('savedResources');
+          if (cachedSavedResources) {
+            setSavedResources(cachedSavedResources);
+          } else {
+            const savedResourcesString = localStorage.getItem('savedResources');
+            if (savedResourcesString) {
+              const savedResourcesData = JSON.parse(savedResourcesString);
+              setSavedResources(savedResourcesData);
+              // Store in cache for faster access next time
+              CacheManager.set<string[]>('savedResources', savedResourcesData, {
+                expiresIn: 1000 * 60 * 60 * 24 * 7, // 1 week
+              });
+            }
+          }
+        }
+      });
+      
+      return () => unsubscribe();
+    } catch (error) {
+      console.error('Error loading saved resources:', error);
+    }
+  }, []);
+  
+  // Analytics tracking setup
+  useEffect(() => {
+    const setupAnalyticsListeners = () => {
+      document.addEventListener('click', (event) => {
+        const target = event.target as HTMLElement;
+        
+        // Track resource category clicks
+        if (target.closest('[data-category]')) {
+          const categoryElement = target.closest('[data-category]') as HTMLElement;
+          const category = categoryElement.dataset.category;
+          if (category) {
+            firebaseLogEvent('category_click', { category });
+          }
+        }
+      });
+    };
+    
+    setupAnalyticsListeners();
+    
+    return () => {
+      document.removeEventListener('click', () => {});
+    };
+  }, []);
+  
+  // Fetch health resources based on filters
+  // Define query options interface
+interface QueryOptions {
+  category?: string;
+  location?: string;
+  query?: string;
+  sort?: string;
+  advancedFilters?: AdvancedFilters;
+}
+
+const fetchHealthResources = async ({ category, location, query, sort, advancedFilters }: QueryOptions): Promise<HealthResource[]> => {
+    try {
+      const cacheKey = `health_resources_${category}_${location}_${query}_${sort}_${JSON.stringify(advancedFilters)}`;
+      
+      // Check cache first
+      const cachedData = await CacheManager.get<HealthResource[]>(cacheKey);
+      if (cachedData) {
+        return cachedData;
+      }
+      
+      // Build query params
+      const params = new URLSearchParams();
+      // Set limit to 200 to show all resources (we have 189 in the database)
+      params.append('limit', '200');
+      if (category && category !== 'all') params.append('category', category);
+      if (location && location !== 'all') params.append('state', location);
+      if (query) params.append('search', query);
+      if (sort) params.append('sort', sort);
+      
+      // Add advanced filters
+      if (advancedFilters) {
+        if (advancedFilters.resourceTypes?.length) {
+          params.append('resourceTypes', advancedFilters.resourceTypes.join(','));
+        }
+        if (advancedFilters.veteranTypes?.length) {
+          params.append('veteranTypes', advancedFilters.veteranTypes.join(','));
+        }
+        if (advancedFilters.serviceBranches?.length) {
+          params.append('serviceBranches', advancedFilters.serviceBranches.join(','));
+        }
+        if (advancedFilters.featuredOnly) {
+          params.append('featured', 'true');
+        }
+        if (advancedFilters.recentlyUpdated) {
+          params.append('recentlyUpdated', 'true');
+        }
+      }
+      
+      // Try the new endpoint first
+      try {
+        const response = await fetch(`/api/health/resources?${params.toString()}`);
+        
+        if (!response.ok) {
+          throw new Error(`Error fetching from health/resources: ${response.status}`);
+        }
+        
+        const resources = await response.json();
+        
+        // Store in cache
+        await CacheManager.set<HealthResource[]>(cacheKey, resources, {
+          expiresIn: 1000 * 60 * 10, // 10 minutes cache for search results
+        });
+        
+        return resources;
+      } catch (primaryError) {
+        console.warn('Primary API failed, trying fallback endpoint:', primaryError);
+        
+        // Try the fallback endpoint - ensure we're using the same params (with limit=200)
+        const fallbackResponse = await fetch(`/api/health-resources?${params.toString()}`);
+        
+        if (!fallbackResponse.ok) {
+          throw new Error(`Error fetching health resources: ${fallbackResponse.status}`);
+        }
+        
+        const data = await fallbackResponse.json();
+        const resources = data.data || [];
+        
+        // Store in cache
+        await CacheManager.set<HealthResource[]>(cacheKey, resources, {
+          expiresIn: 1000 * 60 * 10, // 10 minutes cache for search results
+        });
+        
+        return resources;
+      }
+    } catch (error) {
+      console.error('Error fetching health resources:', error);
+      // Return static fallback data instead of throwing error
+      console.log('Returning static fallback data for health resources');
+      return [
+        {
+          id: 'fallback-1',
+          title: 'VA Health Care Enrollment',
+          description: 'Apply for VA health care benefits and find out how to access services.',
+          category: 'Federal',
+          tags: ['healthcare', 'enrollment', 'benefits', 'mental-health'],
+          contact: {
+            website: 'https://www.va.gov/health-care/'
+          },
+          resourceType: 'federal'
+        },
+        {
+          id: 'fallback-2',
+          title: 'Veterans Crisis Line',
+          description: 'Confidential crisis support available 24/7 for Veterans and their loved ones.',
+          category: 'Mental Health',
+          tags: ['crisis', 'suicide prevention', 'mental health'],
+          contact: {
+            phone: '1-800-273-8255', 
+            website: 'https://www.veteranscrisisline.net/'
+          },
+          resourceType: 'va'
+        }
+      ];
+    }
+  };
+  
+  // Use React Query for data fetching with caching
+  const { 
+    data: resources = [], 
+    isLoading, 
+    isError, 
+    error, 
+    refetch 
+  } = useQuery(
+    // Define the query key as an array of values that uniquely identify this query
+    ['healthResources', selectedCategory, searchQuery, locationFilter, sortOption, JSON.stringify(advancedFilters)],
+    // The query function that returns a promise
+    () => fetchHealthResources({ 
+      category: selectedCategory, 
+      location: locationFilter, 
+      query: searchQuery, 
+      sort: sortOption, 
+      advancedFilters 
+    }),
+    {
+      staleTime: 1000 * 60 * 10, // 10 minutes cache (increased from 5 minutes)
+      cacheTime: 1000 * 60 * 30, // 30 minutes (more aggressive caching)
+    }
+  );
+  
+  // Update URL with current filters
+  const updateUrlWithFilters = useCallback(() => {
+    const params = new URLSearchParams();
+    
+    if (selectedCategory !== 'all') {
+      params.append('category', selectedCategory);
+    }
+    
+    if (searchQuery.trim()) {
+      params.append('search', searchQuery.trim());
+    }
+    
+    if (locationFilter !== 'all') {
+      params.append('location', locationFilter);
+    }
+    
+    if (sortOption !== 'relevance') {
+      params.append('sort', sortOption);
+    }
+    
+    router.push(`/health?${params.toString()}`);
+  }, [selectedCategory, searchQuery, locationFilter, sortOption, router]);
+  
+  // Update URL when filters change
+  useEffect(() => {
+    updateUrlWithFilters();
+  }, [selectedCategory, searchQuery, locationFilter, sortOption, updateUrlWithFilters]);
+  
+  // Toggle category filter
+  const handleCategoryChange = (category: string) => {
+    setSelectedCategory(category);
+  };
+  
+  // Toggle location filter
+  const handleLocationChange = (state: string) => {
+    setLocationFilter(state);
+    setShowLocationFilter(false);
+  };
+  
+  // Toggle advanced filters
+  const handleAdvancedFiltersChange = (filters: AdvancedFilters) => {
+    setAdvancedFilters(filters);
+  };
+  
+  // Handle search form submission
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    refetch(); // Refetch data with current filters
+  };
+  
+  // Handle sorting change
+  const handleSortChange = (option: string) => {
+    setSortOption(option);
+  };
+  
+  // Handle resource selection for detail view
+  const handleResourceSelect = (resource: HealthResource) => {
+    console.log('Resource selected:', resource.title); // Debug log
+    setSelectedResource(resource);
+    setResourceDetailOpen(true);
+    
+    // Track resource view
+    firebaseLogEvent('resource_view', {
+      resource_id: resource._id || resource.id,
+      resource_title: resource.title,
+      resource_type: resource.resourceType || 'unknown'
+    });
+  };
+  
+  // Handle saving/unsaving a resource
+  const handleSaveResource = (resourceId: string) => {
+    try {
+      let updatedSavedResources;
+      
+      if (savedResources.includes(resourceId)) {
+        // Remove from saved resources
+        updatedSavedResources = savedResources.filter(id => id !== resourceId);
+        
+        // Track unsave event
+        firebaseLogEvent('resource_unsave', {
+          resource_id: resourceId
+        });
+      } else {
+        // Add to saved resources
+        updatedSavedResources = [...savedResources, resourceId];
+        
+        // Track save event
+        firebaseLogEvent('resource_save', {
+          resource_id: resourceId
+        });
+      }
+      
+      // Update state
+      setSavedResources(updatedSavedResources);
+      
+      // Save to localStorage
+      localStorage.setItem('savedResources', JSON.stringify(updatedSavedResources));
+      
+      // Update cache
+      CacheManager.set<string[]>('savedResources', updatedSavedResources, {
+        expiresIn: 1000 * 60 * 60 * 24 * 7, // 1 week
+      });
+    } catch (error) {
+      console.error('Error saving resource:', error);
+    }
+  };
+  
+  // Handle resource rating
+  const handleRateResource = (resourceId: string, rating: number) => {
+    // Track rating event
+    firebaseLogEvent('resource_rate', {
+      resource_id: resourceId,
+      rating
+    });
+    
+    // TODO: Implement API call to save rating
+    console.log('Rated resource', resourceId, 'with', rating, 'stars');
+  };
+  
+  return (
+    <div className="flex flex-col md:flex-row gap-6 w-full">
+      {/* Left sidebar - Filters */}
+      <div className="w-full md:w-1/4 bg-white rounded-lg shadow-md p-4">
+        <h2 className="text-xl font-bold mb-4">Filters</h2>
+        
+        {/* Category filter */}
+        <div className="mb-4">
+          <h3 className="font-semibold mb-2">Category</h3>
+          <select
+            value={selectedCategory}
+            onChange={(e) => handleCategoryChange(e.target.value)}
+            className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          >
+            {categories.map((category) => (
+              <option key={category.value} value={category.value}>
+                {category.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        
+        {/* State filter */}
+        <div className="mb-4">
+          <h3 className="font-semibold mb-2">State</h3>
+          <div className="relative">
+            <button
+              onClick={() => setShowLocationFilter(!showLocationFilter)}
+              className="w-full p-2 border border-gray-300 rounded flex items-center justify-between bg-white"
+            >
+              <span>{locationFilter === 'all' ? 'All States' : locationFilter}</span>
+              <ChevronDownIcon className="w-5 h-5" />
+            </button>
+            
+            {showLocationFilter && (
+              <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded shadow-lg">
+                <StateFilterPanel 
+                  selectedState={locationFilter} 
+                  onStateChange={handleLocationChange} 
+                />
+              </div>
+            )}
+          </div>
+        </div>
+        
+        {/* Search input */}
+        <div className="mb-4">
+          <h3 className="font-semibold mb-2">Search</h3>
+          <form onSubmit={handleSearchSubmit} className="relative">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search health resources..."
+              className="w-full p-2 pl-10 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+            <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+          </form>
+        </div>
+        
+        {/* Sort By */}
+        <div className="mb-4">
+          <h3 className="font-semibold mb-2">Sort By</h3>
+          <select
+            value={sortOption}
+            onChange={(e) => handleSortChange(e.target.value)}
+            className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          >
+            <option value="relevance">Relevance</option>
+            <option value="rating">Highest Rated</option>
+            <option value="newest">Recently Updated</option>
+            <option value="alphabetical">Alphabetical (A-Z)</option>
+          </select>
+        </div>
+        
+        {/* Advanced Filters */}
+        <div className="mb-4">
+          <button
+            onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+            className="w-full p-2 border border-gray-300 rounded flex items-center justify-between bg-white"
+          >
+            <span>Advanced Filters</span>
+            <ChevronDownIcon className={`w-5 h-5 transform ${showAdvancedFilters ? 'rotate-180' : ''}`} />
+          </button>
+          
+          {showAdvancedFilters && (
+            <div className="mt-2 bg-white border border-gray-300 rounded p-3">
+              <AdvancedFilterPanel
+                onFilterChange={handleAdvancedFiltersChange}
+                initialFilters={advancedFilters}
+                className="w-full"
+              />
+            </div>
+          )}
+        </div>
+      </div>
+      
+      {/* Right content - Results */}
+      <div className="w-full md:w-3/4">
+        <div className="bg-white rounded-lg shadow-md p-4">
+          <h2 className="text-2xl font-bold mb-4">Health Resources ({resources?.length || 0})</h2>
+          
+          {/* Loading state */}
+          {isLoading && (
+            <div className="flex flex-col items-center justify-center p-6">
+              <ArrowPathIcon className="w-12 h-12 animate-spin text-blue-500 mb-4" />
+              <p className="text-lg text-gray-600">Loading resources...</p>
+            </div>
+          )}
+          
+          {/* Error state */}
+          {isError && (
+            <div className="bg-red-50 rounded-md p-4 mb-4">
+              <div className="flex items-start">
+                <ExclamationTriangleIcon className="w-6 h-6 text-red-600 mr-3" />
+                <div>
+                  <h3 className="text-lg font-medium text-red-800">Error loading resources</h3>
+                  <p className="text-sm text-red-700 mt-1">
+                    {error instanceof Error ? error.message : 'An unknown error occurred'}
+                  </p>
+                  <button
+                    onClick={() => refetch()}
+                    className="mt-3 bg-red-100 hover:bg-red-200 text-red-800 px-4 py-2 rounded-md text-sm font-medium"
+                  >
+                    Try Again
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {/* No results state */}
+          {!isLoading && !isError && (!resources || resources.length === 0) && (
+            <div className="flex flex-col items-center justify-center p-6 bg-gray-50 rounded-lg">
+              <LazyImage 
+                src="/icons/no-results.svg"
+                alt="No results"
+                width={100}
+                height={100}
+                priority={true}
+                className="mb-4"
+              />
+              <h3 className="text-xl font-semibold text-gray-800 mb-2">No health resources found</h3>
+              <p className="text-gray-600 text-center mb-4">
+                Try adjusting your search criteria or removing some filters to see more results.
+              </p>
+              <button
+                onClick={() => {
+                  setSelectedCategory('all');
+                  setLocationFilter('all');
+                  setSearchQuery('');
+                  setSortOption('relevance');
+                  setAdvancedFilters({
+                    resourceTypes: [],
+                    veteranTypes: [],
+                    serviceBranches: [],
+                    featuredOnly: false,
+                    recentlyUpdated: false
+                  });
+                }}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md"
+              >
+                Reset All Filters
+              </button>
+            </div>
+          )}
+          
+          {/* Results grid using virtualized component for performance */}
+          {!isLoading && !isError && resources && resources.length > 0 && (
+            <VirtualizedResourceGrid
+              resources={resources}
+              savedResources={savedResources}
+              onResourceSelect={handleResourceSelect}
+              onSaveResource={handleSaveResource}
+              onRateResource={handleRateResource}
+            />
+          )}
+        </div>
+      </div>
+      
+      {/* Resource Detail Modal */}
+      <ResourceDetailView
+        resource={selectedResource}
+        isOpen={resourceDetailOpen}
+        onClose={() => {
+          console.log('Closing resource detail view'); // Debug log
+          setResourceDetailOpen(false);
+        }}
+        onSave={selectedResource ? () => handleSaveResource(selectedResource._id || selectedResource.id || '') : undefined}
+        isSaved={selectedResource ? savedResources.includes(selectedResource._id || selectedResource.id || '') : false}
+        onRate={selectedResource ? (rating) => handleRateResource(selectedResource._id || selectedResource.id || '', rating) : undefined}
+      />
+    </div>
+  );
+}

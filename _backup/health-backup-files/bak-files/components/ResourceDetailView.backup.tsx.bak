@@ -1,0 +1,473 @@
+"use client";
+
+import React, { useState } from 'react';
+import {
+  PhoneIcon,
+  EnvelopeIcon,
+  GlobeAltIcon,
+  MapPinIcon,
+  StarIcon,
+  CalendarIcon,
+  TagIcon,
+  ClipboardDocumentListIcon,
+  ShieldCheckIcon,
+  UserGroupIcon,
+  BuildingLibraryIcon,
+  ArrowTopRightOnSquareIcon,
+  HeartIcon,
+  ShareIcon,
+  BookmarkIcon,
+  CheckBadgeIcon,
+  ExclamationTriangleIcon
+} from '@heroicons/react/24/outline';
+import { HeartIcon as HeartIconSolid } from '@heroicons/react/24/solid';
+import Modal from '@/components/ui/modal';
+import Link from 'next/link';
+
+// Resource interface definition
+export interface HealthResource {
+  _id?: string;
+  id?: string;
+  title: string;
+  description: string;
+  category?: string;
+  subcategory?: string;
+  resourceType?: string;
+  contact?: {
+    phone?: string;
+    email?: string;
+    website?: string;
+  };
+  location?: {
+    address?: string;
+    city?: string;
+    state?: string;
+    zipCode?: string;
+    coordinates?: { lat: number; lng: number } | null;
+  };
+  eligibility?: string;
+  veteranType?: string[];
+  serviceBranch?: string[];
+  tags?: string[];
+  isFeatured?: boolean;
+  lastUpdated?: Date | string;
+  imageUrl?: string;
+  thumbnail?: string;
+  rating?: number;
+  reviewCount?: number;
+  link?: string;
+  organization?: string;
+}
+
+// Props for the component
+interface ResourceDetailViewProps {
+  resource: HealthResource | null;
+  isOpen: boolean;
+  onClose: () => void;
+  onSave?: (resource: HealthResource) => void | (() => void);
+  onShare?: (resource: HealthResource) => void;
+  onRate?: (rating: number) => void;
+  isSaved?: boolean;
+}
+
+export default function ResourceDetailView({
+  resource,
+  isOpen,
+  onClose,
+  onSave,
+  onShare,
+  isSaved = false
+}: ResourceDetailViewProps) {
+  const [expanded, setExpanded] = useState<boolean>(false);
+  const [localIsSaved, setLocalIsSaved] = useState<boolean>(isSaved);
+  const [userRating, setUserRating] = useState<number | null>(null);
+  const [feedbackSubmitted, setFeedbackSubmitted] = useState<boolean>(false);
+  
+  // Handle non-existent resource
+  if (!resource) {
+    return (
+      <Modal
+        isOpen={isOpen}
+        onClose={onClose}
+        size="lg"
+      >
+        <div className="p-6 text-center">
+          <ExclamationTriangleIcon className="h-16 w-16 text-yellow-500 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Resource Not Found</h3>
+          <p className="text-gray-600 mb-4">The requested resource could not be found or has been removed.</p>
+          <button
+            className="px-4 py-2 bg-[#1A2C5B] text-white rounded-md hover:bg-[#1A2C5B]/90"
+            onClick={onClose}
+          >
+            Close
+          </button>
+        </div>
+      </Modal>
+    );
+  }
+
+  // Handle resource type display
+  const getResourceTypeLabel = (type: string | undefined) => {
+    if (!type) return 'Unknown';
+    
+    const typeMap: { [key: string]: string } = {
+      'va': 'VA',
+      'federal': 'Federal',
+      'state': 'State',
+      'ngo': 'NGO/Non-Profit',
+      'private': 'Private Sector',
+      'academic': 'Academic'
+    };
+    
+    return typeMap[type.toLowerCase()] || type;
+  };
+  
+  // Get resource badge color based on type
+  const getResourceTypeColor = (type: string | undefined) => {
+    if (!type) return 'bg-gray-100 text-gray-800';
+    
+    const colorMap: { [key: string]: string } = {
+      'va': 'bg-blue-100 text-blue-800',
+      'federal': 'bg-blue-100 text-blue-800',
+      'state': 'bg-green-100 text-green-800',
+      'ngo': 'bg-[#B22234]/10 text-[#B22234]',
+      'private': 'bg-purple-100 text-purple-800',
+      'academic': 'bg-yellow-100 text-yellow-800'
+    };
+    
+    return colorMap[type.toLowerCase()] || 'bg-gray-100 text-gray-800';
+  };
+  
+  // Handle save button click
+  const handleSave = () => {
+    setLocalIsSaved(!localIsSaved);
+    if (onSave) {
+      onSave(resource);
+    }
+  };
+  
+  // Handle share button click
+  const handleShare = () => {
+    if (onShare) {
+      onShare(resource);
+    } else {
+      // Fallback if no share handler provided
+      if (navigator.share) {
+        navigator.share({
+          title: resource.title,
+          text: resource.description,
+          url: window.location.href,
+        }).catch(err => {
+          console.error('Error sharing:', err);
+        });
+      } else {
+        // Copy link to clipboard
+        const url = window.location.href;
+        navigator.clipboard.writeText(url);
+        alert('Link copied to clipboard!');
+      }
+    }
+  };
+  
+  // Handle rating submission
+  const handleRating = (rating: number) => {
+    setUserRating(rating);
+  };
+  
+  // Handle feedback submission
+  const handleSubmitFeedback = () => {
+    if (userRating) {
+      // Here we would typically send the rating to an API
+      setFeedbackSubmitted(true);
+    }
+  };
+  
+  // Format date for display
+  const formatDate = (date: Date | string | undefined) => {
+    if (!date) return 'Unknown';
+    return new Date(date).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+  };
+
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      size="lg"
+      className="overflow-hidden"
+    >
+      <div className="p-4 md:p-6">
+        <div className="flex flex-col md:flex-row">
+          {/* Resource icon/image */}
+          <div className="bg-blue-700 rounded-lg p-4 mb-4 md:mb-0 md:mr-6 flex items-center justify-center w-full md:w-40 h-40">
+            <BuildingLibraryIcon className="h-20 w-20 text-white" />
+          </div>
+          
+          {/* Resource information */}
+          <div className="flex-1 max-w-full overflow-x-hidden">
+            {/* Title and Actions Row */}
+            <div className="flex flex-col md:flex-row md:items-start justify-between mb-4">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900 mb-1">{resource.title}</h2>
+                
+                <div className="flex flex-wrap items-center gap-2 mb-2">
+                  {/* Resource Type Badge */}
+                  {resource.resourceType && (
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getResourceTypeColor(resource.resourceType)}`}>
+                      {getResourceTypeLabel(resource.resourceType)}
+              {resource.veteranType && resource.veteranType.length > 0 && (
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
+                  <h3 className="flex items-center text-md font-semibold text-gray-800 mb-2">
+                    <UserGroupIcon className="h-5 w-5 mr-2" />
+                    Veteran Types
+                  </h3>
+                  <div className="flex flex-wrap gap-2">
+                    {resource.veteranType.map((type, index) => (
+                      <span 
+                        key={index} 
+                        className="px-2 py-1 bg-white text-gray-700 text-xs rounded-lg border border-gray-200"
+                      >
+                        {type.charAt(0).toUpperCase() + type.slice(1).replace(/-/g, ' ')}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              {/* Service Branches */}
+              {resource.serviceBranch && resource.serviceBranch.length > 0 && (
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
+                  <h3 className="flex items-center text-md font-semibold text-gray-800 mb-2">
+                    <ShieldCheckIcon className="h-5 w-5 mr-2" />
+                    Service Branches
+                  </h3>
+                  <div className="flex flex-wrap gap-2">
+                    {resource.serviceBranch.map((branch, index) => (
+                      <span 
+                        key={index} 
+                        className="px-2 py-1 bg-white text-gray-700 text-xs rounded-lg border border-gray-200"
+                      >
+                        {branch.charAt(0).toUpperCase() + branch.slice(1).replace(/-/g, ' ')}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            {/* Tags/Categories */}
+            {resource.tags && resource.tags.length > 0 && (
+              <div className="mb-6">
+                <h3 className="flex items-center text-md font-semibold text-gray-800 mb-2">
+                  <TagIcon className="h-5 w-5 mr-2" />
+                  Tags
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  {resource.tags.map((tag, index) => (
+                    <span 
+                      key={index} 
+                      className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded-full"
+                    >
+                      {tag.charAt(0).toUpperCase() + tag.slice(1).replace(/-/g, ' ')}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            {/* User Feedback Section */}
+            {!feedbackSubmitted ? (
+              <div className="mb-6 bg-gray-50 p-4 rounded-lg border border-gray-200">
+                <h3 className="text-md font-semibold text-gray-800 mb-2">Rate this resource</h3>
+                <p className="text-sm text-gray-600 mb-2">
+                  Your feedback helps other veterans find quality resources.
+                </p>
+                <div className="flex items-center mb-3">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button 
+                      key={star}
+                      onClick={() => handleRating(star)}
+                      className="focus:outline-none focus:ring-2 focus:ring-[#1A2C5B] rounded-full p-1"
+                    >
+                      <StarIcon 
+                        className={`h-6 w-6 ${
+                          star <= (userRating || 0)
+                            ? 'text-yellow-400 fill-current' 
+                            : 'text-gray-300 hover:text-yellow-400'
+                        }`}
+                      />
+                    </button>
+                  ))}
+                </div>
+                <button 
+                  onClick={handleSubmitFeedback}
+                  disabled={!userRating}
+                  className={`px-4 py-2 rounded-md text-sm ${
+                    userRating 
+                      ? 'bg-[#1A2C5B] text-white hover:bg-[#1A2C5B]/90' 
+                      : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                  }`}
+                >
+                  Submit Rating
+                </button>
+              </div>
+            ) : (
+              <div className="mb-6 bg-green-50 p-4 rounded-lg border border-green-100">
+                <div className="flex items-center">
+                  <CheckBadgeIcon className="h-6 w-6 text-green-500 mr-2" />
+                  <p className="text-green-700 font-medium">
+                    Thank you for your feedback!
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+          
+          {/* Right Column: Contact Information and Location */}
+          <div className="lg:col-span-1">
+            {/* Contact Card */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden mb-6">
+              <div className="bg-[#1A2C5B] text-white p-3">
+                <h3 className="font-medium">Contact Information</h3>
+              </div>
+              <div className="p-4">
+                {/* Phone */}
+                {resource.contact?.phone && (
+                  <div className="flex items-start mb-3">
+                    <PhoneIcon className="h-5 w-5 text-gray-500 mr-3 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">Phone</p>
+                      <a 
+                        href={`tel:${resource.contact.phone}`}
+                        className="text-[#1A2C5B] hover:underline"
+                      >
+                        {resource.contact.phone}
+                      </a>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Email */}
+                {resource.contact?.email && (
+                  <div className="flex items-start mb-3">
+                    <EnvelopeIcon className="h-5 w-5 text-gray-500 mr-3 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">Email</p>
+                      <a 
+                        href={`mailto:${resource.contact.email}`}
+                        className="text-[#1A2C5B] hover:underline break-all"
+                      >
+                        {resource.contact.email}
+                      </a>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Website */}
+                {(resource.contact?.website || resource.link) && (
+                  <div className="flex items-start mb-3">
+                    <GlobeAltIcon className="h-5 w-5 text-gray-500 mr-3 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">Website</p>
+                      <a 
+                        href={resource.contact?.website || resource.link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[#1A2C5B] hover:underline break-all"
+                      >
+                        {resource.contact?.website || resource.link}
+                      </a>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Location/Address */}
+                {(resource.location?.address || resource.location?.city || resource.location?.state) && (
+                  <div className="flex items-start">
+                    <MapPinIcon className="h-5 w-5 text-gray-500 mr-3 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">Location</p>
+                      <address className="text-gray-600 not-italic">
+                        {resource.location.address && (
+                          <p>{resource.location.address}</p>
+                        )}
+                        {(resource.location.city || resource.location.state) && (
+                          <p>
+                            {resource.location.city && `${resource.location.city}, `}
+                            {resource.location.state}
+                            {resource.location.zipCode && ` ${resource.location.zipCode}`}
+                          </p>
+                        )}
+                      </address>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            {/* Action Buttons Card */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden mb-6">
+              <div className="p-4 space-y-3">
+                {/* Visit Website Button */}
+                {(resource.contact?.website || resource.link) && (
+                  <Link
+                    href={resource.contact?.website || resource.link || ''}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center w-full px-4 py-2 bg-[#1A2C5B] text-white rounded-md hover:bg-[#1A2C5B]/90 transition-colors"
+                  >
+                    Visit Website
+                    <ArrowTopRightOnSquareIcon className="ml-2 h-4 w-4" />
+                  </Link>
+                )}
+                
+                {/* Save Button */}
+                <button
+                  onClick={handleSave}
+                  className={`flex items-center justify-center w-full px-4 py-2 rounded-md border ${
+                    localIsSaved
+                      ? 'bg-[#B22234]/10 text-[#B22234] border-[#B22234]/30'
+                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                  }`}
+                >
+                  {localIsSaved ? (
+                    <>
+                      <HeartIconSolid className="mr-2 h-4 w-4" />
+                      Saved
+                    </>
+                  ) : (
+                    <>
+                      <HeartIcon className="mr-2 h-4 w-4" />
+                      Save for Later
+                    </>
+                  )}
+                </button>
+                
+                {/* Share Button */}
+                <button
+                  onClick={handleShare}
+                  className="flex items-center justify-center w-full px-4 py-2 bg-white text-gray-700 rounded-md border border-gray-300 hover:bg-gray-50"
+                >
+                  <ShareIcon className="mr-2 h-4 w-4" />
+                  Share Resource
+                </button>
+              </div>
+            </div>
+            
+            {/* Disclaimer */}
+            <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+              <p className="text-xs text-gray-500">
+                The information provided is for reference purposes only. 
+                Vet1Stop does not endorse specific resources and recommends 
+                verifying information directly with the provider.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Modal>
+  );
+}

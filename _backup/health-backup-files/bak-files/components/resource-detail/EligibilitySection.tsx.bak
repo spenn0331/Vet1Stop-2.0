@@ -1,0 +1,144 @@
+"use client";
+
+import React from 'react';
+import { 
+  ShieldCheckIcon, 
+  UserGroupIcon, 
+  CheckCircleIcon, 
+  XCircleIcon
+} from '@heroicons/react/24/outline';
+import { HealthResource } from '../ResourceDetailView';
+
+interface EligibilitySectionProps {
+  resource: HealthResource;
+}
+
+/**
+ * EligibilitySection Component
+ * Displays eligibility criteria for a health resource, including veteran type and service branch
+ */
+export const EligibilitySection: React.FC<EligibilitySectionProps> = ({ resource }) => {
+  // Helper to normalize eligibility data
+  const getEligibilityArray = (data: string | string[] | undefined): string[] => {
+    if (!data) return [];
+    return Array.isArray(data) ? data : [data];
+  };
+  
+  // Get eligibility data
+  const veteranTypes = getEligibilityArray(resource.veteranType);
+  const serviceBranches = getEligibilityArray(resource.serviceBranch);
+  const eligibilityCriteria = resource.eligibility || '';
+  
+  // Common veteran types for reference
+  const commonVeteranTypes = [
+    { id: 'all', label: 'All Veterans' },
+    { id: 'post-911', label: 'Post-9/11 Veterans' },
+    { id: 'vietnam', label: 'Vietnam Era Veterans' },
+    { id: 'disabled', label: 'Disabled Veterans' },
+    { id: 'active-duty', label: 'Active Duty' },
+    { id: 'reservists', label: 'Reservists' },
+    { id: 'family', label: 'Family Members' },
+    { id: 'caregivers', label: 'Caregivers' }
+  ];
+  
+  // Service branches for reference
+  const serviceBranchOptions = [
+    { id: 'army', label: 'Army' },
+    { id: 'navy', label: 'Navy' },
+    { id: 'air-force', label: 'Air Force' },
+    { id: 'marines', label: 'Marines' },
+    { id: 'coast-guard', label: 'Coast Guard' },
+    { id: 'space-force', label: 'Space Force' },
+    { id: 'national-guard', label: 'National Guard' }
+  ];
+  
+  // Display human-readable name for veteran type
+  const getVeteranTypeLabel = (type: string): string => {
+    const foundType = commonVeteranTypes.find(vt => vt.id === type.toLowerCase());
+    return foundType ? foundType.label : type.replace(/-/g, ' ');
+  };
+  
+  // Display human-readable name for service branch
+  const getServiceBranchLabel = (branch: string): string => {
+    const foundBranch = serviceBranchOptions.find(sb => sb.id === branch.toLowerCase());
+    return foundBranch ? foundBranch.label : branch.replace(/-/g, ' ');
+  };
+  
+  // If no specific eligibility criteria, show "All Veterans" as default
+  const hasSpecificEligibility = veteranTypes.length > 0 || serviceBranches.length > 0 || eligibilityCriteria;
+  
+  return (
+    <div className="mb-6">
+      <h3 className="text-lg font-semibold text-[#1A2C5B] mb-3 flex items-center">
+        <ShieldCheckIcon className="h-5 w-5 mr-2 text-[#1A2C5B]" />
+        Eligibility Information
+      </h3>
+      
+      {!hasSpecificEligibility ? (
+        <div className="p-3 bg-blue-50 rounded-lg text-blue-700 flex items-center">
+          <CheckCircleIcon className="h-5 w-5 mr-2 text-blue-600" />
+          <p>Available to all veterans</p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {/* Eligibility description if available */}
+          {eligibilityCriteria && (
+            <div className="mb-3">
+              <p className="text-gray-700">{eligibilityCriteria}</p>
+            </div>
+          )}
+          
+          {/* Veteran Type section */}
+          {veteranTypes.length > 0 && (
+            <div className="mb-3">
+              <p className="text-sm font-medium text-gray-600 mb-2 flex items-center">
+                <UserGroupIcon className="h-4 w-4 mr-1 text-gray-500" />
+                Veteran Types:
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {veteranTypes.map((type, index) => (
+                  <span 
+                    key={index} 
+                    className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800"
+                  >
+                    {getVeteranTypeLabel(type)}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          
+          {/* Service Branch section */}
+          {serviceBranches.length > 0 && (
+            <div>
+              <p className="text-sm font-medium text-gray-600 mb-2 flex items-center">
+                <ShieldCheckIcon className="h-4 w-4 mr-1 text-gray-500" />
+                Service Branches:
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {serviceBranches.map((branch, index) => (
+                  <span 
+                    key={index} 
+                    className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
+                  >
+                    {getServiceBranchLabel(branch)}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          
+          {/* Not eligible section (if explicitly specified) */}
+          {resource.notEligible && (
+            <div className="mt-3 p-3 bg-red-50 rounded-lg text-red-700 flex items-center">
+              <XCircleIcon className="h-5 w-5 mr-2 text-red-500" />
+              <p>Not available to: {resource.notEligible}</p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default EligibilitySection;

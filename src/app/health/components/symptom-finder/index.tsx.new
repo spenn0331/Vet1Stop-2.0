@@ -1,0 +1,273 @@
+"use client";
+
+import React from 'react';
+import { HealthResource } from '../../types/consolidated-health-types';
+
+// Import components
+import WelcomeScreen from './components/WelcomeScreen';
+import CategorySelector from './components/CategorySelector';
+import SymptomSelector from './components/SymptomSelector';
+import SeverityAssessor from './components/SeverityAssessor';
+import ResourceResults from './components/ResourceResults';
+import ProgressIndicator from './components/ProgressIndicator';
+
+// Import custom hooks
+import { useWizardState } from './hooks/useWizardState';
+import { useResourceMatcher } from './hooks/useResourceMatcher';
+import { useUserPreferences } from './hooks/useUserPreferences';
+import { useAnalytics } from './hooks/useAnalytics';
+
+// Import data
+import { SYMPTOM_CATEGORIES, SEVERITY_LEVELS } from './utils/data';
+
+// Import types
+import { SymptomCategory } from './utils/types';
+
+/**
+ * Props for the SymptomBasedResourceFinder component
+ */
+interface SymptomBasedResourceFinderProps {
+  resources: HealthResource[];
+  onSaveResource?: (resourceId: string) => void;
+  savedResourceIds?: string[];
+  onViewDetails?: (resource: HealthResource) => void;
+}
+
+/**
+ * A component that helps veterans find health resources based on their symptoms
+ * rather than medical diagnoses. Uses a step-by-step wizard approach with a
+ * conversational interface.
+ */
+const SymptomBasedResourceFinder: React.FC<SymptomBasedResourceFinderProps> = ({
+  resources,
+  onSaveResource = () => {},
+  savedResourceIds = [],
+  onViewDetails = () => {}
+}) => {
+  // Use custom hooks for state management and resource matching
+  const { wizardState, actions } = useWizardState();
+  const { findMatchingResources } = useResourceMatcher(resources);
+  const { preferences, actions: preferenceActions } = useUserPreferences();
+  const { trackSearch, trackResourceClick } = useAnalytics();
+  
+  // Destructure state for easier access
+  const {
+    currentStep,
+    selectedCategory,
+    selectedSymptoms,
+    selectedSeverity,
+    recommendedResources,
+    isLoading,
+    showCrisisWarning
+  } = wizardState;
+  
+  // Destructure actions for easier access
+  const {
+    goToNextStep,
+    goToPreviousStep,
+    handleCategorySelect,
+    handleSymptomToggle,
+    handleSeveritySelect,
+    handleCrisisAcknowledged: handleCrisisWarningClosed,
+    handleContinueToSeverity,
+    setRecommendedResourcesAndGoToResults,
+    setLoading,
+    resetWizard
+  } = actions;
+  
+  /**
+   * Get the current category object based on selected category ID
+   */
+  const currentCategoryObj = React.useMemo(() => {
+    return SYMPTOM_CATEGORIES.find((cat: SymptomCategory) => cat.id === selectedCategory);
+  }, [selectedCategory]);
+  
+  /**
+   * Handle crisis warning acknowledgment and proceed with resource finding
+   */
+  const handleCrisisAcknowledged = React.useCallback(() => {
+    handleCrisisWarningClosed();
+    
+    if (selectedCategory && selectedSeverity) {
+      findResources(selectedSeverity);
+    }
+  }, [handleCrisisWarningClosed, selectedCategory, selectedSeverity]);
+  
+  /**
+   * Find resources based on user selections
+   */
+  const findResources = React.useCallback(async (severityLevel: string) => {
+    if (!selectedCategory) return;
+    
+    setLoading(true);
+    
+    try {
+      // Find matching resources
+      const matchedResources = await findMatchingResources(
+        selectedCategory,
+        selectedSymptoms,
+        severityLevel
+      );
+      
+      // Update state with matched resources
+      setRecommendedResourcesAndGoToResults(matchedResources);
+      
+      // Save search to recent searches
+      if (selectedCategory && severityLevel) {
+        preferenceActions.saveRecentSearch(
+          selectedCategory,
+          selectedSymptoms,
+          severityLevel
+        );
+        
+        // Update preferred categories
+        preferenceActions.updatePreferredCategories(selectedCategory);
+        
+        // Track search for analytics
+        trackSearch({
+          categoryId: selectedCategory,
+          symptoms: selectedSymptoms,
+          severityLevel: severityLevel,
+          resultCount: matchedResources.length
+        });
+      }
+    } catch (error) {
+      console.error('Error finding resources:', error);
+      setRecommendedResourcesAndGoToResults([]);
+    }
+  }, [
+    selectedCategory, 
+    selectedSymptoms, 
+    findMatchingResources, 
+    setLoading, 
+    setRecommendedResourcesAndGoToResults, 
+    preferenceActions,
+    trackSearch
+  ]);
+  
+  /**
+   * Handle saving a resource
+   */
+  const handleSaveResource = React.useCallback((resourceId: string) => {
+    // Toggle in local preferences
+    preferenceActions.toggleSavedResource(resourceId);
+    
+    // Call external onSaveResource if provided
+    onSaveResource(resourceId);
+  }, [preferenceActions, onSaveResource]);
+  
+  /**
+   * Handle resource details view
+   */
+  const handleViewDetails = React.useCallback((resource: HealthResource) => {
+    // Track resource click for analytics
+    trackResourceClick({
+      resourceId: resource.id,
+      resourceTitle: resource.title,
+      resourceType: resource.categories?.[0] || 'unknown',
+      isVerified: resource.isVerified || false
+    });
+    
+    // Call external onViewDetails if provided
+    onViewDetails(resource);
+  }, [trackResourceClick, onViewDetails]);
+  
+  // Combine saved resource IDs from props and preferences
+  const combinedSavedResourceIds = React.useMemo(() => {
+    return Array.from(new Set([...savedResourceIds, ...preferences.savedResourceIds]));
+  }, [savedResourceIds, preferences.savedResourceIds]);
+  
+  return (
+    <div className="bg-white rounded-lg shadow-md overflow-hidden transition-all duration-300 hover:shadow-lg">
+      {/* Header */}
+      <div className="bg-blue-900 text-white p-6 bg-gradient-to-r from-blue-900 to-blue-800">
+        <h3 className="text-2xl font-bold">Find Health Resources Tailored to Your Needs</h3>
+        <p className="mt-2">
+          Answer a few questions about your health needs to discover personalized resources
+          designed for veterans like you.
+        </p>
+        {preferences.isLoaded && preferences.recentSearches.length > 0 && (
+          <div className="mt-3 text-sm">
+            <span className="opacity-80">You have {preferences.recentSearches.length} recent search{preferences.recentSearches.length !== 1 ? 'es' : ''}</span>
+          </div>
+        )}
+      </div>
+      
+      {/* Progress Indicator */}
+      {currentStep !== 'welcome' && (
+        <ProgressIndicator 
+          currentStep={currentStep} 
+          totalSteps={4} 
+        />
+      )}
+      
+      {/* Main Content */}
+      <div className="p-6">
+        {currentStep === 'welcome' && (
+          <WelcomeScreen 
+            onStart={() => goToNextStep('category')} 
+            recentSearches={preferences.recentSearches}
+            onLoadRecentSearch={(search: { categoryId: string; symptoms: string[]; severityLevel: string }) => {
+              // Load a recent search
+              handleCategorySelect(search.categoryId);
+              // Set selected symptoms
+              search.symptoms.forEach((symptomId: string) => {
+                handleSymptomToggle(symptomId);
+              });
+              // Go to severity step
+              handleContinueToSeverity();
+              // Set severity level
+              handleSeveritySelect(search.severityLevel);
+            }}
+          />
+        )}
+        
+        {currentStep === 'category' && (
+          <CategorySelector 
+            categories={SYMPTOM_CATEGORIES} 
+            onCategorySelect={handleCategorySelect}
+            preferredCategories={preferences.preferredCategories}
+            onBack={goToPreviousStep}
+          />
+        )}
+        
+        {currentStep === 'symptoms' && currentCategoryObj && (
+          <SymptomSelector 
+            category={currentCategoryObj}
+            selectedSymptoms={selectedSymptoms}
+            onSymptomToggle={handleSymptomToggle}
+            onContinue={handleContinueToSeverity}
+            onBack={goToPreviousStep}
+          />
+        )}
+        
+        {currentStep === 'severity' && (
+          <SeverityAssessor 
+            severityLevels={SEVERITY_LEVELS}
+            selectedSeverity={selectedSeverity}
+            onSeveritySelect={handleSeveritySelect}
+            onBack={goToPreviousStep}
+            showCrisisWarning={showCrisisWarning}
+            onCrisisAcknowledged={handleCrisisAcknowledged}
+          />
+        )}
+        
+        {currentStep === 'results' && (
+          <ResourceResults 
+            resources={recommendedResources}
+            isLoading={isLoading}
+            savedResourceIds={combinedSavedResourceIds}
+            onSaveResource={handleSaveResource}
+            onViewDetails={handleViewDetails}
+            onStartOver={resetWizard}
+            categoryId={selectedCategory}
+            symptoms={selectedSymptoms}
+            severityLevel={selectedSeverity}
+          />
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default SymptomBasedResourceFinder;

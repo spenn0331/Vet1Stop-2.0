@@ -1,0 +1,86 @@
+"use client";
+
+import React from 'react';
+import Link from 'next/link';
+import { StarIcon, CheckBadgeIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline';
+import { NGOResource } from '@/utils/ngo-data';
+
+interface FeaturedNGOSpotlightProps {
+  ngos: NGOResource[];
+  onSelect: (ngo: NGOResource) => void;
+}
+
+const FeaturedNGOSpotlight: React.FC<FeaturedNGOSpotlightProps> = ({ ngos, onSelect }) => {
+  if (!ngos || ngos.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="mb-6">
+      <div className="bg-blue-600 text-white px-4 py-3 flex justify-between items-center rounded-t-lg">
+        <div className="flex items-center space-x-2">
+          <span className="font-semibold">Featured Organizations</span>
+          <StarIcon className="h-5 w-5 text-yellow-400" />
+        </div>
+        <span className="text-xs bg-yellow-400 text-blue-800 px-2 py-0.5 rounded-full font-medium">Sponsored</span>
+      </div>
+      
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-white p-4 border-x border-b border-blue-200 rounded-b-lg">
+        {ngos.map((ngo) => (
+          <div key={ngo.id || ngo._id?.toString()} className="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow p-4">
+            <div className="flex justify-between items-start mb-2">
+              <h3 className="text-lg font-semibold text-gray-900">{ngo.name}</h3>
+              {ngo.verified && <CheckBadgeIcon className="h-5 w-5 text-blue-600" />}
+            </div>
+            
+            <p className="text-sm text-gray-600 mb-3 line-clamp-2">{ngo.description}</p>
+            
+            <div className="flex items-center mb-3">
+              <div className="flex items-center">
+                <span className="text-yellow-500 mr-1">★</span>
+                <span className="font-medium">{ngo.rating || 0}</span>
+              </div>
+              <span className="text-gray-400 text-xs ml-1">({ngo.reviewCount || 0} reviews)</span>
+              
+              {ngo.veteranFounded && (
+                <span className="ml-2 bg-blue-100 text-blue-800 text-xs px-2 py-0.5 rounded-full">
+                  Veteran Founded
+                </span>
+              )}
+            </div>
+            
+            <div className="flex flex-wrap gap-1 mb-3">
+              {ngo.tags?.slice(0, 2).map((tag, index) => (
+                <span key={index} className="bg-gray-100 text-gray-800 text-xs px-2 py-0.5 rounded-full">
+                  {tag}
+                </span>
+              ))}
+            </div>
+            
+            <div className="flex space-x-2">
+              <button
+                onClick={() => onSelect(ngo)}
+                className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+              >
+                View Details
+              </button>
+              
+              {ngo.website && (
+                <Link
+                  href={ngo.website}
+                  target="_blank"
+                  className="text-gray-600 hover:text-gray-800 text-sm font-medium flex items-center"
+                >
+                  Visit Website
+                  <ArrowTopRightOnSquareIcon className="ml-1 h-3 w-3" />
+                </Link>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+export default FeaturedNGOSpotlight;

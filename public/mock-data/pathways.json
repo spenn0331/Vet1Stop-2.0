@@ -1,0 +1,209 @@
+[
+  {
+    "id": "pathway-1",
+    "title": "Transitioning from Military Healthcare",
+    "description": "A step-by-step guide to help veterans transition from military healthcare to civilian or VA healthcare systems.",
+    "targetAudience": ["Recently separated veterans", "Veterans within 1 year of separation"],
+    "icon": "transition",
+    "steps": [
+      {
+        "id": "step-1-1",
+        "title": "Understand Your Healthcare Options",
+        "description": "Learn about VA healthcare, TRICARE, and civilian healthcare options.",
+        "content": "# Understanding Your Healthcare Options\n\nAs you transition from military service, you have several healthcare options available:\n\n## VA Healthcare\n- Eligibility based on service conditions, discharge status, and other factors\n- Comprehensive coverage for service-connected conditions\n- Apply using VA Form 10-10EZ\n\n## TRICARE\n- Available to retired service members and certain separated veterans\n- Different plans available based on your status\n- Transition period coverage options\n\n## Civilian Healthcare\n- Marketplace plans (Healthcare.gov)\n- Employer-provided insurance\n- COBRA from military coverage",
+        "resourceIds": ["resource-1", "resource-2", "resource-3"],
+        "nextStepId": null,
+        "estimatedTimeMinutes": 15,
+        "order": 1
+      },
+      {
+        "id": "step-1-2",
+        "title": "Collect Your Medical Records",
+        "description": "Learn how to obtain and organize your military medical records.",
+        "content": "# Collecting Your Medical Records\n\nBefore transitioning, it's crucial to have complete copies of your medical records.\n\n## Why Medical Records Matter\n- Documentation for VA disability claims\n- Continuity of care with new providers\n- Evidence for service-connected conditions\n\n## How to Request Records\n1. Visit your Military Treatment Facility records department\n2. Request records through Tricare Online\n3. Submit a request through milConnect\n4. File Standard Form 180 for older records\n\n## Organizing Your Records\n- Keep digital and physical copies\n- Organize by date and condition\n- Highlight important diagnoses and treatments",
+        "resourceIds": ["resource-4", "resource-5"],
+        "nextStepId": null,
+        "estimatedTimeMinutes": 20,
+        "order": 2
+      },
+      {
+        "id": "step-1-3",
+        "title": "Apply for VA Healthcare",
+        "description": "Step-by-step guide to applying for VA healthcare benefits.",
+        "content": "# Applying for VA Healthcare\n\nFollow these steps to apply for VA healthcare:\n\n## Before You Apply\n- Gather your DD214 (discharge papers)\n- Have your Social Security Number ready\n- Collect medical records and documentation\n\n## Application Methods\n1. **Online**: Apply through VA.gov (fastest method)\n2. **By Phone**: Call 1-877-222-VETS (8387)\n3. **In Person**: Visit your local VA Medical Center\n4. **By Mail**: Complete VA Form 10-10EZ\n\n## After Applying\n- Expect a decision within 1-2 weeks\n- If approved, schedule your initial assessment\n- Enroll in My HealtheVet for online access",
+        "resourceIds": ["resource-6", "resource-7", "resource-8"],
+        "nextStepId": null,
+        "estimatedTimeMinutes": 30,
+        "order": 3
+      },
+      {
+        "id": "step-1-4",
+        "title": "Schedule Your Initial VA Appointments",
+        "description": "How to navigate the VA system and schedule your first appointments.",
+        "content": "# Scheduling Your Initial VA Appointments\n\nOnce enrolled in VA healthcare, your first appointments are crucial.\n\n## Primary Care Appointment\n- Will be assigned a Patient Aligned Care Team (PACT)\n- Schedule within 30 days of enrollment\n- Bring complete medical records and medication list\n- Prepare questions about your health concerns\n\n## Mental Health Assessment\n- Can be scheduled separately or requested during primary care\n- Confidential screening for transition-related challenges\n- Available through in-person or telehealth options\n\n## How to Schedule\n1. Call the VA appointment line: 1-866-606-8198\n2. Use the VA Online Scheduling tool through My HealtheVet\n3. Visit the VA facility in person\n\n## What to Expect\n- Initial appointments may be longer (60-90 minutes)\n- Will include comprehensive health history\n- Medication review and prescription transfers\n- Discussion of treatment plan",
+        "resourceIds": ["resource-9", "resource-10"],
+        "nextStepId": null,
+        "estimatedTimeMinutes": 25,
+        "order": 4
+      },
+      {
+        "id": "step-1-5",
+        "title": "Establish Long-term Healthcare Routine",
+        "description": "Creating a sustainable healthcare routine as a veteran.",
+        "content": "# Establishing Your Long-term Healthcare Routine\n\n## Regular Preventive Care\n- Schedule annual physical exams\n- Keep up with recommended screenings\n- Maintain dental and vision appointments\n\n## Managing Prescriptions\n- Set up medication delivery through My HealtheVet\n- Use the VA Mobile app for refill reminders\n- Understand which medications are covered\n\n## Utilizing VA Resources\n- Wellness programs and health education\n- Specialty care referral process\n- Emergency vs. Urgent care guidelines\n\n## Maintaining Your Records\n- Keep a personal health journal\n- Track appointments and outcomes\n- Update information when providers change\n\n## Setting Health Goals\n- Work with your PACT to establish health goals\n- Monitor progress through regular check-ins\n- Adjust your healthcare plan as needs change",
+        "resourceIds": ["resource-11", "resource-12", "resource-13"],
+        "nextStepId": null,
+        "estimatedTimeMinutes": 20,
+        "order": 5
+      }
+    ],
+    "tags": ["healthcare transition", "military separation", "VA enrollment", "medical records"],
+    "recommendedFor": ["Recently separated veterans", "Transitioning service members"],
+    "estimatedDuration": 110,
+    "difficulty": "medium",
+    "featured": true
+  },
+  {
+    "id": "pathway-2",
+    "title": "Mental Health and PTSD Support",
+    "description": "Navigate the resources and steps for addressing PTSD and other mental health concerns as a veteran.",
+    "targetAudience": ["Veterans with PTSD", "Veterans seeking mental health support"],
+    "icon": "mental-health",
+    "steps": [
+      {
+        "id": "step-2-1",
+        "title": "Recognizing the Signs",
+        "description": "Learn to identify symptoms of PTSD and when to seek help.",
+        "content": "# Recognizing Mental Health Concerns\n\n## Common Signs of PTSD\n- Intrusive memories or flashbacks\n- Avoidance behaviors\n- Negative changes in thinking and mood\n- Changes in physical and emotional reactions\n- Sleep disturbances\n\n## Other Mental Health Concerns\n- Depression symptoms\n- Anxiety and stress reactions\n- Substance use changes\n- Anger management difficulties\n\n## When to Seek Help\n- When symptoms interfere with daily life\n- If you're having thoughts of harming yourself or others\n- When loved ones express concern\n- If you're using substances to cope\n\nRemember: Seeking help is a sign of strength, not weakness.",
+        "resourceIds": ["resource-14", "resource-15"],
+        "nextStepOptions": {
+          "id": "decision-1",
+          "question": "Which best describes your current situation?",
+          "options": [
+            {
+              "id": "option-1",
+              "text": "I'm in crisis and need immediate help",
+              "nextStepId": "step-2-2" 
+            },
+            {
+              "id": "option-2",
+              "text": "I'm not in crisis but want to explore treatment options",
+              "nextStepId": "step-2-3"
+            }
+          ]
+        },
+        "estimatedTimeMinutes": 15,
+        "order": 1
+      },
+      {
+        "id": "step-2-2",
+        "title": "Crisis Resources",
+        "description": "Immediate resources for veterans in crisis.",
+        "content": "# Crisis Resources for Veterans\n\n## Immediate Help Options\n\n### Veterans Crisis Line\n- Call: 988, then press 1\n- Text: 838255\n- Chat online: VeteransCrisisLine.net/Chat\n- Available 24/7/365\n- Confidential support for veterans and their loved ones\n\n### Emergency Services\n- Call 911 for immediate life-threatening emergencies\n- Ask for a responder trained in veteran issues if available\n\n### VA Emergency Mental Health\n- Go to your nearest VA Medical Center\n- Emergency mental health services available 24/7 at every VAMC\n- No appointment needed for mental health emergencies\n\n## Next Steps After Crisis\n- Connect with a VA Suicide Prevention Coordinator\n- Schedule a follow-up appointment\n- Create a safety plan with your provider\n\nRemember: You are not alone, and help is always available.",
+        "resourceIds": ["resource-16", "resource-17"],
+        "nextStepId": "step-2-3",
+        "estimatedTimeMinutes": 10,
+        "order": 2
+      },
+      {
+        "id": "step-2-3",
+        "title": "Treatment Options",
+        "description": "Explore effective treatments for PTSD and mental health.",
+        "content": "# Treatment Options for PTSD and Mental Health\n\n## Evidence-Based Therapies\n\n### Cognitive Processing Therapy (CPT)\n- Helps you process and challenge unhelpful beliefs related to trauma\n- Typically 12 sessions with homework between meetings\n- Available through VA and many community providers\n\n### Prolonged Exposure (PE)\n- Helps you face trauma-related memories and situations\n- Reduces avoidance behaviors through gradual exposure\n- Usually 8-15 sessions with between-session exercises\n\n### Eye Movement Desensitization and Reprocessing (EMDR)\n- Focuses on changing reactions to traumatic memories\n- Uses bilateral stimulation (eye movements, taps, or tones)\n- Typically 8-12 sessions\n\n### Medication Options\n- SSRIs and SNRIs (antidepressants often used for PTSD)\n- Sleep medications for insomnia related to PTSD\n- Always discuss medication options with a psychiatrist\n\n## VA Treatment Programs\n- Outpatient mental health services\n- Residential (live-in) treatment programs\n- PTSD-specific specialty programs\n- Telehealth options for remote care",
+        "resourceIds": ["resource-18", "resource-19", "resource-20"],
+        "nextStepId": null,
+        "estimatedTimeMinutes": 20,
+        "order": 3
+      },
+      {
+        "id": "step-2-4",
+        "title": "Building Your Support Network",
+        "description": "Creating a personal support system for ongoing mental health.",
+        "content": "# Building Your Support Network\n\n## Types of Support\n\n### Professional Support\n- Mental health treatment team\n- Primary care provider\n- Veteran service organizations\n\n### Peer Support\n- VA peer specialists\n- Vet Centers\n- Veteran support groups\n- Battle buddy connections\n\n### Family Support\n- Family therapy options\n- Resources for family members\n- Communication strategies\n\n### Community Connections\n- Volunteer opportunities\n- Veteran-friendly social groups\n- Recreational therapy programs\n\n## Creating a Support Plan\n1. Identify key support people in each category\n2. Share appropriate information with support network members\n3. Establish regular check-ins\n4. Plan for potential crisis situations\n5. Practice asking for help before you need it",
+        "resourceIds": ["resource-21", "resource-22"],
+        "nextStepId": null,
+        "estimatedTimeMinutes": 25,
+        "order": 4
+      },
+      {
+        "id": "step-2-5",
+        "title": "Self-Care Strategies",
+        "description": "Daily practices to support mental wellness as a veteran.",
+        "content": "# Self-Care Strategies for Veterans\n\n## Physical Self-Care\n- Regular exercise (aim for 30 minutes daily)\n- Proper sleep hygiene\n- Balanced nutrition\n- Limited alcohol and substance use\n\n## Mental Self-Care\n- Mindfulness and meditation practices\n- Grounding techniques for flashbacks or anxiety\n- Cognitive coping skills\n- Journaling and reflection\n\n## Emotional Self-Care\n- Identifying and expressing emotions\n- Creative outlets (art, music, writing)\n- Connecting with meaningful activities\n- Setting healthy boundaries\n\n## Social Self-Care\n- Scheduled time with supportive people\n- Balanced alone time and social engagement\n- Communication about needs and limits\n- Service to others when ready\n\n## Spiritual Self-Care\n- Connection to personal meaning and purpose\n- Religious or faith practices if relevant\n- Nature connection\n- Gratitude practices\n\n## Creating a Personal Self-Care Plan\n1. Identify one activity from each category\n2. Start small and build gradually\n3. Track what helps most\n4. Share your plan with your support network",
+        "resourceIds": ["resource-23", "resource-24", "resource-25"],
+        "nextStepId": null,
+        "estimatedTimeMinutes": 20,
+        "order": 5
+      }
+    ],
+    "tags": ["PTSD", "mental health", "veteran support", "crisis resources"],
+    "recommendedFor": ["Combat veterans", "Veterans with trauma history", "Family members of veterans"],
+    "estimatedDuration": 90,
+    "difficulty": "medium",
+    "featured": true
+  },
+  {
+    "id": "pathway-3",
+    "title": "Accessing Emergency Care",
+    "description": "Know when and how to get emergency care as a veteran, including VA and non-VA options.",
+    "targetAudience": ["All veterans", "Veterans with VA healthcare"],
+    "icon": "emergency",
+    "steps": [
+      {
+        "id": "step-3-1",
+        "title": "Understanding Emergency vs. Urgent Care",
+        "description": "Learn the difference between emergency and urgent care situations.",
+        "content": "# Understanding Emergency vs. Urgent Care\n\n## Emergency Situations (Seek Emergency Care Immediately)\n- Chest pain or pressure\n- Severe shortness of breath\n- Severe bleeding that won't stop\n- Severe burns\n- Suspected stroke\n- Serious head injury\n- Suicidal or homicidal thoughts\n- Severe allergic reactions\n\n## Urgent Care Situations\n- Minor cuts needing stitches\n- Minor burns\n- Sprains and strains\n- Fever without rash\n- Flu symptoms\n- Urinary tract infections\n- Minor broken bones\n\n## When in Doubt\n- Choose emergency care if you're uncertain\n- Call the Veterans Crisis Line for mental health emergencies\n- Contact your primary care team for guidance when possible",
+        "resourceIds": ["resource-26", "resource-27"],
+        "nextStepId": null,
+        "estimatedTimeMinutes": 10,
+        "order": 1
+      },
+      {
+        "id": "step-3-2",
+        "title": "VA Emergency Care Guidelines",
+        "description": "Learn about VA coverage for emergency care and notification requirements.",
+        "content": "# VA Emergency Care Guidelines\n\n## VA Emergency Care Coverage\n- VA will pay for emergency care at non-VA facilities under certain conditions\n- Service-connected conditions are generally covered\n- Non-service-connected conditions may be covered if you meet specific criteria\n\n## Notification Requirements\n- You or someone acting for you must notify VA within 72 hours of emergency care\n- Call 1-844-72HRVHA (1-844-724-7842)\n- Be prepared to provide:\n  - Veteran's name and last four of SSN\n  - Name and address of facility\n  - Date and time of emergency care\n  - Nature of emergency\n\n## Ambulance Services\n- VA can cover ambulance costs when:\n  - Transport is medically necessary\n  - Transport is to the nearest appropriate facility\n  - The emergency is covered by VA\n\n## Important Documentation to Gather\n- Medical records from the visit\n- Itemized bills\n- Explanation of benefits from other insurance\n- VA claim forms (if provided)",
+        "resourceIds": ["resource-28", "resource-29"],
+        "nextStepId": null,
+        "estimatedTimeMinutes": 15,
+        "order": 2
+      },
+      {
+        "id": "step-3-3",
+        "title": "Using Non-VA Emergency Care",
+        "description": "Steps to take when using non-VA emergency rooms or urgent care.",
+        "content": "# Using Non-VA Emergency Care\n\n## Before an Emergency (Preparation)\n- Keep your VA Health Benefits information card with you\n- Program the 72-hour notification number in your phone\n- Know which hospitals are closest to your home\n- Have a list of current medications and allergies\n- Consider a medical ID bracelet for serious conditions\n\n## During an Emergency\n- Seek care at the nearest emergency department\n- Inform staff you're a veteran with VA healthcare\n- Provide information about other health insurance\n- Request they contact your VA primary care team if possible\n\n## After Emergency Care\n1. Notify VA within 72 hours\n2. Schedule follow-up care with your VA provider\n3. Gather all medical documentation\n4. Submit any bills you receive to VA\n5. Keep records of all communications\n\n## If You Receive Bills\n- Don't ignore them, even if you believe VA should cover them\n- Contact your local VA Medical Center's Non-VA Care Office\n- Submit bills to VA as soon as you receive them\n- Keep copies of everything you submit",
+        "resourceIds": ["resource-30", "resource-31"],
+        "nextStepId": null,
+        "estimatedTimeMinutes": 15,
+        "order": 3
+      },
+      {
+        "id": "step-3-4",
+        "title": "VA Urgent Care Benefit",
+        "description": "How to use the VA urgent care benefit for minor injuries and illnesses.",
+        "content": "# Using the VA Urgent Care Benefit\n\n## Eligibility Requirements\n- Must be enrolled in VA healthcare\n- Must have received VA care in the last 24 months\n- Must visit an in-network urgent care provider\n\n## Finding In-Network Providers\n- Visit va.gov/find-locations\n- Select 'Urgent Care' and your location\n- Call 877-881-7618 for network assistance\n- Use the VA Urgent Care Locator app\n\n## At the Urgent Care Facility\n1. Verify the facility is in-network before receiving care\n2. Present your government-issued ID\n3. State you're using your VA urgent care benefit\n4. No VA referral or authorization needed\n5. No need to call VA before visit\n\n## Prescription Information\n- 14-day maximum supply from urgent care visit\n- Must use a VA-approved pharmacy\n- Prescriptions for longer than 14 days must be sent to VA\n- Some prescriptions may require copay\n\n## Copayment Information\n- Based on VA priority group\n- Billed separately from your visit\n- Medication copays may apply separately",
+        "resourceIds": ["resource-32", "resource-33"],
+        "nextStepId": null,
+        "estimatedTimeMinutes": 15,
+        "order": 4
+      },
+      {
+        "id": "step-3-5",
+        "title": "Creating an Emergency Plan",
+        "description": "Develop a personal emergency plan for future health emergencies.",
+        "content": "# Creating Your Personal Emergency Plan\n\n## Emergency Contact List\n- VA facility phone numbers\n- VA 72-hour notification number\n- Primary VA doctor contact information\n- Personal emergency contacts\n- Local emergency room locations\n\n## Medical Information to Maintain\n- List of current medications and dosages\n- Known allergies\n- Chronic conditions\n- Implanted medical devices\n- Previous surgeries or procedures\n- Blood type if known\n\n## Documentation to Keep Accessible\n- VA Health Benefits card\n- Other insurance information\n- Photo ID\n- List of providers\n- Advance directives if applicable\n\n## Emergency Action Steps Reminder\n1. Call 911 for life-threatening emergencies\n2. Seek nearest emergency care when needed\n3. Notify VA within 72 hours\n4. Follow up with VA primary care\n\n## Creating a Physical Emergency Plan\n- Store information in your wallet or purse\n- Create a phone contact labeled 'ICE' (In Case of Emergency)\n- Consider a medical alert device or app\n- Share plan with close family or friends",
+        "resourceIds": ["resource-34", "resource-35"],
+        "nextStepId": null,
+        "estimatedTimeMinutes": 20,
+        "order": 5
+      }
+    ],
+    "tags": ["emergency care", "urgent care", "VA healthcare", "medical emergencies"],
+    "recommendedFor": ["All veterans with VA healthcare", "Recently enrolled veterans", "Veterans with chronic conditions"],
+    "estimatedDuration": 75,
+    "difficulty": "easy",
+    "featured": false
+  }
+]

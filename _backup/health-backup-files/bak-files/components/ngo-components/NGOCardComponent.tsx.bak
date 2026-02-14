@@ -1,0 +1,211 @@
+"use client";
+
+import React from 'react';
+import Link from 'next/link';
+import Image from 'next/image';
+import { 
+  HeartIcon, 
+  StarIcon, 
+  ArrowTopRightOnSquareIcon,
+  UserGroupIcon,
+  CheckBadgeIcon,
+  CalendarIcon,
+  TagIcon
+} from '@heroicons/react/24/outline';
+import { HeartIcon as HeartIconSolid } from '@heroicons/react/24/solid';
+import { NGOResource, NGO_STATUS_TYPES, NGO_BADGE_COLORS } from '@/utils/ngo-data';
+
+interface NGOCardProps {
+  ngo: NGOResource;
+  isFavorite: boolean;
+  onToggleFavorite: (id: string) => void;
+  onViewDetails: (ngo: NGOResource) => void;
+  featured?: boolean;
+}
+
+/**
+ * NGO Card Component
+ * Displays an individual NGO resource card with badges, actions, and summary information
+ */
+const NGOCardComponent: React.FC<NGOCardProps> = ({ 
+  ngo, 
+  isFavorite, 
+  onToggleFavorite,
+  onViewDetails,
+  featured = false
+}) => {
+  // Show badge if the NGO is featured, of the month, or veteran founded
+  const showBadge = ngo.spotlight || ngo.ofTheMonth || ngo.veteranFounded;
+  
+  // Determine which badge to show (prioritize Featured > NGO of Month > Veteran Founded)
+  const getBadgeInfo = () => {
+    if (ngo.spotlight) {
+      return {
+        type: NGO_STATUS_TYPES.FEATURED,
+        label: 'Featured',
+        colorClass: NGO_BADGE_COLORS[NGO_STATUS_TYPES.FEATURED]
+      };
+    } else if (ngo.ofTheMonth) {
+      return {
+        type: NGO_STATUS_TYPES.OF_THE_MONTH,
+        label: 'NGO of the Month',
+        colorClass: NGO_BADGE_COLORS[NGO_STATUS_TYPES.OF_THE_MONTH]
+      };
+    } else if (ngo.veteranFounded) {
+      return {
+        type: NGO_STATUS_TYPES.VETERAN_FOUNDED,
+        label: 'Veteran Founded',
+        colorClass: NGO_BADGE_COLORS[NGO_STATUS_TYPES.VETERAN_FOUNDED]
+      };
+    }
+    
+    return null;
+  };
+  
+  const badgeInfo = getBadgeInfo();
+  
+  return (
+    <div 
+      className={`bg-white rounded-xl overflow-hidden shadow-md transition-all duration-300 hover:shadow-lg 
+        ${featured ? 'border-2 border-[#EAB308]' : 'border border-gray-200'}
+        ${ngo.ofTheMonth ? 'ring-2 ring-[#1A2C5B] ring-opacity-40' : ''}
+      `}
+    >
+      {/* Colored header bar */}
+      <div className={`h-2 ${featured ? 'bg-[#EAB308]' : ngo.ofTheMonth ? 'bg-[#1A2C5B]' : 'bg-[#B22234]'}`}></div>
+      
+      {/* Badge (if applicable) */}
+      {showBadge && badgeInfo && (
+        <div className="relative h-8"> {/* Fixed height to ensure proper spacing */}
+          <div 
+            className={`absolute top-2 right-2 px-2 py-1 rounded-full text-xs font-semibold ${badgeInfo.colorClass} flex items-center z-10`}
+          >
+            {badgeInfo.type === NGO_STATUS_TYPES.FEATURED && <StarIcon className="h-3 w-3 mr-1" />}
+            {badgeInfo.type === NGO_STATUS_TYPES.OF_THE_MONTH && <CheckBadgeIcon className="h-3 w-3 mr-1" />}
+            {badgeInfo.type === NGO_STATUS_TYPES.VETERAN_FOUNDED && <UserGroupIcon className="h-3 w-3 mr-1" />}
+            {badgeInfo.label}
+          </div>
+        </div>
+      )}
+      
+      <div className="p-5">
+        {/* NGO Logo/Image */}
+        <div className="flex justify-between items-start mb-4">
+          <div className="flex-grow">
+            <h3 className="text-lg font-bold text-[#1A2C5B] mb-1 line-clamp-2">{ngo.name}</h3>
+            
+            {/* Year established */}
+            {ngo.establishedYear && (
+              <div className="flex items-center text-xs text-gray-500 mb-2">
+                <CalendarIcon className="h-3 w-3 mr-1" />
+                <span>Est. {ngo.establishedYear}</span>
+              </div>
+            )}
+          </div>
+          
+          {/* Logo on the right side */}
+          {ngo.logo && (
+            <div className="w-16 h-16 bg-gray-50 rounded overflow-hidden flex-shrink-0 ml-4">
+              {/* This is a placeholder since actual logo files may not exist */}
+              <div className="w-full h-full flex items-center justify-center bg-gray-100">
+                <span className="text-xs text-gray-400">Logo</span>
+              </div>
+            </div>
+          )}
+        </div>
+        
+        {/* Description with truncation */}
+        <p className="text-sm text-gray-600 mb-4 line-clamp-3">{ngo.description}</p>
+        
+        {/* Tags */}
+        <div className="flex flex-wrap gap-1 mb-4">
+          {ngo.tags && ngo.tags.length > 0 ? (
+            <>
+              {ngo.tags.slice(0, 3).map((tag, index) => (
+                <span 
+                  key={index} 
+                  className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700"
+                >
+                  <TagIcon className="h-3 w-3 mr-1" />
+                  {tag.replace(/-/g, ' ')}
+                </span>
+              ))}
+              {ngo.tags.length > 3 && (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                  +{ngo.tags.length - 3} more
+                </span>
+              )}
+            </>
+          ) : (
+            <span className="text-xs text-gray-500">No tags available</span>
+          )}
+        </div>
+        
+        {/* Rating */}
+        <div className="flex items-center mb-4">
+          <div className="flex">
+            {[1, 2, 3, 4, 5].map((star) => (
+              <StarIcon
+                key={star}
+                className={`h-4 w-4 ${star <= (ngo.rating || 0) ? 'text-yellow-400 fill-current' : 'text-gray-300'}`}
+              />
+            ))}
+          </div>
+          <span className="ml-2 text-xs text-gray-600">
+            {ngo.rating?.toFixed(1)} {ngo.reviewCount ? `(${ngo.reviewCount})` : ''}
+          </span>
+        </div>
+        
+        {/* Impact metrics highlight if available */}
+        {ngo.metrics && (
+          <div className="mb-4 bg-blue-50 p-2 rounded-md">
+            <h4 className="text-xs font-semibold text-blue-800 mb-1">Impact Highlights</h4>
+            <div className="flex flex-col gap-1">
+              {ngo.metrics.veteransSupportedCount && (
+                <div className="flex items-center text-xs text-blue-700">
+                  <span className="font-semibold">{ngo.metrics.veteransSupportedCount.toLocaleString()} veterans</span>
+                  <span className="ml-1">supported</span>
+                </div>
+              )}
+              {ngo.metrics.fundingEfficiency && (
+                <div className="flex items-center text-xs text-blue-700">
+                  <span className="font-semibold">{Math.round(ngo.metrics.fundingEfficiency * 100)}%</span>
+                  <span className="ml-1">of funds to programs</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+        
+        {/* Action buttons */}
+        <div className="flex justify-between items-center">
+          <div className="flex space-x-2">
+            {/* View details button */}
+            <button
+              onClick={() => onViewDetails(ngo)}
+              className="flex-1 flex items-center justify-center px-3 py-1.5 border border-[#1A2C5B] text-[#1A2C5B] rounded-md text-sm font-medium hover:bg-[#1A2C5B] hover:text-white transition-colors"
+            >
+              <ArrowTopRightOnSquareIcon className="h-4 w-4 mr-1" />
+              View Details
+            </button>
+            
+            {/* Favorite button */}
+            <button
+              onClick={() => onToggleFavorite(ngo.id || ngo._id?.toString() || '')}
+              className="p-1.5 border border-gray-300 rounded-md hover:bg-gray-50"
+              aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+            >
+              {isFavorite ? (
+                <HeartIconSolid className="h-5 w-5 text-red-500" />
+              ) : (
+                <HeartIcon className="h-5 w-5 text-gray-400" />
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default NGOCardComponent;

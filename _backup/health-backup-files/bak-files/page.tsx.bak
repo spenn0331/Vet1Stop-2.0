@@ -1,0 +1,184 @@
+"use client";
+
+import React, { useState, useEffect, Suspense } from 'react';
+import dynamic from 'next/dynamic';
+import { 
+  BuildingOffice2Icon, 
+  UserGroupIcon, 
+  MagnifyingGlassIcon,
+  ArrowPathIcon
+} from '@heroicons/react/24/outline';
+import { TabItem } from './types/health-types';
+import CrisisBanner from './components/CrisisBanner.refactored';
+import HeroSection from './components/HeroSection.refactored';
+import SimplifiedTabNavigation from './components/SimplifiedTabNavigation.refactored';
+
+// Dynamically import components for code splitting and performance
+const EnhancedResourceFinderSection = dynamic(
+  () => import('./components/EnhancedResourceFinderSection.refactored'),
+  { 
+    loading: () => <LoadingPlaceholder height="400px" />,
+    ssr: false
+  }
+);
+
+const NGOResourcesSection = dynamic(
+  () => import('./components/NGOResourcesSection.refactored'),
+  { 
+    loading: () => <LoadingPlaceholder height="400px" />,
+    ssr: false
+  }
+);
+
+const EnhancedVABenefitsSection = dynamic(
+  () => import('./components/EnhancedVABenefitsSection.refactored'),
+  { 
+    loading: () => <LoadingPlaceholder height="400px" />,
+    ssr: false
+  }
+);
+
+const HealthResourceExplorer = dynamic(
+  () => import('./components/HealthResourceExplorer.refactored'),
+  { 
+    loading: () => <LoadingPlaceholder height="400px" />,
+    ssr: false
+  }
+);
+
+const TestimonialsSection = dynamic(
+  () => import('./components/TestimonialsSection'),
+  { 
+    loading: () => <LoadingPlaceholder height="200px" />,
+    ssr: false
+  }
+);
+
+const ResourcePathwaysSection = dynamic(
+  () => import('./components/ResourcePathwaysSection'),
+  { 
+    loading: () => <LoadingPlaceholder height="300px" />,
+    ssr: false
+  }
+);
+
+// Loading placeholder component
+const LoadingPlaceholder = ({ height }: { height: string }) => (
+  <div 
+    className="animate-pulse bg-gray-200 rounded-lg flex items-center justify-center"
+    style={{ height }}
+  >
+    <ArrowPathIcon className="h-8 w-8 text-gray-400 animate-spin" />
+    <span className="ml-2 text-gray-500 font-medium">Loading...</span>
+  </div>
+);
+
+/**
+ * Health Page
+ * 
+ * Main page for health resources, featuring a tabbed navigation system
+ * and dynamically loaded content sections.
+ */
+export default function HealthPage() {
+  // State for active tab
+  const [activeTab, setActiveTab] = useState('resources');
+  
+  // State for initial resources (can be fetched server-side in the future)
+  const [initialResources, setInitialResources] = useState([]);
+  
+  // Define tabs
+  const tabs: TabItem[] = [
+    {
+      id: 'resources',
+      label: 'Health Resources',
+      icon: <MagnifyingGlassIcon className="h-4 w-4" />,
+    },
+    {
+      id: 'va-benefits',
+      label: 'VA Benefits',
+      icon: <BuildingOffice2Icon className="h-4 w-4" />,
+    },
+    {
+      id: 'organizations',
+      label: 'Organizations',
+      icon: <UserGroupIcon className="h-4 w-4" />,
+    }
+  ];
+  
+  // Handle tab change
+  const handleTabChange = (tabId: string) => {
+    setActiveTab(tabId);
+    // Scroll to top when changing tabs
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+  
+  // Render active tab content
+  const renderTabContent = () => {
+    switch (activeTab) {
+      case 'resources':
+        return (
+          <div className="space-y-8">
+            <Suspense fallback={<LoadingPlaceholder height="400px" />}>
+              <EnhancedResourceFinderSection initialResources={initialResources} />
+            </Suspense>
+            <Suspense fallback={<LoadingPlaceholder height="400px" />}>
+              <HealthResourceExplorer resources={initialResources} />
+            </Suspense>
+          </div>
+        );
+      case 'va-benefits':
+        return (
+          <Suspense fallback={<LoadingPlaceholder height="400px" />}>
+            <EnhancedVABenefitsSection />
+          </Suspense>
+        );
+      case 'organizations':
+        return (
+          <Suspense fallback={<LoadingPlaceholder height="400px" />}>
+            <NGOResourcesSection />
+          </Suspense>
+        );
+      default:
+        return null;
+    }
+  };
+  
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Crisis Banner */}
+      <CrisisBanner />
+      
+      {/* Main Content */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-12">
+        {/* Hero Section */}
+        <HeroSection />
+        
+        {/* Tab Navigation */}
+        <SimplifiedTabNavigation 
+          tabs={tabs}
+          activeTab={activeTab}
+          onTabChange={handleTabChange}
+        />
+        
+        {/* Tab Content */}
+        <div className="mt-6">
+          {renderTabContent()}
+        </div>
+        
+        {/* Testimonials Section */}
+        <div className="mt-12">
+          <Suspense fallback={<LoadingPlaceholder height="200px" />}>
+            <TestimonialsSection />
+          </Suspense>
+        </div>
+        
+        {/* Resource Pathways Section */}
+        <div className="mt-12">
+          <Suspense fallback={<LoadingPlaceholder height="300px" />}>
+            <ResourcePathwaysSection />
+          </Suspense>
+        </div>
+      </main>
+    </div>
+  );
+}

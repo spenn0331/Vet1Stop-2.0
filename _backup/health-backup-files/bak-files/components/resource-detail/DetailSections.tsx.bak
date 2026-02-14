@@ -1,0 +1,293 @@
+"use client";
+
+import React from 'react';
+import {
+  PhoneIcon,
+  EnvelopeIcon,
+  GlobeAltIcon,
+  MapPinIcon,
+  StarIcon,
+  CalendarIcon,
+  TagIcon,
+  ClipboardDocumentListIcon,
+  ShieldCheckIcon,
+  UserGroupIcon,
+  ArrowTopRightOnSquareIcon,
+} from '@heroicons/react/24/outline';
+import Link from 'next/link';
+import { HealthResource } from '../ResourceDetailView';
+
+// Resource badge component
+export function ResourceTypeBadge({ 
+  resourceType 
+}: { 
+  resourceType: string 
+}) {
+  const getResourceTypeColor = (type: string) => {
+    const types: Record<string, string> = {
+      'va': 'bg-blue-100 text-blue-800',
+      'federal': 'bg-indigo-100 text-indigo-800',
+      'state': 'bg-purple-100 text-purple-800',
+      'nonprofit': 'bg-green-100 text-green-800',
+      'private': 'bg-orange-100 text-orange-800',
+      'community': 'bg-teal-100 text-teal-800'
+    };
+    
+    return types[type.toLowerCase()] || 'bg-gray-100 text-gray-800';
+  };
+  
+  const getResourceTypeLabel = (type: string) => {
+    const types: Record<string, string> = {
+      'va': 'VA',
+      'federal': 'Federal',
+      'state': 'State',
+      'nonprofit': 'Non-Profit',
+      'private': 'Private',
+      'community': 'Community'
+    };
+    
+    return types[type.toLowerCase()] || type;
+  };
+
+  return (
+    <span className={`px-2 py-0.5 rounded-full text-xs ${getResourceTypeColor(resourceType)}`}>
+      {getResourceTypeLabel(resourceType)}
+    </span>
+  );
+}
+
+// Format date utility
+export const formatDate = (date: Date | string | undefined) => {
+  if (!date) return 'Unknown';
+  try {
+    const d = new Date(date);
+    return d.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
+  } catch (error) {
+    return 'Unknown date';
+  }
+};
+
+// Star Rating component
+export function StarRating({ 
+  rating, 
+  reviewCount 
+}: { 
+  rating?: number, 
+  reviewCount?: number 
+}) {
+  return (
+    <div className="flex items-center">
+      {[1, 2, 3, 4, 5].map((star) => (
+        <StarIcon
+          key={star}
+          className={`h-4 w-4 ${star <= (rating || 0) ? 'text-yellow-500 fill-current' : 'text-gray-300'}`}
+        />
+      ))}
+      <span className="ml-2 text-xs text-gray-600">
+        {rating ? `${rating.toFixed(1)} · ` : ''}
+        {reviewCount ? `${reviewCount} reviews` : 'No reviews yet'}
+      </span>
+    </div>
+  );
+}
+
+// Contact Information Section
+export function ContactInfoSection({ resource }: { resource: HealthResource }) {
+  return (
+    <div className="bg-gray-50 p-4 md:p-6 rounded-lg mb-6">
+      <h3 className="text-lg font-semibold text-gray-900 mb-4">Contact Information</h3>
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        {/* Phone */}
+        {(resource.contact?.phone || resource.phone) && (
+          <div className="flex items-start">
+            <div className="flex-shrink-0">
+              <PhoneIcon className="h-5 w-5 text-gray-500 mt-0.5" />
+            </div>
+            <div className="ml-3">
+              <p className="text-sm font-medium text-gray-900">Phone</p>
+              <p className="text-sm text-gray-600">
+                <a href={`tel:${resource.contact?.phone || resource.phone}`} className="hover:underline">
+                  {resource.contact?.phone || resource.phone}
+                </a>
+              </p>
+            </div>
+          </div>
+        )}
+        
+        {/* Email */}
+        {(resource.contact?.email || resource.email) && (
+          <div className="flex items-start">
+            <div className="flex-shrink-0">
+              <EnvelopeIcon className="h-5 w-5 text-gray-500 mt-0.5" />
+            </div>
+            <div className="ml-3">
+              <p className="text-sm font-medium text-gray-900">Email</p>
+              <p className="text-sm text-gray-600">
+                <a href={`mailto:${resource.contact?.email || resource.email}`} className="hover:underline">
+                  {resource.contact?.email || resource.email}
+                </a>
+              </p>
+            </div>
+          </div>
+        )}
+        
+        {/* Website */}
+        {(resource.contact?.website || resource.website) && (
+          <div className="flex items-start">
+            <div className="flex-shrink-0">
+              <GlobeAltIcon className="h-5 w-5 text-gray-500 mt-0.5" />
+            </div>
+            <div className="ml-3">
+              <p className="text-sm font-medium text-gray-900">Website</p>
+              <p className="text-sm text-gray-600 break-words">
+                <a 
+                  href={resource.contact?.website || resource.website || '#'} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="hover:underline"
+                >
+                  {(resource.contact?.website || resource.website || '')
+                    .replace(/^https?:\/\//, '')
+                    .replace(/\/$/, '')}
+                </a>
+              </p>
+            </div>
+          </div>
+        )}
+        
+        {/* Location */}
+        {((resource.location?.address || resource.address) || 
+          (resource.location?.city || resource.city) || 
+          (resource.location?.state || resource.state)) && (
+          <div className="flex items-start">
+            <div className="flex-shrink-0">
+              <MapPinIcon className="h-5 w-5 text-gray-500 mt-0.5" />
+            </div>
+            <div className="ml-3">
+              <p className="text-sm font-medium text-gray-900">Location</p>
+              <p className="text-sm text-gray-600">
+                {resource.location?.address || resource.address}
+                {(resource.location?.address || resource.address) && (
+                  (resource.location?.city || resource.city) ? ', ' : ''
+                )}
+                {resource.location?.city || resource.city}
+                {(resource.location?.city || resource.city) && 
+                  (resource.location?.state || resource.state) ? ', ' : ''}
+                {resource.location?.state || resource.state}
+                {' '}
+                {resource.location?.zipCode || resource.zipCode}
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Details Information Section
+export function DetailsInfoSection({ resource }: { resource: HealthResource }) {
+  return (
+    <div className="bg-gray-50 p-4 md:p-6 rounded-lg mb-6">
+      <h3 className="text-lg font-semibold text-gray-900 mb-4">Details</h3>
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Category */}
+        {resource.category && (
+          <div className="flex items-start">
+            <div className="flex-shrink-0">
+              <TagIcon className="h-5 w-5 text-gray-500 mt-0.5" />
+            </div>
+            <div className="ml-3">
+              <p className="text-sm font-medium text-gray-900">Category</p>
+              <p className="text-sm text-gray-600">{resource.category}</p>
+            </div>
+          </div>
+        )}
+        
+        {/* Last Updated */}
+        {resource.lastUpdated && (
+          <div className="flex items-start">
+            <div className="flex-shrink-0">
+              <CalendarIcon className="h-5 w-5 text-gray-500 mt-0.5" />
+            </div>
+            <div className="ml-3">
+              <p className="text-sm font-medium text-gray-900">Last Updated</p>
+              <p className="text-sm text-gray-600">{formatDate(resource.lastUpdated)}</p>
+            </div>
+          </div>
+        )}
+        
+        {/* Eligibility */}
+        {resource.eligibility && (
+          <div className="flex items-start">
+            <div className="flex-shrink-0">
+              <ClipboardDocumentListIcon className="h-5 w-5 text-gray-500 mt-0.5" />
+            </div>
+            <div className="ml-3">
+              <p className="text-sm font-medium text-gray-900">Eligibility</p>
+              <p className="text-sm text-gray-600">{resource.eligibility}</p>
+            </div>
+          </div>
+        )}
+        
+        {/* Veteran Type */}
+        {resource.veteranType && resource.veteranType.length > 0 && (
+          <div className="flex items-start">
+            <div className="flex-shrink-0">
+              <ShieldCheckIcon className="h-5 w-5 text-gray-500 mt-0.5" />
+            </div>
+            <div className="ml-3">
+              <p className="text-sm font-medium text-gray-900">Veteran Type</p>
+              <p className="text-sm text-gray-600">
+                {Array.isArray(resource.veteranType) 
+                  ? resource.veteranType.join(', ') 
+                  : resource.veteranType}
+              </p>
+            </div>
+          </div>
+        )}
+        
+        {/* Service Branch */}
+        {resource.serviceBranch && resource.serviceBranch.length > 0 && (
+          <div className="flex items-start">
+            <div className="flex-shrink-0">
+              <UserGroupIcon className="h-5 w-5 text-gray-500 mt-0.5" />
+            </div>
+            <div className="ml-3">
+              <p className="text-sm font-medium text-gray-900">Service Branch</p>
+              <p className="text-sm text-gray-600">
+                {Array.isArray(resource.serviceBranch) 
+                  ? resource.serviceBranch.join(', ') 
+                  : resource.serviceBranch}
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Resource Tags
+export function ResourceTags({ tags }: { tags?: string[] }) {
+  if (!tags || tags.length === 0) return null;
+  
+  return (
+    <div className="mb-6">
+      <h3 className="text-lg font-semibold text-gray-900 mb-2">Tags</h3>
+      <div className="flex flex-wrap gap-2">
+        {tags.map((tag, index) => (
+          <span key={index} className="px-2 py-1 bg-gray-100 text-gray-800 rounded-md text-xs">
+            {tag}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}

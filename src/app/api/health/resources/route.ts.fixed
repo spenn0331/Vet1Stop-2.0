@@ -1,0 +1,205 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { connectToDatabase } from '@/lib/mongodb';
+import { ObjectId, Db, Document, WithId } from 'mongodb';
+
+export async function GET(request: NextRequest) {
+  try {
+    // Parse URL and query parameters
+    const url = new URL(request.url);
+    const ids = url.searchParams.get('ids');
+    
+    // Connect to MongoDB
+    const { db } = await connectToDatabase();
+    const dbName = process.env.MONGODB_DB || 'vet1stop';
+    const collectionName = process.env.MONGODB_COLLECTION || 'healthResources';
+    
+    const collection = db.collection(collectionName);
+    
+    // If IDs are provided, fetch specific resources
+    if (ids) {
+      // Split the comma-separated IDs
+      const idArray = ids.split(',').map(id => id.trim()).filter(Boolean);
+      
+      if (idArray.length === 0) {
+        return NextResponse.json({ error: 'No valid IDs provided' }, { status: 400 });
+      }
+      
+      // Create a query to match either string IDs or ObjectIds
+      const query: any = {};
+      
+      // Try to convert string IDs to ObjectIds for MongoDB
+      const possibleObjectIds = idArray
+        .filter(id => ObjectId.isValid(id))
+        .map(id => new ObjectId(id));
+      
+      // Always include the string id match
+      query.id = { $in: idArray };
+      
+      // Add ObjectId match if we have any valid ObjectIds
+      if (possibleObjectIds.length > 0) {
+        query.$or = [
+          { id: { $in: idArray } },
+          { _id: { $in: possibleObjectIds } }
+        ];
+      }
+      
+      try {
+        // Execute the query
+        const resources = await collection.find(query).toArray();
+        
+        // If no resources found, return empty array with 200 status
+        if (!resources || resources.length === 0) {
+          return NextResponse.json([], { status: 200 });
+        }
+        
+        // Return the resources
+        return NextResponse.json(resources, { status: 200 });
+      } catch (error) {
+        console.error('Error fetching resources by ID:', error);
+        return NextResponse.json({ error: 'Failed to fetch resources' }, { status: 500 });
+      }
+    }
+    
+    // Handle regular resource fetching with filters
+    const category = url.searchParams.get('category')?.toLowerCase() || '';
+    const subcategory = url.searchParams.get('subcategory')?.toLowerCase() || '';
+    const searchTerm = url.searchParams.get('search')?.toLowerCase() || '';
+    const page = parseInt(url.searchParams.get('page') || '1', 10);
+    const limit = parseInt(url.searchParams.get('limit') || '20', 10);
+    const sortBy = url.searchParams.get('sortBy') || 'relevance';
+    
+    // Build the query
+    const query: any = {};
+    
+    // Add category filter if provided
+    if (category) {
+      query.category = { $regex: category, $options: 'i' };
+    }
+    
+    // Add subcategory filter if provided
+    if (subcategory) {
+      query.subcategory = { $regex: subcategory, $options: 'i' };
+    }
+    
+    // Add search term filter if provided
+    if (searchTerm) {
+      query.$or = [
+        { title: { $regex: searchTerm, $options: 'i' } },
+        { description: { $regex: searchTerm, $options: 'i' } },
+        { tags: { $in: [new RegExp(searchTerm, 'i')] } }
+      ];
+    }
+    
+    // Define sort options
+    const sortOptions: any = {};
+    
+    // Set sort options based on sortBy parameter
+    switch (sortBy) {
+      case 'rating':
+        sortOptions.rating = -1; // Descending
+        break;
+      case 'name':
+        sortOptions.title = 1; // Ascending
+        break;
+      case 'date':
+        sortOptions.lastUpdated = -1; // Descending
+        break;
+      case 'relevance':
+      default:
+        // For relevance, we'll handle it in code
+        sortOptions._id = 1; // Default sort
+        break;
+    }
+    
+    try {
+      // Calculate pagination
+      const skip = (page - 1) * limit;
+      
+      // Execute the query with pagination and sorting
+      const resources = await collection
+        .find(query)
+        .sort(sortOptions)
+        .skip(skip)
+        .limit(limit)
+        .toArray();
+      
+      // Get total count for pagination
+      const totalCount = await collection.countDocuments(query);
+      
+      // If relevance sorting is requested and we have a search term,
+      // we need to calculate relevance scores and re-sort
+      if (sortBy === 'relevance' && searchTerm) {
+        // This is a simplified relevance calculation
+        // In a real app, you might use more sophisticated algorithms
+        const scoredResources = resources.map(resource => {
+          let relevanceScore = 0;
+          
+          // Check title match (highest weight)
+          if (resource.title && resource.title.toLowerCase().includes(searchTerm)) {
+            relevanceScore += 10;
+            
+            // Exact title match gets even higher score
+            if (resource.title.toLowerCase() === searchTerm) {
+              relevanceScore += 5;
+            }
+          }
+          
+          // Check description match
+          if (resource.description && resource.description.toLowerCase().includes(searchTerm)) {
+            relevanceScore += 5;
+          }
+          
+          // Check tags match
+          if (resource.tags && Array.isArray(resource.tags)) {
+            resource.tags.forEach(tag => {
+              if (tag.toLowerCase().includes(searchTerm)) {
+                relevanceScore += 3;
+              }
+            });
+          }
+          
+          // Check category match
+          if (resource.category && resource.category.toLowerCase().includes(searchTerm)) {
+            relevanceScore += 2;
+          }
+          
+          return {
+            ...resource,
+            relevanceScore
+          };
+        });
+        
+        // Sort by relevance score
+        scoredResources.sort((a, b) => b.relevanceScore - a.relevanceScore);
+        
+        // Return the sorted resources
+        return NextResponse.json({
+          resources: scoredResources,
+          pagination: {
+            page,
+            limit,
+            totalCount,
+            totalPages: Math.ceil(totalCount / limit)
+          }
+        }, { status: 200 });
+      }
+      
+      // Return the resources
+      return NextResponse.json({
+        resources,
+        pagination: {
+          page,
+          limit,
+          totalCount,
+          totalPages: Math.ceil(totalCount / limit)
+        }
+      }, { status: 200 });
+    } catch (error) {
+      console.error('Error fetching resources:', error);
+      return NextResponse.json({ error: 'Failed to fetch resources' }, { status: 500 });
+    }
+  } catch (error) {
+    console.error('Unhandled error in health resources API:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}

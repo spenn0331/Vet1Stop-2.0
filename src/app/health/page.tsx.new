@@ -1,0 +1,187 @@
+"use client";
+
+import React, { useState, Suspense } from 'react';
+// Temporary placeholder imports for Header and Footer until correct path is confirmed
+// import Header from '../../components/layout/Header';
+// import Footer from '../../components/layout/Footer';
+// Placeholder components as fallback
+const Header = () => <header className="bg-[#1A2C5B] text-white p-4">Vet1Stop Header</header>;
+const Footer = () => <footer className="bg-[#1A2C5B] text-white p-4">Vet1Stop Footer &copy; {new Date().getFullYear()}</footer>;
+
+// Import components
+import HeroSection from './components/HeroSection';
+import CrisisBanner from './components/CrisisBanner';
+import UnifiedResourceFinder from './components/UnifiedResourceFinder';
+import ResourceFinderSection from './components/ResourceFinderSection';
+import VAHealthcareBenefitsSection from './components/VAHealthcareBenefitsSection';
+import StateResourcesSection from './components/StateResourcesSection';
+import NGOResourcesSection from './components/NGOResourcesSection';
+import ResourcePathwaysSection from './components/ResourcePathwaysSection';
+
+// Removed metadata export as it cannot be used in a client component
+// Metadata is now defined in layout.tsx
+
+export default function HealthPage() {
+  // State for active tab in resource finder
+  const [activeResourceTab, setActiveResourceTab] = useState('all');
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <Header />
+      <main className="flex-grow">
+        {/* Hero Section */}
+        <section className="relative bg-[#1A2C5B] text-white py-16 md:py-24 overflow-hidden">
+          <div className="absolute inset-0 opacity-20">
+            {/* <Image
+              src="/images/health-hero-bg.jpg"
+              alt="Military health background"
+              fill
+              className="object-cover"
+            /> */}
+          </div>
+          <div className="container mx-auto px-4 relative z-10">
+            <div className="max-w-3xl mx-auto text-center">
+              <h1 className="text-4xl md:text-5xl font-bold mb-6">Health Resources for Veterans</h1>
+              <p className="text-xl md:text-2xl mb-8 text-blue-100">
+                Comprehensive healthcare information and resources to support your well-being.
+              </p>
+              <div className="mt-8">
+                <a 
+                  href="#symptom-finder" 
+                  className="bg-[#B22234] hover:bg-red-700 text-white font-bold py-3 px-6 rounded-md transition-colors inline-flex items-center"
+                >
+                  Find Resources Based on Your Needs
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 ml-2" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M10 3a1 1 0 00-1 1v5H4a1 1 0 100 2h5v5a1 1 0 102 0v-5h5a1 1 0 100-2h-5V4a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                </a>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Crisis Banner - Always visible for immediate help */}
+        <CrisisBanner />
+
+        {/* Symptom-Based Resource Finder - Main Feature */}
+        <section id="symptom-finder" className="py-12 bg-white border-b border-gray-200">
+          <div className="container mx-auto px-4">
+            <div className="max-w-3xl mx-auto text-center mb-10">
+              <h2 className="text-3xl font-bold text-[#1A2C5B] mb-4">Find Health Resources Tailored to Your Needs</h2>
+              <p className="text-gray-600 text-lg">
+                Answer a few questions about your health needs to discover personalized resources designed for veterans like you.
+              </p>
+            </div>
+            
+            <Suspense fallback={
+              <div className="flex justify-center items-center py-20">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#1A2C5B]"></div>
+              </div>
+            }>
+              <UnifiedResourceFinder category="all" initialQuestion="main" />
+            </Suspense>
+          </div>
+        </section>
+
+        {/* Resource Finder Tabs */}
+        <section className="py-12 bg-gray-50">
+          <div className="container mx-auto px-4">
+            <div className="max-w-4xl mx-auto text-center mb-8">
+              <h2 className="text-2xl font-bold text-[#1A2C5B] mb-2">Health Resources</h2>
+              <p className="text-gray-600">
+                Browse our comprehensive collection of health resources for veterans.
+              </p>
+            </div>
+
+            {/* Resource Tabs Navigation */}
+            <div className="flex flex-wrap justify-center mb-8 border-b border-gray-200">
+              <button
+                onClick={() => setActiveResourceTab('all')}
+                className={`px-4 py-3 font-medium text-sm ${
+                  activeResourceTab === 'all'
+                    ? 'text-[#1A2C5B] border-b-2 border-[#1A2C5B]'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                All Resources
+              </button>
+              <button
+                onClick={() => setActiveResourceTab('va')}
+                className={`px-4 py-3 font-medium text-sm ${
+                  activeResourceTab === 'va'
+                    ? 'text-[#1A2C5B] border-b-2 border-[#1A2C5B]'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                VA Resources
+              </button>
+              <button
+                onClick={() => setActiveResourceTab('state')}
+                className={`px-4 py-3 font-medium text-sm ${
+                  activeResourceTab === 'state'
+                    ? 'text-[#1A2C5B] border-b-2 border-[#1A2C5B]'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                State Resources
+              </button>
+              <button
+                onClick={() => setActiveResourceTab('ngo')}
+                className={`px-4 py-3 font-medium text-sm ${
+                  activeResourceTab === 'ngo'
+                    ? 'text-[#1A2C5B] border-b-2 border-[#1A2C5B]'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                NGO Resources
+              </button>
+            </div>
+
+            {/* Resource Tab Content */}
+            <div className="bg-white rounded-lg shadow-md p-6">
+              <Suspense fallback={
+                <div className="flex justify-center items-center py-20">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#1A2C5B]"></div>
+                </div>
+              }>
+                {activeResourceTab === 'all' && (
+                  <ResourceFinderSection />
+                )}
+                {activeResourceTab === 'va' && (
+                  <VAHealthcareBenefitsSection />
+                )}
+                {activeResourceTab === 'state' && (
+                  <StateResourcesSection />
+                )}
+                {activeResourceTab === 'ngo' && (
+                  <NGOResourcesSection />
+                )}
+              </Suspense>
+            </div>
+          </div>
+        </section>
+
+        {/* Transition Pathways Section */}
+        <section className="py-12 bg-white border-t border-gray-200">
+          <div className="container mx-auto px-4">
+            <div className="max-w-4xl mx-auto text-center mb-8">
+              <h2 className="text-2xl font-bold text-[#1A2C5B] mb-2">Healthcare Transition Pathways</h2>
+              <p className="text-gray-600">
+                Step-by-step guides to help you navigate your healthcare journey.
+              </p>
+            </div>
+            
+            <Suspense fallback={
+              <div className="flex justify-center items-center py-20">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#1A2C5B]"></div>
+              </div>
+            }>
+              <ResourcePathwaysSection />
+            </Suspense>
+          </div>
+        </section>
+      </main>
+      <Footer />
+    </div>
+  );
+}
