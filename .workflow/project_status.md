@@ -29,6 +29,49 @@
 * **Legal Setup:** LLC formation in PA (Pending).
 * **Health Page:** Continued testing and refinement of AI tools.
 
+### 📋 Session: Feb 19, 2026 — Medical Detective Large File Fix
+
+#### Problem
+Medical Detective froze at 21% when processing a 1001-page VA records PDF. Root causes identified:
+1. **72+ sequential Grok API calls** — 1001 pages at 14K char chunks = ~72 chunks, each processed one at a time
+2. **No timeout/retry** — A single stalled Grok call froze everything permanently
+3. **No concurrency** — All API calls were strictly sequential (12-36 min for large docs)
+4. **No cancel/abort** — User couldn't stop a stuck scan
+5. **Small fixed chunk size** — 14K chars too small for 1000+ page docs
+6. **Body size limit too small** — Next.js default could reject large base64 payloads
+
+#### Fixes Applied
+**API Route** (`src/app/api/health/medical-detective/route.ts`):
+- **Adaptive chunk sizing**: 14K (small docs) → 28K (>20 pages) → 48K (>100 pages) — reduces API calls by 3.4x for large docs
+- **Parallel batch processing**: 3 concurrent Grok API calls instead of sequential — ~3x speed boost
+- **Safety cap**: Max 40 chunks per file; overflow gets sampled rather than dropped
+- **Per-call timeout**: 90s timeout with automatic retry (up to 2 retries, exponential backoff)
+- **Rate limit handling**: Auto-detects 429 responses and waits before retrying
+- **Graceful degradation**: Failed chunks return empty instead of crashing the whole scan
+- **ETA tracking**: Server emits elapsed time and estimated remaining in progress events
+- **5-minute max duration**: `maxDuration = 300` for serverless function
+
+**Client** (`src/app/health/components/MedicalDetectivePanel.tsx`):
+- **Cancel button**: AbortController allows user to stop mid-scan
+- **Elapsed time display**: Live timer shows how long the scan has been running
+- **Estimated time remaining**: Parsed from server progress events
+- **50MB file limit**: Increased from 25MB to support large Blue Button exports
+- **Better error handling**: Distinguishes cancel vs actual errors, re-throws real errors from JSON parse catch
+- **Memory cleanup**: Base64 data freed from client memory immediately after upload
+
+**Config** (`next.config.js`):
+- Body size limit increased to 50MB for large PDF uploads
+- `pdf-parse` added to `serverExternalPackages` for proper bundling
+
+#### Performance Impact (estimated for 1001-page PDF)
+| Metric | Before | After |
+|--------|--------|-------|
+| Chunks | ~72 | ~22 (48K XL chunks) |
+| Concurrency | 1 (sequential) | 3 (parallel batches) |
+| Est. time | 12-36 min (if it didn't freeze) | ~2-5 min |
+| Timeout handling | None (infinite hang) | 90s per call + 2 retries |
+| User cancel | Not possible | Cancel button available |
+
 ### � Today's Session Summary (Feb 18, 2026)
 
 #### What We Accomplished

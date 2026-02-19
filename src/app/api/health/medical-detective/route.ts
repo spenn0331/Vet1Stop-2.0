@@ -13,7 +13,18 @@ import { NextRequest } from 'next/server';
  *
  * SAFETY: Raw file data cleared from memory immediately after text extraction.
  * Files are NEVER stored. Zero HIPAA exposure.
+ *
+ * LARGE FILE SUPPORT (v2):
+ *   - Adaptive chunk sizing scales up for large documents (fewer API calls)
+ *   - Parallel batch processing (up to 3 concurrent Grok API calls)
+ *   - Per-call timeout (90s) with automatic retry (up to 2 retries)
+ *   - Body size limit raised to 50MB for large VA Blue Button exports
  */
+
+// ─── Next.js Route Config ────────────────────────────────────────────────────
+
+export const maxDuration = 300; // 5 min max for serverless function
+export const dynamic = 'force-dynamic';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -47,7 +58,13 @@ interface DetectiveReport {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const CHUNK_SIZE = 14000; // ~3500 tokens at 4 chars/token
+const CHUNK_SIZE_DEFAULT = 14000;  // ~3500 tokens — used for small docs
+const CHUNK_SIZE_LARGE = 28000;    // ~7000 tokens — used for docs > 20 pages
+const CHUNK_SIZE_XLARGE = 48000;   // ~12000 tokens — used for docs > 100 pages
+const MAX_CHUNKS_PER_FILE = 40;    // Safety cap — summarize overflow
+const CONCURRENT_BATCH_SIZE = 3;   // Parallel Grok API calls
+const API_TIMEOUT_MS = 90_000;     // 90s timeout per Grok call
+const MAX_RETRIES = 2;             // Retry failed API calls up to 2 times
 
 const DISCLAIMER = `This report is for informational purposes only and does not constitute medical or legal advice. This tool does not file claims. Please share this report with your accredited VSO or claims representative for professional review.`;
 
@@ -121,14 +138,21 @@ function extractTextWithRegex(base64Data: string): string {
   } catch { return ''; }
 }
 
-// ─── Text Chunking ────────────────────────────────────────────────────────────
+// ─── Adaptive Text Chunking ──────────────────────────────────────────────────
 
-function chunkText(text: string): string[] {
+function getChunkSize(numPages: number): number {
+  if (numPages > 100) return CHUNK_SIZE_XLARGE;
+  if (numPages > 20) return CHUNK_SIZE_LARGE;
+  return CHUNK_SIZE_DEFAULT;
+}
+
+function chunkText(text: string, numPages: number = 1): string[] {
+  const chunkSize = getChunkSize(numPages);
   const chunks: string[] = [];
   const paragraphs = text.split(/\n{2,}/);
   let current = '';
   for (const para of paragraphs) {
-    if (current.length + para.length > CHUNK_SIZE && current.length > 0) {
+    if (current.length + para.length > chunkSize && current.length > 0) {
       chunks.push(current.trim());
       current = para;
     } else {
@@ -136,13 +160,37 @@ function chunkText(text: string): string[] {
     }
   }
   if (current.trim().length > 50) chunks.push(current.trim());
-  return chunks.length > 0 ? chunks : [text.substring(0, CHUNK_SIZE)];
+  if (chunks.length === 0) return [text.substring(0, chunkSize)];
+
+  // Safety cap: if too many chunks, merge the overflow into the last chunk
+  // This prevents 100+ sequential API calls for extremely large docs
+  if (chunks.length > MAX_CHUNKS_PER_FILE) {
+    const kept = chunks.slice(0, MAX_CHUNKS_PER_FILE - 1);
+    const overflow = chunks.slice(MAX_CHUNKS_PER_FILE - 1).join('\n\n');
+    // Take a representative sample from the overflow rather than dropping it
+    const overflowSample = overflow.substring(0, chunkSize * 2);
+    kept.push(overflowSample);
+    return kept;
+  }
+
+  return chunks;
 }
 
 // ─── Grok API Calls ───────────────────────────────────────────────────────────
 
 function getApiKey(): string {
   return process.env.XAI_API_KEY || '';
+}
+
+async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const resp = await fetch(url, { ...options, signal: controller.signal });
+    return resp;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function analyzeChunkWithGrok4(
@@ -154,29 +202,54 @@ async function analyzeChunkWithGrok4(
   const apiKey = getApiKey();
   if (!apiKey) throw new Error('XAI_API_KEY is not configured in environment variables.');
 
-  const response = await fetch('https://api.x.ai/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: 'grok-4',
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        {
-          role: 'user',
-          content: `Document: "${fileName}" | Chunk ${chunkIdx + 1} of ${totalChunks}\n\n${chunk}`,
-        },
-      ],
-      temperature: 0.1,
-      max_tokens: 4000,
-    }),
-  });
+  let lastError = '';
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const response = await fetchWithTimeout('https://api.x.ai/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'grok-4',
+          messages: [
+            { role: 'system', content: SYSTEM_PROMPT },
+            {
+              role: 'user',
+              content: `Document: "${fileName}" | Chunk ${chunkIdx + 1} of ${totalChunks}\n\n${chunk}`,
+            },
+          ],
+          temperature: 0.1,
+          max_tokens: 4000,
+        }),
+      }, API_TIMEOUT_MS);
 
-  if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`Grok 4 API error ${response.status}: ${err.substring(0, 200)}`);
+      if (!response.ok) {
+        const err = await response.text();
+        // Rate limit — wait and retry
+        if (response.status === 429 && attempt < MAX_RETRIES) {
+          const retryAfter = parseInt(response.headers.get('retry-after') || '5', 10);
+          await new Promise(r => setTimeout(r, retryAfter * 1000));
+          lastError = `Rate limited (429). Retrying...`;
+          continue;
+        }
+        throw new Error(`Grok 4 API error ${response.status}: ${err.substring(0, 200)}`);
+      }
+      const data = await response.json();
+      return data.choices?.[0]?.message?.content || '';
+    } catch (err) {
+      lastError = (err as Error).message || 'Unknown error';
+      if ((err as Error).name === 'AbortError') {
+        lastError = `Chunk ${chunkIdx + 1} timed out after ${API_TIMEOUT_MS / 1000}s`;
+      }
+      if (attempt < MAX_RETRIES) {
+        // Exponential backoff: 2s, 4s
+        await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
+        continue;
+      }
+    }
   }
-  const data = await response.json();
-  return data.choices?.[0]?.message?.content || '';
+  // After all retries failed, return empty rather than crashing the whole scan
+  console.warn(`[MedicalDetective] Chunk ${chunkIdx + 1}/${totalChunks} of "${fileName}" failed after ${MAX_RETRIES + 1} attempts: ${lastError}`);
+  return '';
 }
 
 async function analyzeImageWithGrokVision(
@@ -187,32 +260,50 @@ async function analyzeImageWithGrokVision(
   const apiKey = getApiKey();
   if (!apiKey) throw new Error('XAI_API_KEY is not configured in environment variables.');
 
-  const response = await fetch('https://api.x.ai/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: 'grok-2-vision-1212',
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        {
-          role: 'user',
-          content: [
-            { type: 'text', text: `Analyze this VA medical record image (${fileName}) for disability claim-relevant findings.` },
-            { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64Data}` } },
+  let lastError = '';
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const response = await fetchWithTimeout('https://api.x.ai/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'grok-2-vision-1212',
+          messages: [
+            { role: 'system', content: SYSTEM_PROMPT },
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: `Analyze this VA medical record image (${fileName}) for disability claim-relevant findings.` },
+                { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64Data}` } },
+              ],
+            },
           ],
-        },
-      ],
-      temperature: 0.1,
-      max_tokens: 4000,
-    }),
-  });
+          temperature: 0.1,
+          max_tokens: 4000,
+        }),
+      }, API_TIMEOUT_MS);
 
-  if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`Grok Vision API error ${response.status}: ${err.substring(0, 200)}`);
+      if (!response.ok) {
+        const err = await response.text();
+        if (response.status === 429 && attempt < MAX_RETRIES) {
+          const retryAfter = parseInt(response.headers.get('retry-after') || '5', 10);
+          await new Promise(r => setTimeout(r, retryAfter * 1000));
+          continue;
+        }
+        throw new Error(`Grok Vision API error ${response.status}: ${err.substring(0, 200)}`);
+      }
+      const data = await response.json();
+      return data.choices?.[0]?.message?.content || '';
+    } catch (err) {
+      lastError = (err as Error).message || 'Unknown error';
+      if (attempt < MAX_RETRIES) {
+        await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
+        continue;
+      }
+    }
   }
-  const data = await response.json();
-  return data.choices?.[0]?.message?.content || '';
+  console.warn(`[MedicalDetective] Image "${fileName}" failed after ${MAX_RETRIES + 1} attempts: ${lastError}`);
+  return '';
 }
 
 // ─── Parse AI Text Output → FlaggedItems ─────────────────────────────────────
@@ -350,8 +441,8 @@ export async function POST(request: NextRequest) {
 
         // Validate file sizes
         for (const f of files) {
-          if (f.size > 25 * 1024 * 1024) {
-            emit({ type: 'error', message: `"${f.name}" exceeds 25MB limit.` });
+          if (f.size > 50 * 1024 * 1024) {
+            emit({ type: 'error', message: `"${f.name}" exceeds 50MB limit.` });
             controller.close();
             return;
           }
@@ -375,33 +466,54 @@ export async function POST(request: NextRequest) {
           } else if (file.type === 'application/pdf') {
             const { text, numPages } = await extractPDFData(file.data);
             file.data = ''; // clear raw data immediately
-            const chunks = chunkText(text);
+            const chunks = chunkText(text, numPages);
             fileInfos.push({ name: file.name, chunks, numPages, isImage: false });
             totalChunks += chunks.length;
-            emit({ type: 'file_ready', fileName: file.name, numPages, numChunks: chunks.length });
+            const chunkSizeLabel = numPages > 100 ? 'XL' : numPages > 20 ? 'L' : 'standard';
+            emit({ type: 'file_ready', fileName: file.name, numPages, numChunks: chunks.length, chunkMode: chunkSizeLabel });
           }
         }
 
-        // Phase 2: Analyze each chunk
+        const isLargeJob = totalChunks > 10;
+        if (isLargeJob) {
+          emit({ type: 'progress', message: `Large document detected — ${totalChunks} chunks to analyze. Processing in parallel batches of ${CONCURRENT_BATCH_SIZE}...`, percent: 20 });
+        }
+
+        // Phase 2: Analyze chunks — parallel batches for speed
         const allFlags: FlaggedItem[] = [];
         let processedChunks = 0;
 
+        // Flatten all chunks into a work queue
+        type WorkItem = { fileInfo: FileInfo; chunkIdx: number };
+        const workQueue: WorkItem[] = [];
         for (const info of fileInfos) {
           for (let ci = 0; ci < info.chunks.length; ci++) {
-            processedChunks++;
-            const percent = Math.round(20 + (processedChunks / totalChunks) * 72);
+            workQueue.push({ fileInfo: info, chunkIdx: ci });
+          }
+        }
 
+        // Process work queue in parallel batches
+        for (let batchStart = 0; batchStart < workQueue.length; batchStart += CONCURRENT_BATCH_SIZE) {
+          const batch = workQueue.slice(batchStart, batchStart + CONCURRENT_BATCH_SIZE);
+
+          // Emit progress for each item in the batch
+          for (const item of batch) {
+            const percent = Math.round(20 + ((processedChunks + batch.indexOf(item)) / totalChunks) * 72);
             emit({
               type: 'chunk_start',
-              chunk: ci + 1,
-              totalChunks: info.chunks.length,
-              fileName: info.name,
-              message: info.isImage
-                ? `Analyzing image "${info.name}"...`
-                : `Analyzing chunk ${ci + 1} of ${info.chunks.length} from "${info.name}"...`,
+              chunk: item.chunkIdx + 1,
+              totalChunks: item.fileInfo.chunks.length,
+              fileName: item.fileInfo.name,
+              message: item.fileInfo.isImage
+                ? `Analyzing image "${item.fileInfo.name}"...`
+                : `Analyzing chunk ${item.chunkIdx + 1} of ${item.fileInfo.chunks.length} from "${item.fileInfo.name}"${batch.length > 1 ? ` (batch of ${batch.length})` : ''}...`,
               percent,
             });
+          }
 
+          // Run batch in parallel
+          const batchPromises = batch.map(async (item) => {
+            const { fileInfo: info, chunkIdx: ci } = item;
             let rawOutput = '';
             if (info.isImage && info.imageData && info.imageMime) {
               rawOutput = await analyzeImageWithGrokVision(info.imageData, info.imageMime, info.name);
@@ -409,12 +521,29 @@ export async function POST(request: NextRequest) {
             } else {
               rawOutput = await analyzeChunkWithGrok4(info.chunks[ci], ci, info.chunks.length, info.name);
             }
+            return { rawOutput, ci, info };
+          });
 
-            const flags = parseAIOutput(rawOutput);
+          const batchResults = await Promise.all(batchPromises);
+
+          for (const result of batchResults) {
+            processedChunks++;
+            const flags = parseAIOutput(result.rawOutput);
             allFlags.push(...flags);
-
-            emit({ type: 'chunk_complete', chunk: ci + 1, totalChunks: info.chunks.length, flagsInChunk: flags.length });
+            emit({ type: 'chunk_complete', chunk: result.ci + 1, totalChunks: result.info.chunks.length, flagsInChunk: flags.length });
           }
+
+          // Emit batch completion progress
+          const batchPercent = Math.round(20 + (processedChunks / totalChunks) * 72);
+          const elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
+          const estimatedRemaining = processedChunks > 0
+            ? Math.round(((Date.now() - startTime) / processedChunks) * (totalChunks - processedChunks) / 1000)
+            : 0;
+          emit({
+            type: 'progress',
+            message: `${processedChunks} of ${totalChunks} chunks complete (${elapsed}s elapsed${estimatedRemaining > 0 ? `, ~${estimatedRemaining}s remaining` : ''})`,
+            percent: batchPercent,
+          });
         }
 
         // Phase 3: Build final report

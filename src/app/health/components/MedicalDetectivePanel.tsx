@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   DocumentMagnifyingGlassIcon,
   CloudArrowUpIcon,
@@ -54,7 +54,7 @@ type PanelState = 'upload' | 'processing' | 'results' | 'no_flags' | 'error';
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const ACCEPTED_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'application/pdf'];
-const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB
+const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB — supports large VA Blue Button exports
 const MAX_FILES = 5;
 
 const DISCLAIMER_TEXT = `This report is for informational purposes only and does not constitute medical or legal advice. This tool does not file claims. Please share this report with your accredited VSO or claims representative for professional review.`;
@@ -87,7 +87,29 @@ export default function MedicalDetectivePanel() {
   const [progress, setProgress] = useState(0);
   const [progressMsg, setProgressMsg] = useState('Starting...');
   const [isDragOver, setIsDragOver] = useState(false);
+  const [elapsedTime, setElapsedTime] = useState(0);
+  const [estimatedRemaining, setEstimatedRemaining] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Elapsed time counter during processing
+  useEffect(() => {
+    if (panelState === 'processing') {
+      setElapsedTime(0);
+      elapsedTimerRef.current = setInterval(() => {
+        setElapsedTime(prev => prev + 1);
+      }, 1000);
+    } else {
+      if (elapsedTimerRef.current) {
+        clearInterval(elapsedTimerRef.current);
+        elapsedTimerRef.current = null;
+      }
+    }
+    return () => {
+      if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
+    };
+  }, [panelState]);
 
   // Convert file to base64
   const fileToBase64 = (file: File): Promise<string> =>
@@ -119,7 +141,7 @@ export default function MedicalDetectivePanel() {
       }
 
       if (file.size > MAX_FILE_SIZE) {
-        errors.push(`"${file.name}" exceeds 10MB limit.`);
+        errors.push(`"${file.name}" exceeds 50MB limit.`);
         continue;
       }
 
@@ -162,6 +184,16 @@ export default function MedicalDetectivePanel() {
     setError('');
   };
 
+  // Cancel an in-progress scan
+  const handleCancel = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setError('Scan cancelled by user.');
+    setPanelState('error');
+  }, []);
+
   // Process files — streaming NDJSON fetch
   const handleScan = async () => {
     if (files.length === 0) return;
@@ -170,25 +202,44 @@ export default function MedicalDetectivePanel() {
     setProgress(0);
     setProgressMsg('Preparing files...');
     setError('');
+    setEstimatedRemaining(null);
+
+    // Create abort controller for cancellation
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
 
     try {
       // Convert all files to base64
       const fileData = [];
+      const totalSize = files.reduce((sum, f) => sum + f.size, 0);
+      const isLargeUpload = totalSize > 5 * 1024 * 1024; // > 5MB
+
       for (let i = 0; i < files.length; i++) {
-        setProgressMsg(`Reading file ${i + 1} of ${files.length}: "${files[i].name}"...`);
+        if (abortController.signal.aborted) throw new Error('Scan cancelled by user.');
+        const sizeLabel = isLargeUpload ? ` (${(files[i].size / (1024 * 1024)).toFixed(1)}MB)` : '';
+        setProgressMsg(`Reading file ${i + 1} of ${files.length}: "${files[i].name}"${sizeLabel}...`);
         setProgress(Math.round(((i + 0.5) / files.length) * 10));
         const base64 = await fileToBase64(files[i].file);
         fileData.push({ name: files[i].name, type: files[i].type, data: base64, size: files[i].size });
       }
 
-      setProgressMsg('Uploading to analysis engine...');
+      if (abortController.signal.aborted) throw new Error('Scan cancelled by user.');
+
+      const uploadSizeLabel = isLargeUpload
+        ? ` (${(totalSize / (1024 * 1024)).toFixed(1)}MB — large file, this may take a moment)...`
+        : '...';
+      setProgressMsg(`Uploading to analysis engine${uploadSizeLabel}`);
       setProgress(12);
 
       const response = await fetch('/api/health/medical-detective', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ files: fileData }),
+        signal: abortController.signal,
       });
+
+      // Free the base64 data from client memory immediately after upload
+      fileData.length = 0;
 
       if (!response.ok || !response.body) {
         const text = await response.text();
@@ -201,6 +252,11 @@ export default function MedicalDetectivePanel() {
       let buffer = '';
 
       while (true) {
+        if (abortController.signal.aborted) {
+          reader.cancel();
+          throw new Error('Scan cancelled by user.');
+        }
+
         const { done, value } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
@@ -213,18 +269,23 @@ export default function MedicalDetectivePanel() {
             const event = JSON.parse(line);
             if (event.type === 'progress') {
               setProgressMsg(event.message || '');
-              setProgress(event.percent ?? progress);
+              if (typeof event.percent === 'number') setProgress(event.percent);
+              // Parse estimated remaining from server message
+              const etaMatch = (event.message || '').match(/~(\d+)s remaining/);
+              if (etaMatch) setEstimatedRemaining(parseInt(etaMatch[1], 10));
             } else if (event.type === 'file_ready') {
-              setProgressMsg(`"${event.fileName}" ready — ${event.numPages} page(s), ${event.numChunks} chunk(s) to analyze`);
+              const modeLabel = event.chunkMode === 'XL' ? ' (XL chunks for speed)' : event.chunkMode === 'L' ? ' (large chunks)' : '';
+              setProgressMsg(`"${event.fileName}" ready — ${event.numPages} page(s), ${event.numChunks} chunk(s)${modeLabel}`);
             } else if (event.type === 'chunk_start') {
               setProgressMsg(event.message || `Analyzing chunk ${event.chunk} of ${event.totalChunks}...`);
-              setProgress(event.percent ?? progress);
+              if (typeof event.percent === 'number') setProgress(event.percent);
             } else if (event.type === 'chunk_complete') {
-              // progress bar already updated by chunk_start
+              // progress bar already updated by chunk_start / progress events
             } else if (event.type === 'complete') {
               const r: DetectiveReport = event.report;
               setReport(r);
               setProgress(100);
+              setEstimatedRemaining(null);
               setFiles([]); // clear from memory
               setPanelState(r.totalFlagsFound > 0 ? 'results' : 'no_flags');
               return;
@@ -232,14 +293,27 @@ export default function MedicalDetectivePanel() {
               throw new Error(event.message || 'Processing failed.');
             }
           } catch (parseErr) {
-            // Ignore malformed lines
+            // Only re-throw if it's an actual Error we created (not JSON parse failure)
+            if (parseErr instanceof Error && parseErr.message.includes('cancelled')) throw parseErr;
+            if (parseErr instanceof Error && parseErr.message.includes('Processing failed')) throw parseErr;
+            if (parseErr instanceof Error && parseErr.message.includes('API error')) throw parseErr;
+            // Otherwise ignore malformed JSON lines
           }
         }
       }
     } catch (err) {
-      console.error('[MedicalDetective]', err);
-      setError((err as Error).message || 'An error occurred. Please try again.');
+      const msg = (err as Error).message || 'An error occurred. Please try again.';
+      // Don't log abort errors as console errors
+      if ((err as Error).name === 'AbortError' || msg.includes('cancelled')) {
+        console.log('[MedicalDetective] Scan cancelled by user.');
+        setError('Scan cancelled. Your files were not stored.');
+      } else {
+        console.error('[MedicalDetective]', err);
+        setError(msg);
+      }
       setPanelState('error');
+    } finally {
+      abortControllerRef.current = null;
     }
   };
 
@@ -402,7 +476,7 @@ body{font-family:'Segoe UI',sans-serif;padding:40px;color:#1F2937;line-height:1.
               Drop files here or click to upload
             </p>
             <p className="text-sm text-gray-500">
-              PDF, PNG, JPG — Max 25MB per file, up to {MAX_FILES} files
+              PDF, PNG, JPG — Max 50MB per file, up to {MAX_FILES} files
             </p>
             <p className="text-xs text-gray-400 mt-2">
               VA Blue Button exports, medical records, progress notes, lab results
@@ -483,7 +557,7 @@ body{font-family:'Segoe UI',sans-serif;padding:40px;color:#1F2937;line-height:1.
           {/* Progress bar */}
           <div className="mb-4">
             <div className="flex justify-between text-xs text-gray-500 mb-1">
-              <span className="font-medium truncate max-w-xs">{progressMsg}</span>
+              <span className="font-medium truncate max-w-[70%]">{progressMsg}</span>
               <span className="font-bold text-[#1A2C5B] ml-2">{progress}%</span>
             </div>
             <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
@@ -494,8 +568,27 @@ body{font-family:'Segoe UI',sans-serif;padding:40px;color:#1F2937;line-height:1.
             </div>
           </div>
 
-          <p className="text-xs text-gray-400 text-center mt-4">
-            Grok 4 is analyzing your documents chunk by chunk for claim-relevant evidence. Large PDFs may take 1–2 minutes.
+          {/* Elapsed / ETA display */}
+          <div className="flex justify-center gap-6 text-xs text-gray-500 mt-2 mb-4">
+            <span>Elapsed: <strong>{Math.floor(elapsedTime / 60)}:{String(elapsedTime % 60).padStart(2, '0')}</strong></span>
+            {estimatedRemaining !== null && estimatedRemaining > 0 && (
+              <span>Est. remaining: <strong>~{estimatedRemaining < 60 ? `${estimatedRemaining}s` : `${Math.floor(estimatedRemaining / 60)}m ${estimatedRemaining % 60}s`}</strong></span>
+            )}
+          </div>
+
+          {/* Cancel button */}
+          <div className="text-center mb-4">
+            <button
+              onClick={handleCancel}
+              className="inline-flex items-center px-4 py-2 rounded-lg border border-red-300 text-red-600 text-sm font-medium hover:bg-red-50 transition-colors focus:outline-none focus:ring-2 focus:ring-red-200"
+            >
+              <XMarkIcon className="mr-1.5 h-4 w-4" />
+              Cancel Scan
+            </button>
+          </div>
+
+          <p className="text-xs text-gray-400 text-center mt-2">
+            Grok 4 is analyzing your documents chunk by chunk for claim-relevant evidence. Large PDFs (100+ pages) use parallel batch processing.
           </p>
           <p className="text-xs text-gray-400 text-center mt-1">
             Files are processed in memory only — never stored permanently.

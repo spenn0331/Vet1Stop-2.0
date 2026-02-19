@@ -20,11 +20,15 @@ const nextConfig = {
     typedRoutes: false,
   },
   // Improve compatibility with older TypeScript versions
-  serverExternalPackages: [],
+  serverExternalPackages: ['pdf-parse'],
   // Increase timeout for builds
   staticPageGenerationTimeout: 180,
   // Disable source maps in production
   productionBrowserSourceMaps: false,
+  // Increase body size limit for Medical Detective large PDF uploads (50MB base64)
+  serverActions: {
+    bodySizeLimit: '50mb',
+  },
 };
 
 module.exports = nextConfig;
