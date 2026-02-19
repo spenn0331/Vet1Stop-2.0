@@ -1,60 +1,27 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 
 /**
  * POST /api/health/medical-detective
- * 
- * Phase 1 MVP – Upload-First "Scan & Flag" Mode
- * Accepts uploaded VA medical records (base64 images/PDFs).
- * Uses Grok Vision (xAI) + text extraction + targeted NLP.
- * Scans for 25+ high-value flags and generates a structured report.
- * 
- * SAFETY: Raw files are NEVER stored. Processing is ephemeral.
- * All data is discarded after response is sent.
+ *
+ * Streaming NDJSON response. Emits JSON events line-by-line:
+ *   {type:'progress', message, percent}
+ *   {type:'file_ready', fileName, numPages, numChunks}
+ *   {type:'chunk_start', chunk, totalChunks, fileName, message, percent}
+ *   {type:'chunk_complete', chunk, totalChunks, flagsInChunk}
+ *   {type:'complete', report}
+ *   {type:'error', message}
+ *
+ * SAFETY: Raw file data cleared from memory immediately after text extraction.
+ * Files are NEVER stored. Zero HIPAA exposure.
  */
 
-// 25+ high-value flags to scan for in medical records
-const HIGH_VALUE_FLAGS = [
-  // Service-connected conditions
-  { id: 'sleep_apnea', label: 'Sleep Apnea', category: 'Sleep Disorders', keywords: ['sleep apnea', 'obstructive sleep', 'cpap', 'sleep study', 'polysomnography'] },
-  { id: 'tinnitus', label: 'Tinnitus', category: 'Hearing', keywords: ['tinnitus', 'ringing in ears', 'ear ringing', 'hearing noise'] },
-  { id: 'hearing_loss', label: 'Hearing Loss', category: 'Hearing', keywords: ['hearing loss', 'sensorineural', 'audiogram', 'hearing impairment', 'decreased hearing'] },
-  { id: 'migraines', label: 'Migraines / Headaches', category: 'Neurological', keywords: ['migraine', 'headache', 'chronic headache', 'tension headache', 'cephalgia'] },
-  { id: 'ptsd', label: 'PTSD Markers', category: 'Mental Health', keywords: ['ptsd', 'post-traumatic', 'posttraumatic', 'trauma', 'nightmares', 'hypervigilance', 'flashbacks', 'startle response'] },
-  { id: 'tbi', label: 'TBI Indicators', category: 'Neurological', keywords: ['tbi', 'traumatic brain injury', 'concussion', 'blast exposure', 'head injury', 'cognitive impairment'] },
-  { id: 'depression', label: 'Depression / Anxiety', category: 'Mental Health', keywords: ['depression', 'anxiety', 'depressive disorder', 'generalized anxiety', 'mood disorder', 'phq-9', 'gad-7'] },
-  { id: 'chronic_pain', label: 'Chronic Pain', category: 'Musculoskeletal', keywords: ['chronic pain', 'pain management', 'fibromyalgia', 'pain disorder', 'opioid'] },
-  { id: 'back_condition', label: 'Back / Spine Conditions', category: 'Musculoskeletal', keywords: ['back pain', 'lumbar', 'cervical', 'spinal', 'disc', 'herniated', 'degenerative disc', 'radiculopathy', 'sciatica'] },
-  { id: 'joint_conditions', label: 'Joint Conditions', category: 'Musculoskeletal', keywords: ['arthritis', 'joint pain', 'knee', 'shoulder', 'ankle', 'degenerative joint', 'range of motion'] },
-  { id: 'skin_conditions', label: 'Skin Conditions', category: 'Dermatological', keywords: ['dermatitis', 'eczema', 'skin condition', 'rash', 'psoriasis', 'skin cancer', 'chloracne'] },
-  { id: 'respiratory', label: 'Respiratory Conditions', category: 'Respiratory', keywords: ['asthma', 'copd', 'respiratory', 'lung', 'breathing difficulty', 'pulmonary', 'sinusitis', 'rhinitis'] },
-  { id: 'heart_conditions', label: 'Heart / Cardiovascular', category: 'Cardiovascular', keywords: ['heart', 'cardiovascular', 'hypertension', 'blood pressure', 'cardiac', 'ischemic'] },
-  { id: 'diabetes', label: 'Diabetes', category: 'Endocrine', keywords: ['diabetes', 'diabetic', 'blood sugar', 'glucose', 'a1c', 'insulin', 'type 2 diabetes'] },
-  { id: 'vision', label: 'Vision Problems', category: 'Ophthalmological', keywords: ['vision', 'eye condition', 'glaucoma', 'macular', 'cataracts', 'visual acuity'] },
-  { id: 'gerd', label: 'GERD / Digestive', category: 'Gastrointestinal', keywords: ['gerd', 'reflux', 'gastroesophageal', 'ibs', 'irritable bowel', 'digestive'] },
-  { id: 'mst', label: 'MST Markers', category: 'Mental Health', keywords: ['military sexual trauma', 'mst', 'sexual assault', 'sexual harassment'] },
-  
-  // PACT Act presumptive conditions
-  { id: 'burn_pit', label: 'Burn Pit / Toxic Exposure', category: 'PACT Act Presumptive', keywords: ['burn pit', 'toxic exposure', 'airborne hazard', 'pact act', 'environmental exposure', 'camp lejeune'] },
-  { id: 'agent_orange', label: 'Agent Orange Exposure', category: 'PACT Act Presumptive', keywords: ['agent orange', 'herbicide', 'dioxin', 'vietnam exposure'] },
-  { id: 'gulf_war_illness', label: 'Gulf War Illness', category: 'PACT Act Presumptive', keywords: ['gulf war illness', 'gulf war syndrome', 'undiagnosed illness', 'medically unexplained'] },
-  { id: 'cancer_markers', label: 'Cancer Markers', category: 'Oncological', keywords: ['cancer', 'carcinoma', 'tumor', 'neoplasm', 'oncology', 'malignant', 'biopsy'] },
-  
-  // Key legal/claim language
-  { id: 'service_connected', label: '"Service-Connected" Language', category: 'Claim Language', keywords: ['service-connected', 'service connected', 'in-service', 'line of duty', 'incurred in service'] },
-  { id: 'ruled_out', label: '"Ruled Out" Language', category: 'Claim Language', keywords: ['ruled out', 'rule out', 'r/o', 'differential diagnosis'] },
-  { id: 'suspected', label: '"Suspected" / "Possible" Language', category: 'Claim Language', keywords: ['suspected', 'possible', 'probable', 'likely', 'consistent with', 'suggestive of'] },
-  { id: 'secondary', label: 'Secondary Conditions', category: 'Claim Language', keywords: ['secondary to', 'secondary condition', 'aggravated by', 'caused by', 'result of', 'due to'] },
-  { id: 'aggravated', label: 'Aggravation Language', category: 'Claim Language', keywords: ['aggravated', 'worsened', 'exacerbated', 'increased severity', 'beyond natural progression'] },
-  { id: 'nexus', label: 'Nexus / Connection Language', category: 'Claim Language', keywords: ['nexus', 'at least as likely as not', 'more likely than not', 'related to service', 'connected to military'] },
-];
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-interface DetectiveRequest {
-  files: Array<{
-    name: string;
-    type: string; // 'image/png', 'image/jpeg', 'application/pdf', etc.
-    data: string; // base64 encoded
-    size: number;
-  }>;
+interface FilePayload {
+  name: string;
+  type: string;
+  data: string; // base64
+  size: number;
 }
 
 interface FlaggedItem {
@@ -64,6 +31,7 @@ interface FlaggedItem {
   excerpt: string;
   context: string;
   dateFound?: string;
+  pageNumber?: string;
   suggestedClaimCategory: string;
   confidence: 'high' | 'medium' | 'low';
 }
@@ -74,414 +42,401 @@ interface DetectiveReport {
   totalFlagsFound: number;
   flaggedItems: FlaggedItem[];
   suggestedNextSteps: string[];
-  processingDetails: {
-    filesProcessed: number;
-    processingTime: number;
-    aiModel: string;
-  };
+  processingDetails: { filesProcessed: number; processingTime: number; aiModel: string };
 }
 
-// Get the Grok API key from environment
-function getGrokApiKey(): string {
-  return process.env.GROK_API_KEY || process.env.NEXT_PUBLIC_GROK_API_KEY || '';
-}
+// ─── Constants ────────────────────────────────────────────────────────────────
 
-// Extract text content from a PDF buffer (basic extraction)
-function extractTextFromPDF(base64Data: string): string {
+const CHUNK_SIZE = 14000; // ~3500 tokens at 4 chars/token
+
+const DISCLAIMER = `This report is for informational purposes only and does not constitute medical or legal advice. This tool does not file claims. Please share this report with your accredited VSO or claims representative for professional review.`;
+
+// ─── Exact system prompt (user-specified) ─────────────────────────────────────
+
+const SYSTEM_PROMPT = `You are an expert VA disability claims evidence analyst with deep knowledge of VA rating schedules, presumptive conditions, the PACT Act, and how clinical notes support claims.
+
+Scan the provided VA medical records thoroughly for evidence that may support a service-connected disability claim.
+
+Key high-value conditions and patterns to flag (including synonyms, ICD codes, and VA shorthand):
+- Tinnitus / ringing in ears / hearing loss / H93.19 / 'tinnitus 10% SC' / 'tinnitus service connected'
+- PTSD / post-traumatic stress disorder / trauma / anxiety / depression / panic attacks / mental health diagnosis
+- Sleep apnea / OSA / obstructive sleep apnea / CPAP / sleep study / daytime somnolence
+- Migraine / chronic migraine / headache disorder / migraine without aura
+- Burn pit exposure / PACT Act / Agent Orange / Gulf War / toxic exposure / presumptive condition
+- Respiratory / sinusitis / rhinitis / asthma / COPD
+- Gastrointestinal / GERD / IBS
+- Musculoskeletal / knee pain / back pain / shoulder pain / arthritis / limitation of motion
+- Any rating language: 'service connected', 'SC', '10% SC', '30% SC', '50% SC', '100% SC', 'rated at', 'compensable'
+- Nexus language: 'at least as likely as not', 'more likely than not', 'caused by military service', 'aggravated by service', 'due to service', 'consistent with service'
+- Clinical shorthand: 'r/o', 'ruled out', 'suspected', 'consistent with', 'likely', 'probable', 'history of'
+
+Rules:
+- Be thorough but conservative. Only flag meaningful evidence. Do not flag normal lab results or ruled-out conditions.
+- For every flag: Condition name, Confidence (High / Medium / Low), Exact quote (include 1-2 surrounding sentences for context), Page number if available, Date of the note if available, 1-sentence relevance explanation.
+- If no strong flags, clearly state 'No strong claim-relevant evidence flags were identified in this report.'
+
+Output in clean, numbered bullet list format suitable for a professional PDF report.
+
+Always end with this exact bold disclaimer:
+**This report is for informational purposes only and does not constitute medical or legal advice. This tool does not file claims. Please share this report with your accredited VSO or claims representative for professional review.**
+
+Be accurate, professional, and veteran-focused.`;
+
+// ─── PDF Text Extraction ──────────────────────────────────────────────────────
+
+async function extractPDFData(base64Data: string): Promise<{ text: string; numPages: number }> {
   try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const pdfParse = require('pdf-parse');
     const buffer = Buffer.from(base64Data, 'base64');
-    const str = buffer.toString('latin1');
-    
-    // Method 1: Extract text between BT/ET blocks (PDF text objects)
-    const textParts: string[] = [];
-    const btBlocks = str.match(/BT[\s\S]*?ET/g) || [];
-    
-    for (const block of btBlocks) {
-      // Match text within Tj and TJ operators
-      const tjMatches = block.match(/\(([^)]*)\)\s*Tj/g) || [];
-      for (const tj of tjMatches) {
-        const match = tj.match(/\(([^)]*)\)/);
-        if (match?.[1]) {
-          textParts.push(match[1]);
-        }
-      }
-      
-      // Match TJ arrays
-      const tjArrayMatches = block.match(/\[(.*?)\]\s*TJ/g) || [];
-      for (const tjArr of tjArrayMatches) {
-        const innerMatches = tjArr.match(/\(([^)]*)\)/g) || [];
-        for (const inner of innerMatches) {
-          const match = inner.match(/\(([^)]*)\)/);
-          if (match?.[1]) {
-            textParts.push(match[1]);
-          }
-        }
-      }
-    }
-    
-    // Method 2: Fallback - try to find readable text in the buffer
-    if (textParts.length === 0) {
-      const utf8Str = buffer.toString('utf-8');
-      // Extract strings that look like readable text (at least 4 chars, mostly alpha)
-      const readableMatches = utf8Str.match(/[A-Za-z][A-Za-z0-9\s,.;:'\-\/]{3,}/g) || [];
-      textParts.push(...readableMatches.filter(t => t.length > 5));
-    }
-    
-    const extracted = textParts.join(' ').replace(/\s+/g, ' ').trim();
-    return extracted;
-  } catch (error) {
-    console.error('[MedicalDetective] PDF text extraction error:', error);
-    return '';
+    const data = await pdfParse(buffer);
+    return { text: data.text || '', numPages: data.numpages || 1 };
+  } catch (err) {
+    console.warn('[MedicalDetective] pdf-parse failed, using regex fallback:', err);
+    return { text: extractTextWithRegex(base64Data), numPages: 1 };
   }
 }
 
-// Call Grok Vision API to analyze an image
+function extractTextWithRegex(base64Data: string): string {
+  try {
+    const buffer = Buffer.from(base64Data, 'base64');
+    const latin1 = buffer.toString('latin1');
+    const parts: string[] = [];
+    const btBlocks = latin1.match(/BT[\s\S]*?ET/g) || [];
+    for (const block of btBlocks) {
+      const tj = block.match(/\(([^)]*)\)\s*Tj/g) || [];
+      for (const t of tj) { const m = t.match(/\(([^)]*)\)/); if (m?.[1]) parts.push(m[1]); }
+      const tjArr = block.match(/\[([^\]]*)\]\s*TJ/gi) || [];
+      for (const a of tjArr) {
+        const inner = a.match(/\(([^)]*)\)/g) || [];
+        for (const i of inner) { const m = i.match(/\(([^)]*)\)/); if (m?.[1]) parts.push(m[1]); }
+      }
+    }
+    if (parts.length < 10) {
+      const utf8 = buffer.toString('utf-8');
+      const readable = utf8.match(/[A-Za-z][A-Za-z0-9\s,.;:'\-\/()]{4,}/g) || [];
+      parts.push(...readable.filter(t => t.length > 8 && /[a-z]/.test(t)));
+    }
+    return parts.join(' ').replace(/\s+/g, ' ').trim();
+  } catch { return ''; }
+}
+
+// ─── Text Chunking ────────────────────────────────────────────────────────────
+
+function chunkText(text: string): string[] {
+  const chunks: string[] = [];
+  const paragraphs = text.split(/\n{2,}/);
+  let current = '';
+  for (const para of paragraphs) {
+    if (current.length + para.length > CHUNK_SIZE && current.length > 0) {
+      chunks.push(current.trim());
+      current = para;
+    } else {
+      current += (current ? '\n\n' : '') + para;
+    }
+  }
+  if (current.trim().length > 50) chunks.push(current.trim());
+  return chunks.length > 0 ? chunks : [text.substring(0, CHUNK_SIZE)];
+}
+
+// ─── Grok API Calls ───────────────────────────────────────────────────────────
+
+function getApiKey(): string {
+  return process.env.XAI_API_KEY || '';
+}
+
+async function analyzeChunkWithGrok4(
+  chunk: string,
+  chunkIdx: number,
+  totalChunks: number,
+  fileName: string
+): Promise<string> {
+  const apiKey = getApiKey();
+  if (!apiKey) throw new Error('XAI_API_KEY is not configured in environment variables.');
+
+  const response = await fetch('https://api.x.ai/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'grok-4',
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        {
+          role: 'user',
+          content: `Document: "${fileName}" | Chunk ${chunkIdx + 1} of ${totalChunks}\n\n${chunk}`,
+        },
+      ],
+      temperature: 0.1,
+      max_tokens: 4000,
+    }),
+  });
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`Grok 4 API error ${response.status}: ${err.substring(0, 200)}`);
+  }
+  const data = await response.json();
+  return data.choices?.[0]?.message?.content || '';
+}
+
 async function analyzeImageWithGrokVision(
   base64Data: string,
   mimeType: string,
   fileName: string
 ): Promise<string> {
-  const apiKey = getGrokApiKey();
-  if (!apiKey) return '';
+  const apiKey = getApiKey();
+  if (!apiKey) throw new Error('XAI_API_KEY is not configured in environment variables.');
 
-  try {
-    const response = await fetch('https://api.x.ai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'grok-2-vision-latest',
-        messages: [
-          {
-            role: 'system',
-            content: `You are a medical records analyst for Vet1Stop, a veteran resource platform. Your job is to carefully scan uploaded VA medical records and identify key findings relevant to VA disability claims.
+  const response = await fetch('https://api.x.ai/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'grok-2-vision-1212',
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: `Analyze this VA medical record image (${fileName}) for disability claim-relevant findings.` },
+            { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64Data}` } },
+          ],
+        },
+      ],
+      temperature: 0.1,
+      max_tokens: 4000,
+    }),
+  });
 
-CRITICAL: You are NOT providing medical advice. You are ONLY identifying relevant text, dates, conditions, and language patterns in the documents.
-
-For each finding, provide:
-1. The exact text excerpt
-2. Any dates mentioned nearby
-3. The relevant condition category
-4. Whether it contains claim-relevant language (e.g., "service-connected", "ruled out", "suspected", "secondary to")
-
-Look specifically for these types of flags:
-- Sleep apnea, tinnitus, hearing loss, migraines
-- PTSD markers, TBI indicators, depression/anxiety
-- Chronic pain, back/spine conditions, joint conditions
-- PACT Act presumptive conditions (burn pit, Agent Orange, Gulf War illness)
-- Cancer markers, respiratory conditions, heart conditions
-- "Service-connected", "ruled out", "suspected", "secondary to" language
-- Nexus language ("at least as likely as not", "more likely than not")
-- Aggravation language ("worsened", "aggravated", "exacerbated")
-
-Respond in JSON format:
-{
-  "findings": [
-    {
-      "excerpt": "exact text from document",
-      "condition": "condition name",
-      "category": "category",
-      "dateFound": "date if visible",
-      "claimLanguage": "any claim-relevant language found",
-      "confidence": "high|medium|low"
-    }
-  ],
-  "documentType": "type of document (progress note, lab report, etc.)",
-  "summary": "brief summary of what the document contains"
-}`
-          },
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: `Analyze this VA medical record document (${fileName}) for disability claim-relevant findings. Identify all conditions, claim language, and dates.`
-              },
-              {
-                type: 'image_url',
-                image_url: {
-                  url: `data:${mimeType};base64,${base64Data}`
-                }
-              }
-            ]
-          }
-        ],
-        temperature: 0.1,
-        max_tokens: 3000,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('[MedicalDetective] Grok Vision API error:', response.status, errorText);
-      return '';
-    }
-
-    const data = await response.json();
-    return data.choices?.[0]?.message?.content || '';
-  } catch (error) {
-    console.error('[MedicalDetective] Error calling Grok Vision:', error);
-    return '';
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`Grok Vision API error ${response.status}: ${err.substring(0, 200)}`);
   }
+  const data = await response.json();
+  return data.choices?.[0]?.message?.content || '';
 }
 
-// Call Grok AI for text-based NLP analysis
-async function analyzeTextWithGrokNLP(text: string, fileName: string): Promise<string> {
-  const apiKey = getGrokApiKey();
-  if (!apiKey) return '';
+// ─── Parse AI Text Output → FlaggedItems ─────────────────────────────────────
 
-  // Truncate text if too long (API limits)
-  const truncatedText = text.length > 15000 ? text.substring(0, 15000) + '...[truncated]' : text;
-
-  try {
-    const response = await fetch('https://api.x.ai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'grok-3-latest',
-        messages: [
-          {
-            role: 'system',
-            content: `You are a medical records text analyst for Vet1Stop, a veteran resource platform. Analyze the following extracted text from a VA medical record and identify all findings relevant to VA disability claims.
-
-CRITICAL: You are NOT providing medical advice. You are ONLY identifying relevant text patterns, dates, conditions, and language.
-
-Respond in JSON format:
-{
-  "findings": [
-    {
-      "excerpt": "exact text excerpt that is relevant",
-      "condition": "condition name",
-      "category": "category",
-      "dateFound": "date if found in text",
-      "claimLanguage": "any claim-relevant language",
-      "confidence": "high|medium|low"
-    }
-  ],
-  "documentType": "type of document",
-  "summary": "brief summary"
-}`
-          },
-          {
-            role: 'user',
-            content: `Analyze this extracted text from a VA medical record (${fileName}) for disability claim-relevant findings:\n\n${truncatedText}`
-          }
-        ],
-        temperature: 0.1,
-        max_tokens: 3000,
-      }),
-    });
-
-    if (!response.ok) {
-      console.error('[MedicalDetective] Grok NLP API error:', response.status);
-      return '';
-    }
-
-    const data = await response.json();
-    return data.choices?.[0]?.message?.content || '';
-  } catch (error) {
-    console.error('[MedicalDetective] Error calling Grok NLP:', error);
-    return '';
-  }
+function mapToCategory(label: string): string {
+  const l = label.toLowerCase();
+  if (l.includes('tinnitus') || l.includes('hearing')) return 'Hearing';
+  if (l.includes('ptsd') || l.includes('trauma') || l.includes('anxiety') || l.includes('depression') || l.includes('mental') || l.includes('panic') || l.includes('mst')) return 'Mental Health';
+  if (l.includes('sleep apnea') || l.includes('osa') || l.includes('cpap') || l.includes('somnolence')) return 'Sleep Disorders';
+  if (l.includes('migraine') || l.includes('headache') || l.includes('tbi') || l.includes('neurolog')) return 'Neurological';
+  if (l.includes('burn pit') || l.includes('pact') || l.includes('agent orange') || l.includes('gulf war') || l.includes('toxic') || l.includes('presumptive')) return 'PACT Act Presumptive';
+  if (l.includes('respirat') || l.includes('sinus') || l.includes('rhinitis') || l.includes('asthma') || l.includes('copd')) return 'Respiratory';
+  if (l.includes('gerd') || l.includes('gastro') || l.includes('ibs') || l.includes('digest')) return 'Gastrointestinal';
+  if (l.includes('back') || l.includes('knee') || l.includes('shoulder') || l.includes('musculo') || l.includes('arthritis') || l.includes('lumbar') || l.includes('spinal') || l.includes('joint')) return 'Musculoskeletal';
+  if (l.includes('service connect') || l.includes(' sc ') || l.includes('nexus') || l.includes('rated at') || l.includes('compensable')) return 'Claim Language';
+  if (l.includes('cancer') || l.includes('tumor') || l.includes('carcin')) return 'Oncological';
+  if (l.includes('heart') || l.includes('cardio') || l.includes('hypertens')) return 'Cardiovascular';
+  return 'Other';
 }
 
-// Local keyword-based scanning as fallback / supplement
-function scanTextForFlags(text: string): FlaggedItem[] {
-  const lowerText = text.toLowerCase();
+function parseAIOutput(rawText: string): FlaggedItem[] {
+  if (!rawText || rawText.includes('No strong claim-relevant evidence flags were identified')) return [];
+
   const items: FlaggedItem[] = [];
+  // Split on numbered list items like "1." "2." etc.
+  const blocks = rawText.split(/\n(?=\d+\.\s)/);
 
-  for (const flag of HIGH_VALUE_FLAGS) {
-    for (const keyword of flag.keywords) {
-      const index = lowerText.indexOf(keyword.toLowerCase());
-      if (index !== -1) {
-        // Extract surrounding context (100 chars before and after)
-        const start = Math.max(0, index - 100);
-        const end = Math.min(text.length, index + keyword.length + 100);
-        const excerpt = text.substring(index, Math.min(text.length, index + keyword.length + 50)).trim();
-        const context = text.substring(start, end).trim();
+  for (const block of blocks) {
+    const trimmed = block.trim();
+    if (!trimmed || !/^\d+\./.test(trimmed)) continue;
 
-        // Try to find a date near the keyword
-        const dateRegex = /\b(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}|\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2},?\s*\d{4})\b/gi;
-        const nearbyText = text.substring(Math.max(0, index - 200), Math.min(text.length, index + 200));
-        const dateMatch = nearbyText.match(dateRegex);
+    // Condition name: first line after stripping number
+    const firstLine = trimmed.split('\n')[0].replace(/^\d+\.\s*\*?\*?/, '').replace(/\*\*/g, '').trim();
+    if (!firstLine || firstLine.length < 3) continue;
 
-        items.push({
-          flagId: flag.id,
-          label: flag.label,
-          category: flag.category,
-          excerpt: excerpt,
-          context: context,
-          dateFound: dateMatch?.[0] || undefined,
-          suggestedClaimCategory: flag.category,
-          confidence: 'medium',
-        });
+    // Confidence
+    const confMatch = block.match(/[Cc]onfidence[:\s]+([Hh]igh|[Mm]edium|[Ll]ow)/);
+    const confidence = (confMatch?.[1]?.toLowerCase() || 'medium') as 'high' | 'medium' | 'low';
 
-        break; // Only flag once per flag type per text block
-      }
-    }
+    // Exact quote — look for quoted text
+    const quoteMatch = block.match(/(?:Exact [Qq]uote|[Qq]uote)[:\s]*[""'"']([^""'"']{5,})[""'"']/);
+    const excerpt = quoteMatch?.[1]?.trim() || '';
+
+    // Page number
+    const pageMatch = block.match(/[Pp]age(?:\s+[Nn]umber)?[:\s]+(\d+)/);
+    const pageNumber = pageMatch?.[1] || undefined;
+
+    // Date
+    const dateMatch = block.match(/[Dd]ate(?:\s+of\s+the\s+[Nn]ote)?[:\s]+([\w\/\-,\s]+?)(?:\n|,\s*[A-Z]|$)/);
+    const dateFound = dateMatch?.[1]?.trim().replace(/[,\s]+$/, '') || undefined;
+
+    // Relevance / context
+    const relMatch = block.match(/[Rr]elevance(?:\s+[Ee]xplanation)?[:\s]+(.+?)(?:\n|$)/);
+    const context = relMatch?.[1]?.trim() || firstLine;
+
+    const category = mapToCategory(firstLine);
+
+    items.push({
+      flagId: `${firstLine.toLowerCase().replace(/[^a-z0-9]/g, '_').substring(0, 30)}_${items.length}`,
+      label: firstLine,
+      category,
+      excerpt,
+      context,
+      dateFound,
+      pageNumber,
+      suggestedClaimCategory: category,
+      confidence,
+    });
   }
 
   return items;
 }
 
-// Parse AI response and merge with keyword scan results
-function parseAIFindings(aiResponse: string, keywordFlags: FlaggedItem[]): FlaggedItem[] {
-  const aiItems: FlaggedItem[] = [];
+// ─── Deduplication ────────────────────────────────────────────────────────────
 
-  try {
-    const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]);
-      const findings = parsed.findings || [];
-
-      for (const finding of findings) {
-        // Map finding to a known flag if possible
-        const matchedFlag = HIGH_VALUE_FLAGS.find(f =>
-          f.keywords.some(kw =>
-            finding.condition?.toLowerCase().includes(kw) ||
-            finding.excerpt?.toLowerCase().includes(kw) ||
-            finding.category?.toLowerCase().includes(f.category.toLowerCase())
-          )
-        );
-
-        aiItems.push({
-          flagId: matchedFlag?.id || finding.condition?.toLowerCase().replace(/\s+/g, '_') || 'unknown',
-          label: matchedFlag?.label || finding.condition || 'Unclassified Finding',
-          category: matchedFlag?.category || finding.category || 'Other',
-          excerpt: finding.excerpt || '',
-          context: finding.claimLanguage ? `${finding.excerpt} — ${finding.claimLanguage}` : finding.excerpt || '',
-          dateFound: finding.dateFound || undefined,
-          suggestedClaimCategory: matchedFlag?.category || finding.category || 'Other',
-          confidence: finding.confidence || 'medium',
-        });
-      }
-    }
-  } catch (error) {
-    console.warn('[MedicalDetective] Error parsing AI findings:', error);
+function deduplicateFlags(items: FlaggedItem[]): FlaggedItem[] {
+  const seen = new Map<string, FlaggedItem>();
+  for (const item of items) {
+    const key = item.label.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 20);
+    const existing = seen.get(key);
+    if (!existing || item.confidence === 'high') seen.set(key, item);
   }
-
-  // Merge: AI findings take priority, add keyword-only findings that AI missed
-  const aiIds = new Set(aiItems.map(i => i.flagId));
-  const uniqueKeywordFlags = keywordFlags.filter(kf => !aiIds.has(kf.flagId));
-
-  return [...aiItems, ...uniqueKeywordFlags];
+  return Array.from(seen.values());
 }
 
-const DISCLAIMER = `IMPORTANT DISCLAIMER: This report is strictly for informational purposes only. It is NOT medical advice, legal advice, or a substitute for professional guidance. Vet1Stop does not diagnose conditions, file claims, or provide medical opinions. This tool identifies potential patterns in YOUR OWN uploaded documents to help you have informed conversations with your VSO (Veterans Service Organization) or healthcare provider. No files are stored — all uploaded documents are automatically deleted immediately after processing. Zero HIPAA exposure.`;
+// ─── Report Builder ───────────────────────────────────────────────────────────
+
+function buildReport(flags: FlaggedItem[], filesProcessed: number, processingTime: number): DetectiveReport {
+  return {
+    disclaimer: DISCLAIMER,
+    summary: flags.length > 0
+      ? `${flags.length} potential claim-relevant flag(s) identified across ${filesProcessed} document(s). Review with your VSO or accredited claims representative.`
+      : `No strong claim-relevant flags were identified in the ${filesProcessed} document(s) processed. This does not mean there are no valid claims — consider uploading additional records, progress notes, or screenshots for a more thorough scan.`,
+    totalFlagsFound: flags.length,
+    flaggedItems: flags,
+    suggestedNextSteps: flags.length > 0
+      ? [
+          'Review this report with an accredited VSO (Veterans Service Organization) representative',
+          'Request a nexus letter from your healthcare provider for flagged conditions',
+          'Contact your local VA Regional Office to file or supplement a disability claim',
+          'Gather supporting buddy statements and service records for flagged conditions',
+          'Visit va.gov/disability to file online or call 1-800-827-1000',
+        ]
+      : [
+          'Upload additional VA records, progress notes, or Blue Button exports for a more thorough scan',
+          'Contact a free VSO (American Legion, DAV, VFW) — they can review your records in person',
+          'Request your full C-file from the VA by submitting VA Form 3288',
+          'Visit va.gov/disability for information on filing a claim',
+        ],
+    processingDetails: { filesProcessed, processingTime, aiModel: 'xAI Grok 4 / Grok Vision' },
+  };
+}
+
+// ─── Streaming POST Handler ───────────────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
+  const encoder = new TextEncoder();
 
-  try {
-    // Parse multipart or JSON body
-    const body: DetectiveRequest = await request.json();
-    const { files } = body;
+  const stream = new ReadableStream({
+    async start(controller) {
+      const emit = (event: object) => {
+        try { controller.enqueue(encoder.encode(JSON.stringify(event) + '\n')); } catch { /* closed */ }
+      };
 
-    if (!files || files.length === 0) {
-      return NextResponse.json(
-        { error: 'No files provided' },
-        { status: 400 }
-      );
-    }
+      try {
+        const body = await request.json();
+        const files: FilePayload[] = body.files || [];
 
-    // Validate file sizes (max 10MB per file)
-    const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
-    for (const file of files) {
-      if (file.size > MAX_FILE_SIZE) {
-        return NextResponse.json(
-          { error: `File "${file.name}" exceeds maximum size of 10MB` },
-          { status: 400 }
-        );
-      }
-    }
+        if (files.length === 0) {
+          emit({ type: 'error', message: 'No files provided.' });
+          controller.close();
+          return;
+        }
 
-    const allFlaggedItems: FlaggedItem[] = [];
-    let filesProcessed = 0;
-
-    for (const file of files) {
-      filesProcessed++;
-      const isImage = file.type.startsWith('image/');
-      const isPDF = file.type === 'application/pdf';
-
-      if (isImage) {
-        // Use Grok Vision for images
-        const aiResponse = await analyzeImageWithGrokVision(file.data, file.type, file.name);
-        
-        // Also do keyword scan on any text in the image response
-        const keywordFlags = aiResponse ? scanTextForFlags(aiResponse) : [];
-        const findings = aiResponse ? parseAIFindings(aiResponse, keywordFlags) : keywordFlags;
-        allFlaggedItems.push(...findings);
-
-      } else if (isPDF) {
-        // Extract text from PDF
-        const extractedText = extractTextFromPDF(file.data);
-        
-        if (extractedText.length > 50) {
-          // Good text extraction — use NLP analysis
-          const aiResponse = await analyzeTextWithGrokNLP(extractedText, file.name);
-          const keywordFlags = scanTextForFlags(extractedText);
-          const findings = aiResponse ? parseAIFindings(aiResponse, keywordFlags) : keywordFlags;
-          allFlaggedItems.push(...findings);
-        } else {
-          // Poor text extraction — try as image (some PDFs are scanned)
-          // Inform user that screenshot upload may be better for scanned PDFs
-          const keywordFlags = scanTextForFlags(extractedText);
-          if (keywordFlags.length > 0) {
-            allFlaggedItems.push(...keywordFlags);
+        // Validate file sizes
+        for (const f of files) {
+          if (f.size > 25 * 1024 * 1024) {
+            emit({ type: 'error', message: `"${f.name}" exceeds 25MB limit.` });
+            controller.close();
+            return;
           }
         }
+
+        emit({ type: 'progress', message: 'Starting analysis...', percent: 2 });
+
+        // Phase 1: Extract text from all files
+        type FileInfo = { name: string; chunks: string[]; numPages: number; isImage: boolean; imageData?: string; imageMime?: string };
+        const fileInfos: FileInfo[] = [];
+        let totalChunks = 0;
+
+        for (let fi = 0; fi < files.length; fi++) {
+          const file = files[fi];
+          emit({ type: 'progress', message: `Extracting text from "${file.name}"...`, percent: 5 + (fi / files.length) * 15 });
+
+          if (file.type.startsWith('image/')) {
+            // Images processed via Grok Vision — one "chunk"
+            fileInfos.push({ name: file.name, chunks: ['__IMAGE__'], numPages: 1, isImage: true, imageData: file.data, imageMime: file.type });
+            totalChunks += 1;
+          } else if (file.type === 'application/pdf') {
+            const { text, numPages } = await extractPDFData(file.data);
+            file.data = ''; // clear raw data immediately
+            const chunks = chunkText(text);
+            fileInfos.push({ name: file.name, chunks, numPages, isImage: false });
+            totalChunks += chunks.length;
+            emit({ type: 'file_ready', fileName: file.name, numPages, numChunks: chunks.length });
+          }
+        }
+
+        // Phase 2: Analyze each chunk
+        const allFlags: FlaggedItem[] = [];
+        let processedChunks = 0;
+
+        for (const info of fileInfos) {
+          for (let ci = 0; ci < info.chunks.length; ci++) {
+            processedChunks++;
+            const percent = Math.round(20 + (processedChunks / totalChunks) * 72);
+
+            emit({
+              type: 'chunk_start',
+              chunk: ci + 1,
+              totalChunks: info.chunks.length,
+              fileName: info.name,
+              message: info.isImage
+                ? `Analyzing image "${info.name}"...`
+                : `Analyzing chunk ${ci + 1} of ${info.chunks.length} from "${info.name}"...`,
+              percent,
+            });
+
+            let rawOutput = '';
+            if (info.isImage && info.imageData && info.imageMime) {
+              rawOutput = await analyzeImageWithGrokVision(info.imageData, info.imageMime, info.name);
+              info.imageData = ''; // clear immediately
+            } else {
+              rawOutput = await analyzeChunkWithGrok4(info.chunks[ci], ci, info.chunks.length, info.name);
+            }
+
+            const flags = parseAIOutput(rawOutput);
+            allFlags.push(...flags);
+
+            emit({ type: 'chunk_complete', chunk: ci + 1, totalChunks: info.chunks.length, flagsInChunk: flags.length });
+          }
+        }
+
+        // Phase 3: Build final report
+        emit({ type: 'progress', message: 'Building your evidence report...', percent: 96 });
+        const deduped = deduplicateFlags(allFlags);
+        const report = buildReport(deduped, files.length, Date.now() - startTime);
+        emit({ type: 'complete', report, percent: 100 });
+
+      } catch (err) {
+        console.error('[MedicalDetective] Stream error:', err);
+        emit({ type: 'error', message: (err as Error).message || 'Processing failed. Please try again.' });
+      } finally {
+        controller.close();
       }
+    },
+  });
 
-      // IMMEDIATELY clear file data from memory (ephemeral processing)
-      file.data = '';
-    }
-
-    // Deduplicate flags by flagId
-    const deduped = new Map<string, FlaggedItem>();
-    for (const item of allFlaggedItems) {
-      const existing = deduped.get(item.flagId);
-      if (!existing || item.confidence === 'high') {
-        deduped.set(item.flagId, item);
-      }
-    }
-
-    const flaggedItems = Array.from(deduped.values());
-    const processingTime = Date.now() - startTime;
-
-    // Build the report
-    const report: DetectiveReport = {
-      disclaimer: DISCLAIMER,
-      summary: flaggedItems.length > 0
-        ? `We identified ${flaggedItems.length} potential flag(s) across ${filesProcessed} document(s) that may be relevant to VA disability claims. Review these findings with your VSO or healthcare provider.`
-        : `No specific claim-relevant flags were identified in the ${filesProcessed} document(s) processed. This does not mean there are no valid claims — consider uploading additional records or screenshots for a more thorough scan.`,
-      totalFlagsFound: flaggedItems.length,
-      flaggedItems: flaggedItems,
-      suggestedNextSteps: [
-        'Review this report with a Veterans Service Organization (VSO) representative',
-        'Contact your local VA Regional Office for claims assistance',
-        'Gather additional medical evidence to support identified conditions',
-        'Request a nexus letter from your healthcare provider if applicable',
-        'Consider filing or supplementing a VA disability claim',
-      ],
-      processingDetails: {
-        filesProcessed,
-        processingTime,
-        aiModel: 'Grok Vision + NLP (xAI)',
-      },
-    };
-
-    return NextResponse.json(report);
-
-  } catch (error) {
-    console.error('[MedicalDetective] Error:', error);
-    return NextResponse.json(
-      { error: 'Failed to process medical records', message: (error as Error).message },
-      { status: 500 }
-    );
-  }
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'application/x-ndjson',
+      'Cache-Control': 'no-cache',
+      'X-Content-Type-Options': 'nosniff',
+    },
+  });
 }

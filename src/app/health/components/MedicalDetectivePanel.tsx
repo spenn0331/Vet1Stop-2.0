@@ -6,12 +6,12 @@ import {
   CloudArrowUpIcon,
   ExclamationTriangleIcon,
   DocumentArrowDownIcon,
-  TrashIcon,
   CheckCircleIcon,
   XMarkIcon,
   ShieldExclamationIcon,
   ArrowRightIcon,
   FlagIcon,
+  InformationCircleIcon,
 } from '@heroicons/react/24/outline';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -22,7 +22,6 @@ interface UploadedFile {
   name: string;
   type: string;
   size: number;
-  preview?: string;
 }
 
 interface FlaggedItem {
@@ -32,6 +31,7 @@ interface FlaggedItem {
   excerpt: string;
   context: string;
   dateFound?: string;
+  pageNumber?: string;
   suggestedClaimCategory: string;
   confidence: 'high' | 'medium' | 'low';
 }
@@ -49,18 +49,15 @@ interface DetectiveReport {
   };
 }
 
-type PanelState = 'upload' | 'processing' | 'results' | 'error';
+type PanelState = 'upload' | 'processing' | 'results' | 'no_flags' | 'error';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const ACCEPTED_TYPES = [
-  'image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif',
-  'application/pdf',
-];
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
-const MAX_FILES = 10;
+const ACCEPTED_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'application/pdf'];
+const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB
+const MAX_FILES = 5;
 
-const DISCLAIMER_TEXT = `IMPORTANT: This tool is strictly for informational purposes only. It is NOT medical or legal advice. Vet1Stop does not diagnose conditions, file claims, or provide medical opinions. This tool identifies potential patterns in YOUR OWN uploaded documents. No files are permanently stored — all uploaded documents are automatically deleted immediately after processing. Zero HIPAA exposure.`;
+const DISCLAIMER_TEXT = `This report is for informational purposes only and does not constitute medical or legal advice. This tool does not file claims. Please share this report with your accredited VSO or claims representative for professional review.`;
 
 const CATEGORY_COLORS: Record<string, string> = {
   'Sleep Disorders': 'bg-indigo-100 text-indigo-800',
@@ -88,23 +85,18 @@ export default function MedicalDetectivePanel() {
   const [report, setReport] = useState<DetectiveReport | null>(null);
   const [error, setError] = useState<string>('');
   const [progress, setProgress] = useState(0);
+  const [progressMsg, setProgressMsg] = useState('Starting...');
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Convert file to base64
-  const fileToBase64 = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
+  const fileToBase64 = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload = () => {
-        const result = reader.result as string;
-        // Remove the data URL prefix to get pure base64
-        const base64 = result.split(',')[1];
-        resolve(base64);
-      };
+      reader.onload = () => resolve((reader.result as string).split(',')[1]);
       reader.onerror = reject;
       reader.readAsDataURL(file);
     });
-  };
 
   // Handle file selection
   const handleFileSelect = useCallback((selectedFiles: FileList | null) => {
@@ -170,170 +162,187 @@ export default function MedicalDetectivePanel() {
     setError('');
   };
 
-  // Process files
+  // Process files — streaming NDJSON fetch
   const handleScan = async () => {
     if (files.length === 0) return;
 
     setPanelState('processing');
     setProgress(0);
+    setProgressMsg('Preparing files...');
     setError('');
 
     try {
       // Convert all files to base64
       const fileData = [];
       for (let i = 0; i < files.length; i++) {
-        setProgress(Math.round(((i + 0.5) / files.length) * 40));
+        setProgressMsg(`Reading file ${i + 1} of ${files.length}: "${files[i].name}"...`);
+        setProgress(Math.round(((i + 0.5) / files.length) * 10));
         const base64 = await fileToBase64(files[i].file);
-        fileData.push({
-          name: files[i].name,
-          type: files[i].type,
-          data: base64,
-          size: files[i].size,
-        });
+        fileData.push({ name: files[i].name, type: files[i].type, data: base64, size: files[i].size });
       }
 
-      setProgress(50);
+      setProgressMsg('Uploading to analysis engine...');
+      setProgress(12);
 
-      // Send to API
       const response = await fetch('/api/health/medical-detective', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ files: fileData }),
       });
 
-      setProgress(80);
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Processing failed');
+      if (!response.ok || !response.body) {
+        const text = await response.text();
+        throw new Error(text || 'Server error. Please try again.');
       }
 
-      const data: DetectiveReport = await response.json();
-      setReport(data);
-      setProgress(100);
+      // Read streaming NDJSON response
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
 
-      // Clear files from memory (ephemeral processing)
-      setFiles([]);
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
 
-      setPanelState('results');
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const event = JSON.parse(line);
+            if (event.type === 'progress') {
+              setProgressMsg(event.message || '');
+              setProgress(event.percent ?? progress);
+            } else if (event.type === 'file_ready') {
+              setProgressMsg(`"${event.fileName}" ready — ${event.numPages} page(s), ${event.numChunks} chunk(s) to analyze`);
+            } else if (event.type === 'chunk_start') {
+              setProgressMsg(event.message || `Analyzing chunk ${event.chunk} of ${event.totalChunks}...`);
+              setProgress(event.percent ?? progress);
+            } else if (event.type === 'chunk_complete') {
+              // progress bar already updated by chunk_start
+            } else if (event.type === 'complete') {
+              const r: DetectiveReport = event.report;
+              setReport(r);
+              setProgress(100);
+              setFiles([]); // clear from memory
+              setPanelState(r.totalFlagsFound > 0 ? 'results' : 'no_flags');
+              return;
+            } else if (event.type === 'error') {
+              throw new Error(event.message || 'Processing failed.');
+            }
+          } catch (parseErr) {
+            // Ignore malformed lines
+          }
+        }
+      }
     } catch (err) {
-      console.error('Medical Detective error:', err);
-      setError((err as Error).message || 'An error occurred during processing. Please try again.');
+      console.error('[MedicalDetective]', err);
+      setError((err as Error).message || 'An error occurred. Please try again.');
       setPanelState('error');
     }
   };
 
-  // Generate printable report
+  // Generate printable HTML report (user prints to PDF via browser)
   const handleDownloadReport = () => {
     if (!report) return;
-
-    const reportHtml = `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Vet1Stop Personal Evidence Report</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 40px; color: #1F2937; line-height: 1.6; }
-    .header { text-align: center; margin-bottom: 30px; border-bottom: 3px solid #1A2C5B; padding-bottom: 20px; }
-    .header h1 { color: #1A2C5B; font-size: 24px; margin-bottom: 5px; }
-    .header p { color: #6B7280; font-size: 12px; }
-    .disclaimer { background: #FEF3C7; border: 1px solid #F59E0B; border-radius: 8px; padding: 15px; margin-bottom: 25px; font-size: 11px; color: #92400E; }
-    .disclaimer strong { display: block; margin-bottom: 5px; font-size: 12px; }
-    .summary { background: #EFF6FF; border-radius: 8px; padding: 15px; margin-bottom: 25px; }
-    .summary h2 { color: #1A2C5B; font-size: 16px; margin-bottom: 8px; }
-    .flag-section { margin-bottom: 20px; }
-    .flag-section h2 { color: #1A2C5B; font-size: 18px; margin-bottom: 15px; border-bottom: 1px solid #E5E7EB; padding-bottom: 5px; }
-    .flag-item { border: 1px solid #E5E7EB; border-radius: 8px; padding: 15px; margin-bottom: 12px; page-break-inside: avoid; }
-    .flag-item.high { border-left: 4px solid #1A2C5B; }
-    .flag-item.medium { border-left: 4px solid #F59E0B; }
-    .flag-item.low { border-left: 4px solid #9CA3AF; }
-    .flag-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-    .flag-label { font-weight: 700; color: #1A2C5B; font-size: 14px; }
-    .flag-category { background: #F3F4F6; padding: 2px 8px; border-radius: 4px; font-size: 11px; color: #4B5563; }
-    .flag-excerpt { background: #FFFBEB; padding: 10px; border-radius: 4px; font-size: 12px; color: #92400E; margin-bottom: 8px; font-style: italic; }
-    .flag-meta { font-size: 11px; color: #6B7280; }
-    .next-steps { background: #F0FDF4; border-radius: 8px; padding: 15px; margin-top: 25px; }
-    .next-steps h2 { color: #166534; font-size: 16px; margin-bottom: 10px; }
-    .next-steps ol { padding-left: 20px; }
-    .next-steps li { margin-bottom: 5px; font-size: 13px; }
-    .footer { margin-top: 30px; text-align: center; font-size: 10px; color: #9CA3AF; border-top: 1px solid #E5E7EB; padding-top: 15px; }
-    @media print { body { padding: 20px; } .no-print { display: none; } }
-  </style>
-</head>
-<body>
-  <div class="header">
-    <h1>Vet1Stop Personal Evidence Report</h1>
-    <p>Generated: ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
-    <p>Files Processed: ${report.processingDetails.filesProcessed} | Flags Found: ${report.totalFlagsFound}</p>
-  </div>
-
-  <div class="disclaimer">
-    <strong>⚠ IMPORTANT DISCLAIMER</strong>
-    ${DISCLAIMER_TEXT}
-  </div>
-
-  <div class="summary">
-    <h2>Summary</h2>
-    <p>${report.summary}</p>
-  </div>
-
-  <div class="flag-section">
-    <h2>Flagged Findings (${report.totalFlagsFound})</h2>
-    ${report.flaggedItems.map(item => `
+    const date = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const flagRows = report.flaggedItems.map((item, i) => `
       <div class="flag-item ${item.confidence}">
         <div class="flag-header">
+          <span class="flag-num">${i + 1}.</span>
           <span class="flag-label">${item.label}</span>
-          <span class="flag-category">${item.category}</span>
+          <span class="flag-badge">${item.category}</span>
+          <span class="conf-badge conf-${item.confidence}">${item.confidence.toUpperCase()}</span>
         </div>
-        ${item.excerpt ? `<div class="flag-excerpt">"${item.excerpt}"</div>` : ''}
+        ${item.excerpt ? `<div class="flag-quote">&ldquo;${item.excerpt}&rdquo;</div>` : ''}
         <div class="flag-meta">
-          ${item.dateFound ? `Date Found: ${item.dateFound} | ` : ''}
-          Suggested Claim Category: ${item.suggestedClaimCategory} |
-          Confidence: ${item.confidence.charAt(0).toUpperCase() + item.confidence.slice(1)}
+          ${item.dateFound ? `<span>📅 Date: <strong>${item.dateFound}</strong></span>` : ''}
+          ${item.pageNumber ? `<span>📄 Page: <strong>${item.pageNumber}</strong></span>` : ''}
+          <span>Category: <strong>${item.suggestedClaimCategory}</strong></span>
         </div>
-      </div>
-    `).join('')}
-  </div>
+        ${item.context && item.context !== item.label ? `<div class="flag-context">${item.context}</div>` : ''}
+      </div>`).join('');
 
-  <div class="next-steps">
-    <h2>Suggested Next Steps</h2>
-    <ol>
-      ${report.suggestedNextSteps.map(step => `<li>${step}</li>`).join('')}
-    </ol>
-  </div>
+    const html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
+<title>Vet1Stop Personal Evidence Report — ${date}</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',sans-serif;padding:40px;color:#1F2937;line-height:1.6}
+.header{text-align:center;border-bottom:3px solid #1A2C5B;padding-bottom:18px;margin-bottom:22px}
+.header h1{color:#1A2C5B;font-size:22px}
+.header p{color:#6B7280;font-size:11px;margin-top:4px}
+.disclaimer{background:#FEF3C7;border:2px solid #F59E0B;border-radius:8px;padding:14px;margin-bottom:22px;font-size:11px;color:#92400E}
+.disclaimer strong{display:block;font-size:13px;margin-bottom:5px}
+.summary{background:#EFF6FF;border-radius:8px;padding:14px;margin-bottom:22px}
+.summary h2{color:#1A2C5B;font-size:15px;margin-bottom:6px}
+.flag-section h2{color:#1A2C5B;font-size:17px;margin-bottom:14px;border-bottom:1px solid #E5E7EB;padding-bottom:5px}
+.flag-item{border:1px solid #E5E7EB;border-radius:8px;padding:14px;margin-bottom:10px;page-break-inside:avoid}
+.flag-item.high{border-left:4px solid #1A2C5B}
+.flag-item.medium{border-left:4px solid #F59E0B}
+.flag-item.low{border-left:4px solid #9CA3AF}
+.flag-header{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px}
+.flag-num{color:#6B7280;font-size:13px}
+.flag-label{font-weight:700;color:#1A2C5B;font-size:14px;flex:1}
+.flag-badge{background:#F3F4F6;padding:2px 8px;border-radius:4px;font-size:10px;color:#4B5563}
+.conf-badge{padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700}
+.conf-high{background:#DBEAFE;color:#1E40AF}
+.conf-medium{background:#FEF3C7;color:#92400E}
+.conf-low{background:#F3F4F6;color:#6B7280}
+.flag-quote{background:#FFFBEB;border-left:3px solid #F59E0B;padding:8px 12px;border-radius:4px;font-size:12px;color:#92400E;font-style:italic;margin-bottom:7px}
+.flag-meta{font-size:11px;color:#6B7280;display:flex;flex-wrap:wrap;gap:12px}
+.flag-context{font-size:11px;color:#374151;margin-top:6px;padding:6px 10px;background:#F9FAFB;border-radius:4px}
+.next-steps{background:#F0FDF4;border-radius:8px;padding:14px;margin-top:22px}
+.next-steps h2{color:#166534;font-size:15px;margin-bottom:8px}
+.next-steps ol{padding-left:20px}
+.next-steps li{font-size:12px;margin-bottom:4px}
+.footer{margin-top:28px;text-align:center;font-size:10px;color:#9CA3AF;border-top:1px solid #E5E7EB;padding-top:14px}
+.no-print{text-align:center;margin-top:20px}
+@media print{.no-print{display:none}body{padding:20px}}
+</style></head><body>
+<div class="header">
+  <h1>🔍 Vet1Stop Personal Evidence Report</h1>
+  <p>Generated: ${date} | Files Processed: ${report.processingDetails.filesProcessed} | Flags Found: ${report.totalFlagsFound}</p>
+  <p>Analyzed by: ${report.processingDetails.aiModel} | Processing Time: ${(report.processingDetails.processingTime / 1000).toFixed(1)}s</p>
+</div>
+<div class="disclaimer">
+  <strong>⚠ IMPORTANT DISCLAIMER</strong>
+  ${DISCLAIMER_TEXT}
+</div>
+<div class="summary"><h2>Summary</h2><p>${report.summary}</p></div>
+<div class="flag-section">
+  <h2>Flagged Findings (${report.totalFlagsFound})</h2>
+  ${flagRows || '<p style="color:#6B7280;font-size:13px">No flags identified.</p>'}
+</div>
+<div class="next-steps">
+  <h2>Suggested Next Steps</h2>
+  <ol>${report.suggestedNextSteps.map(s => `<li>${s}</li>`).join('')}</ol>
+</div>
+<div class="footer">
+  <p>Generated by Vet1Stop Medical Detective — for informational purposes only.</p>
+  <p><strong>This is NOT medical or legal advice.</strong> Share with your VSO or accredited claims representative.</p>
+  <p>No files were stored. Zero HIPAA exposure.</p>
+</div>
+<div class="no-print">
+  <button onclick="window.print()" style="padding:10px 28px;background:#1A2C5B;color:white;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-weight:600">
+    Print / Save as PDF
+  </button>
+</div>
+</body></html>`;
 
-  <div class="footer">
-    <p>This report was generated by Vet1Stop Medical Detective (Phase 1) for informational purposes only.</p>
-    <p>It is NOT medical or legal advice. Share this report with your VSO or healthcare provider.</p>
-    <p>No files were stored during this process. Zero HIPAA exposure.</p>
-  </div>
-
-  <div class="no-print" style="text-align:center; margin-top:20px;">
-    <button onclick="window.print()" style="padding:10px 30px; background:#1A2C5B; color:white; border:none; border-radius:6px; cursor:pointer; font-size:14px;">
-      Print / Save as PDF
-    </button>
-  </div>
-</body>
-</html>`;
-
-    const blob = new Blob([reportHtml], { type: 'text/html' });
+    const blob = new Blob([html], { type: 'text/html' });
     const url = URL.createObjectURL(blob);
-    const newWindow = window.open(url, '_blank');
-    if (newWindow) {
-      newWindow.onload = () => {
-        URL.revokeObjectURL(url);
-      };
-    }
+    const win = window.open(url, '_blank');
+    if (win) win.onload = () => URL.revokeObjectURL(url);
   };
 
-  // Reset
+  // Reset to upload state
   const handleReset = () => {
     setFiles([]);
     setReport(null);
     setError('');
     setProgress(0);
+    setProgressMsg('Starting...');
     setPanelState('upload');
   };
 
@@ -346,15 +355,14 @@ export default function MedicalDetectivePanel() {
 
   return (
     <div className="max-w-4xl mx-auto">
-      {/* Bold Disclaimer - Always visible */}
-      <div className="bg-amber-50 border-2 border-amber-300 rounded-lg p-4 mb-6">
+
+      {/* ── Bold Disclaimer — always visible ── */}
+      <div className="bg-amber-50 border-2 border-amber-400 rounded-lg p-4 mb-6">
         <div className="flex items-start gap-3">
           <ShieldExclamationIcon className="h-6 w-6 text-amber-600 flex-shrink-0 mt-0.5" />
           <div>
-            <p className="text-sm text-amber-900 font-bold mb-1">Not Medical or Legal Advice</p>
-            <p className="text-xs text-amber-800 leading-relaxed">
-              {DISCLAIMER_TEXT}
-            </p>
+            <p className="text-sm font-bold text-amber-900 mb-1">⚠ Not Medical or Legal Advice</p>
+            <p className="text-xs text-amber-800 leading-relaxed font-semibold">{DISCLAIMER_TEXT}</p>
           </div>
         </div>
       </div>
@@ -394,7 +402,7 @@ export default function MedicalDetectivePanel() {
               Drop files here or click to upload
             </p>
             <p className="text-sm text-gray-500">
-              PDF, PNG, JPG — Max 10MB per file, up to {MAX_FILES} files
+              PDF, PNG, JPG — Max 25MB per file, up to {MAX_FILES} files
             </p>
             <p className="text-xs text-gray-400 mt-2">
               VA Blue Button exports, medical records, progress notes, lab results
@@ -467,28 +475,30 @@ export default function MedicalDetectivePanel() {
 
       {/* ─── Processing State ─── */}
       {panelState === 'processing' && (
-        <div className="text-center py-12">
-          <div className="relative w-24 h-24 mx-auto mb-6">
-            <svg className="animate-spin" viewBox="0 0 100 100">
-              <circle cx="50" cy="50" r="45" fill="none" stroke="#E5E7EB" strokeWidth="6" />
-              <circle
-                cx="50" cy="50" r="45" fill="none" stroke="#1A2C5B" strokeWidth="6"
-                strokeDasharray={`${progress * 2.83} 283`}
-                strokeLinecap="round"
-                transform="rotate(-90 50 50)"
-                className="transition-all duration-300"
+        <div className="py-10">
+          <h3 className="text-xl font-bold text-[#1A2C5B] text-center mb-6">
+            Scanning Your Records...
+          </h3>
+
+          {/* Progress bar */}
+          <div className="mb-4">
+            <div className="flex justify-between text-xs text-gray-500 mb-1">
+              <span className="font-medium truncate max-w-xs">{progressMsg}</span>
+              <span className="font-bold text-[#1A2C5B] ml-2">{progress}%</span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+              <div
+                className="bg-[#1A2C5B] h-3 rounded-full transition-all duration-500 ease-out"
+                style={{ width: `${progress}%` }}
               />
-            </svg>
-            <span className="absolute inset-0 flex items-center justify-center text-lg font-bold text-[#1A2C5B]">
-              {progress}%
-            </span>
+            </div>
           </div>
-          <h3 className="text-xl font-bold text-[#1A2C5B] mb-2">Scanning Your Records...</h3>
-          <p className="text-gray-600 text-sm max-w-md mx-auto">
-            AI is analyzing your documents for claim-relevant evidence flags. This may take a moment.
+
+          <p className="text-xs text-gray-400 text-center mt-4">
+            Grok 4 is analyzing your documents chunk by chunk for claim-relevant evidence. Large PDFs may take 1–2 minutes.
           </p>
-          <p className="text-xs text-gray-400 mt-4">
-            Files are being processed in memory only — never stored permanently.
+          <p className="text-xs text-gray-400 text-center mt-1">
+            Files are processed in memory only — never stored permanently.
           </p>
         </div>
       )}
@@ -498,91 +508,113 @@ export default function MedicalDetectivePanel() {
         <div className="text-center py-12">
           <ExclamationTriangleIcon className="h-16 w-16 text-red-400 mx-auto mb-4" />
           <h3 className="text-xl font-bold text-gray-800 mb-2">Processing Error</h3>
-          <p className="text-gray-600 mb-6">{error || 'Something went wrong. Please try again.'}</p>
-          <button
-            onClick={handleReset}
-            className="inline-flex items-center px-6 py-3 rounded-lg bg-[#1A2C5B] text-white font-semibold hover:bg-[#0F1D3D] transition-colors"
-          >
+          <p className="text-gray-600 mb-6 text-sm max-w-md mx-auto">{error || 'Something went wrong. Please try again.'}</p>
+          <button onClick={handleReset} className="inline-flex items-center px-6 py-3 rounded-lg bg-[#1A2C5B] text-white font-semibold hover:bg-[#0F1D3D] transition-colors">
             Try Again
           </button>
+        </div>
+      )}
+
+      {/* ─── No Flags Found State ─── */}
+      {panelState === 'no_flags' && report && (
+        <div>
+          <div className="bg-gray-50 border border-gray-200 rounded-xl p-6 text-center mb-6">
+            <InformationCircleIcon className="h-14 w-14 text-gray-400 mx-auto mb-3" />
+            <h3 className="text-lg font-bold text-gray-700 mb-2">No Strong Claim-Relevant Flags Identified</h3>
+            <p className="text-sm text-gray-600 max-w-lg mx-auto mb-4">
+              The AI did not find strong evidence flags in the uploaded document(s). This does <strong>not</strong> mean there are no valid claims — it may mean additional records are needed.
+            </p>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-left mb-4">
+              <p className="text-sm font-semibold text-[#1A2C5B] mb-2">What to try next:</p>
+              <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
+                <li>Upload your VA Blue Button report (includes all VA visits)</li>
+                <li>Upload individual progress notes, radiology reports, or C&amp;P exam results</li>
+                <li>Upload discharge documents or separation physical results</li>
+                <li>Contact a free VSO (DAV, VFW, American Legion) for a hands-on records review</li>
+              </ul>
+            </div>
+            <p className="text-xs text-gray-500">
+              Processed {report.processingDetails.filesProcessed} file(s) in {(report.processingDetails.processingTime / 1000).toFixed(1)}s using {report.processingDetails.aiModel}
+            </p>
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-3">
+            <button onClick={handleReset} className="flex-1 inline-flex items-center justify-center px-6 py-3 rounded-lg bg-[#1A2C5B] text-white font-semibold hover:bg-[#0F1D3D] transition-colors">
+              <CloudArrowUpIcon className="mr-2 h-5 w-5" />
+              Upload Different Records
+            </button>
+            <a href="https://www.va.gov/vso/" target="_blank" rel="noopener noreferrer"
+              className="flex-1 inline-flex items-center justify-center px-6 py-3 rounded-lg bg-[#EAB308] text-[#1A2C5B] font-semibold hover:bg-[#FACC15] transition-colors">
+              Find a Free VSO
+              <ArrowRightIcon className="ml-2 h-5 w-5" />
+            </a>
+          </div>
         </div>
       )}
 
       {/* ─── Results State ─── */}
       {panelState === 'results' && report && (
         <div>
-          {/* Summary */}
+          {/* Summary banner */}
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
             <div className="flex items-start gap-3">
               <CheckCircleIcon className="h-6 w-6 text-green-600 flex-shrink-0 mt-0.5" />
               <div>
-                <h4 className="font-semibold text-[#1A2C5B] mb-1">Scan Complete</h4>
+                <h4 className="font-semibold text-[#1A2C5B] mb-1">Scan Complete — {report.totalFlagsFound} Flag(s) Found</h4>
                 <p className="text-sm text-gray-700">{report.summary}</p>
                 <p className="text-xs text-gray-500 mt-1">
-                  Processed {report.processingDetails.filesProcessed} file(s) in {(report.processingDetails.processingTime / 1000).toFixed(1)}s
+                  {report.processingDetails.filesProcessed} file(s) · {(report.processingDetails.processingTime / 1000).toFixed(1)}s · {report.processingDetails.aiModel}
                 </p>
               </div>
             </div>
           </div>
 
           {/* Flagged Items */}
-          {report.flaggedItems.length > 0 && (
-            <div className="mb-6">
-              <h4 className="text-lg font-bold text-[#1A2C5B] mb-4 flex items-center gap-2">
-                <FlagIcon className="h-5 w-5" />
-                Flagged Findings ({report.totalFlagsFound})
-              </h4>
-
-              <div className="space-y-3">
-                {report.flaggedItems.map((item, idx) => (
-                  <div
-                    key={idx}
-                    className={`bg-white border rounded-lg p-4 ${
-                      item.confidence === 'high'
-                        ? 'border-l-4 border-l-[#1A2C5B] border-gray-200'
-                        : item.confidence === 'medium'
-                          ? 'border-l-4 border-l-[#EAB308] border-gray-200'
-                          : 'border-gray-200'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-3 mb-2">
-                      <h5 className="font-semibold text-[#1A2C5B]">{item.label}</h5>
-                      <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${
-                        CATEGORY_COLORS[item.category] || CATEGORY_COLORS['Other']
-                      }`}>
-                        {item.category}
-                      </span>
-                    </div>
-
-                    {item.excerpt && (
-                      <div className="bg-amber-50 border border-amber-200 rounded p-3 mb-2">
-                        <p className="text-sm text-amber-900 italic">&quot;{item.excerpt}&quot;</p>
-                      </div>
-                    )}
-
-                    <div className="flex flex-wrap gap-3 text-xs text-gray-500">
-                      {item.dateFound && (
-                        <span>Date: <strong>{item.dateFound}</strong></span>
-                      )}
-                      <span>Claim Category: <strong>{item.suggestedClaimCategory}</strong></span>
-                      <span className={`px-2 py-0.5 rounded ${
-                        item.confidence === 'high' ? 'bg-green-100 text-green-800' :
-                        item.confidence === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-gray-100 text-gray-600'
-                      }`}>
-                        {item.confidence} confidence
-                      </span>
-                    </div>
+          <div className="mb-6">
+            <h4 className="text-lg font-bold text-[#1A2C5B] mb-4 flex items-center gap-2">
+              <FlagIcon className="h-5 w-5" />
+              Flagged Findings ({report.totalFlagsFound})
+            </h4>
+            <div className="space-y-3">
+              {report.flaggedItems.map((item, idx) => (
+                <div key={idx} className={`bg-white border rounded-lg p-4 ${
+                  item.confidence === 'high' ? 'border-l-4 border-l-[#1A2C5B] border-gray-200'
+                  : item.confidence === 'medium' ? 'border-l-4 border-l-[#EAB308] border-gray-200'
+                  : 'border-gray-200'
+                }`}>
+                  <div className="flex items-start justify-between gap-3 mb-2">
+                    <h5 className="font-semibold text-[#1A2C5B]">{item.label}</h5>
+                    <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${CATEGORY_COLORS[item.category] || CATEGORY_COLORS['Other']}`}>
+                      {item.category}
+                    </span>
                   </div>
-                ))}
-              </div>
+                  {item.excerpt && (
+                    <div className="bg-amber-50 border border-amber-200 rounded p-3 mb-2">
+                      <p className="text-sm text-amber-900 italic">&quot;{item.excerpt}&quot;</p>
+                    </div>
+                  )}
+                  {item.context && item.context !== item.label && (
+                    <p className="text-xs text-gray-600 mb-2 bg-gray-50 rounded p-2">{item.context}</p>
+                  )}
+                  <div className="flex flex-wrap gap-3 text-xs text-gray-500">
+                    {item.dateFound && <span>📅 <strong>{item.dateFound}</strong></span>}
+                    {item.pageNumber && <span>📄 Page <strong>{item.pageNumber}</strong></span>}
+                    <span>Category: <strong>{item.suggestedClaimCategory}</strong></span>
+                    <span className={`px-2 py-0.5 rounded font-medium ${
+                      item.confidence === 'high' ? 'bg-blue-100 text-blue-800'
+                      : item.confidence === 'medium' ? 'bg-yellow-100 text-yellow-800'
+                      : 'bg-gray-100 text-gray-600'
+                    }`}>{item.confidence} confidence</span>
+                  </div>
+                </div>
+              ))}
             </div>
-          )}
+          </div>
 
           {/* Next Steps */}
           <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
             <h4 className="font-semibold text-green-800 mb-3">Suggested Next Steps</h4>
-            <ol className="list-decimal list-inside space-y-2">
+            <ol className="list-decimal list-inside space-y-1">
               {report.suggestedNextSteps.map((step, idx) => (
                 <li key={idx} className="text-sm text-green-900">{step}</li>
               ))}
@@ -591,37 +623,27 @@ export default function MedicalDetectivePanel() {
 
           {/* Action Buttons */}
           <div className="flex flex-col sm:flex-row gap-3">
-            <button
-              onClick={handleDownloadReport}
-              className="flex-1 inline-flex items-center justify-center px-6 py-3 rounded-lg bg-[#1A2C5B] text-white font-semibold hover:bg-[#0F1D3D] transition-colors focus:outline-none focus:ring-4 focus:ring-blue-200"
-            >
+            <button onClick={handleDownloadReport}
+              className="flex-1 inline-flex items-center justify-center px-6 py-3 rounded-lg bg-[#1A2C5B] text-white font-semibold hover:bg-[#0F1D3D] transition-colors focus:outline-none focus:ring-4 focus:ring-blue-200">
               <DocumentArrowDownIcon className="mr-2 h-5 w-5" />
-              Download Personal Evidence Report
+              Download Evidence Report (PDF)
             </button>
-            <a
-              href="https://www.va.gov/vso/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex-1 inline-flex items-center justify-center px-6 py-3 rounded-lg bg-[#EAB308] text-[#1A2C5B] font-semibold hover:bg-[#FACC15] transition-colors focus:outline-none focus:ring-4 focus:ring-yellow-200"
-            >
-              Next Step: Share with Your VSO
+            <a href="https://www.va.gov/vso/" target="_blank" rel="noopener noreferrer"
+              className="flex-1 inline-flex items-center justify-center px-6 py-3 rounded-lg bg-[#EAB308] text-[#1A2C5B] font-semibold hover:bg-[#FACC15] transition-colors focus:outline-none focus:ring-4 focus:ring-yellow-200">
+              Share with Your VSO
               <ArrowRightIcon className="ml-2 h-5 w-5" />
             </a>
           </div>
 
-          {/* Scan More */}
           <div className="mt-4 text-center">
-            <button
-              onClick={handleReset}
-              className="text-[#1A2C5B] text-sm underline hover:no-underline"
-            >
+            <button onClick={handleReset} className="text-[#1A2C5B] text-sm underline hover:no-underline">
               Scan More Documents
             </button>
           </div>
 
-          {/* Disclaimer at bottom of results */}
+          {/* Bottom disclaimer */}
           <div className="mt-6 bg-amber-50 border border-amber-200 rounded-lg p-3">
-            <p className="text-xs text-amber-800">
+            <p className="text-xs text-amber-900 font-semibold">
               <strong>Reminder:</strong> {DISCLAIMER_TEXT}
             </p>
           </div>
