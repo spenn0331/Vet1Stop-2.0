@@ -8,10 +8,10 @@ import { ObjectId } from 'mongodb';
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const id = params.id;
+    const { id } = await context.params;
     
     // Connect to the database
     const dbConnection = await connectToDatabase();
@@ -56,10 +56,10 @@ export async function GET(
  */
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const id = params.id;
+    const { id } = await context.params;
     const updateData = await request.json();
     
     // Add timestamp
@@ -103,10 +103,10 @@ export async function PUT(
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const id = params.id;
+    const { id } = await context.params;
     
     // Connect to the database
     const dbConnection = await connectToDatabase();

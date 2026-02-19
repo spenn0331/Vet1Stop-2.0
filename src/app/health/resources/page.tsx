@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
-import ResourceCard from '@/app/health/components/ResourceCard';
+import ResourceCard from '@/app/health/components/shared/ResourceCard';
 import { adaptToModelResource } from '@/types/health-resource-adapter';
 import { HealthResource } from '@/models/healthResource';
 

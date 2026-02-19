@@ -7,11 +7,10 @@ import { getResourceById, getRelatedResources } from '@/services/resourceService
  */
 export async function GET(
   request: NextRequest,
-  context: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
-  const { params } = context;
   try {
-    const { id } = params;
+    const { id } = await context.params;
     
     if (!id) {
       return NextResponse.json(

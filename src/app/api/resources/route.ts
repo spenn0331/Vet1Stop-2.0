@@ -51,10 +51,10 @@ export async function GET(request: NextRequest) {
     console.error('Error in resources API:', error);
     return NextResponse.json(
       { error: 'Failed to fetch resources', details: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 };
+      { status: 500 }
     );
-  };
-};
+  }
+}
 /**
  * POST /api/resources/counts
  * Get resource counts by category
@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
     console.error('Error in resource counts API:', error);
     return NextResponse.json(
       { error: 'Failed to fetch resource counts', details: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 };
+      { status: 500 }
     );
-  };
-};
+  }
+}
