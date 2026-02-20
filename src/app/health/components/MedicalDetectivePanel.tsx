@@ -281,8 +281,8 @@ export default function MedicalDetectivePanel() {
             } else if (event.type === 'file_ready') {
               const reduction = event.reductionPct ? ` — ${event.reductionPct}% noise removed` : '';
               setProgressMsg(`"${event.fileName}" ready — ${event.numPages} pages → ${event.filteredChunks || event.numChunks} section(s)${reduction}`);
-            } else if (event.type === 'screening_flag') {
-              // Live flag from Phase 2 screening
+            } else if (event.type === 'keyword_flag' || event.type === 'screening_flag') {
+              // Live flag from Phase 1 keyword pre-filter (v4) or Phase 2 screening (v3 compat)
               if (event.flag) {
                 setLiveFlags(prev => [...prev, event.flag]);
               }
@@ -559,11 +559,11 @@ body{font-family:'Segoe UI',sans-serif;padding:40px;color:#1F2937;line-height:1.
             Scanning Your Records...
           </h3>
 
-          {/* Phase indicator */}
+          {/* Phase indicator — v4: 2 phases only */}
           <div className="flex justify-center gap-2 mb-4">
-            {['filter', 'screening', 'synthesis'].map((phase, i) => {
-              const labels = ['Pre-Filter', 'AI Screening', 'Deep Analysis'];
-              const phaseOrder = ['filter', 'screening', 'synthesis'];
+            {['filter', 'synthesis'].map((phase, i) => {
+              const labels = ['Pre-Filter', 'Deep Analysis'];
+              const phaseOrder = ['filter', 'synthesis'];
               const currentIdx = phaseOrder.indexOf(currentPhase.replace('_done', ''));
               const isDone = i < currentIdx || currentPhase.includes('_done') && i <= currentIdx;
               const isActive = currentPhase.startsWith(phase);
@@ -632,7 +632,7 @@ body{font-family:'Segoe UI',sans-serif;padding:40px;color:#1F2937;line-height:1.
           </div>
 
           <p className="text-xs text-gray-400 text-center mt-2">
-            3-phase pipeline: Pre-filter removes noise → grok-3-mini screens for flags → Grok 4 produces your final report.
+            2-phase pipeline: Aggressive pre-filter removes noise → single Grok 4 call produces your final report (~25-65s).
           </p>
           <p className="text-xs text-gray-400 text-center mt-1">
             Files are processed in memory only — never stored permanently.

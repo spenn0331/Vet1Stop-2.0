@@ -1,20 +1,23 @@
 import { NextRequest } from 'next/server';
 
 /**
- * POST /api/health/medical-detective — v3 "Three-Phase Pipeline"
+ * POST /api/health/medical-detective — v4 "Two-Phase Pipeline"
  *
- * Architecture:
- *   Phase 1: Smart Pre-Filter (NO AI, instant) — keyword-scores every paragraph,
- *            discards administrative noise (~75% of VA Blue Button content).
- *   Phase 2: Fast Screening (grok-3-mini) — extracts raw flagged quotes from
- *            the pre-filtered text in parallel batches. ~5-10s per chunk.
- *   Phase 3: Grok 4 Synthesis (single call) — takes the raw quotes and produces
- *            structured, high-quality flags with confidence, category, nexus reasoning.
+ * Architecture (v4 — optimized for <65s scans):
+ *   Phase 1: Aggressive Pre-Filter (NO AI, ~1-2s) — strict keyword scoring
+ *            (2+ matches required per paragraph), noise-phrase exclusion,
+ *            hard cap at 32K chars. Emits live keyword-based flags to client.
+ *   Phase 2: Single Grok-4 Synthesis (one API call, ~20-45s) — takes the
+ *            entire pre-filtered text and produces structured flags with
+ *            confidence, category, nexus reasoning, and next steps.
+ *
+ * Fallback: If Grok-4 fails, keyword-extracted flags from Phase 1 are used
+ *           directly to generate a usable (if less polished) report.
  *
  * Streaming NDJSON response. Emits JSON events line-by-line:
  *   {type:'progress', message, percent, phase}
- *   {type:'file_ready', fileName, numPages, numChunks, filteredChunks}
- *   {type:'screening_flag', flag}  — live flag during Phase 2
+ *   {type:'file_ready', fileName, numPages, filteredChunks, reductionPct}
+ *   {type:'keyword_flag', flag}  — live flag from keyword pre-filter
  *   {type:'complete', report}
  *   {type:'error', message}
  *
@@ -59,114 +62,101 @@ interface DetectiveReport {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-// Phase 2 chunk size — larger since grok-3-mini is fast
-const SCREENING_CHUNK_SIZE = 96000;   // ~24K tokens — grok-3-mini handles this fine
-const MAX_SCREENING_CHUNKS = 20;      // Safety cap
-const CONCURRENT_BATCH_SIZE = 3;      // Parallel API calls per batch
-const API_TIMEOUT_MS = 60_000;        // 60s timeout per call (mini is fast)
-const SYNTHESIS_TIMEOUT_MS = 120_000; // 120s for final Grok 4 synthesis
-const MAX_RETRIES = 2;
+// v4: Single Grok-4 call — no more grok-3-mini batching
+const FILTERED_TEXT_CAP = 32_000;     // ~8K tokens — hard cap for Grok-4 input
+const SYNTHESIS_TIMEOUT_MS = 90_000;  // 90s timeout (down from 120s)
+const IMAGE_TIMEOUT_MS = 60_000;      // 60s timeout for image vision
+const MAX_RETRIES = 1;                // 1 retry (down from 2) — fail fast
+const MIN_PARAGRAPH_LENGTH = 40;      // Require 40+ chars (up from 20)
+const MIN_KEYWORD_MATCHES = 2;        // Require 2+ keyword hits per paragraph
 
-// Models — user's xAI API models (from Vet1Stop AI Cheat Sheet)
-const MODEL_SCREENING = 'grok-3-mini';      // Fast bulk screening
-const MODEL_SYNTHESIS = 'grok-4-0709';       // Deep analysis (single call)
-const MODEL_VISION = 'grok-3-mini';          // Image analysis
+// Models — user's xAI API models
+const MODEL_SYNTHESIS = 'grok-4-0709';  // Deep analysis (single call)
+const MODEL_VISION = 'grok-3-mini';     // Image analysis (fast on single images)
 
 const DISCLAIMER = `This report is for informational purposes only and does not constitute medical or legal advice. This tool does not file claims. Please share this report with your accredited VSO or claims representative for professional review.`;
 
-// ─── Medical Keywords for Pre-Filter (Phase 1) ──────────────────────────────
-// Any paragraph containing at least one of these terms (case-insensitive) is
-// considered "high signal" and kept for AI analysis. Everything else is noise.
+// ─── Core Medical Keywords for Aggressive Pre-Filter (Phase 1) ──────────────
+// 50 core claim terms focused on high-value disability evidence.
+// Paragraph must match 2+ of these to be kept. This is intentionally strict
+// to reduce 1001 pages → ~100-150 high-signal paragraphs (~4-8K tokens).
 
-const MEDICAL_KEYWORDS = [
-  // Conditions / diagnoses
-  'tinnitus', 'hearing loss', 'ptsd', 'post-traumatic', 'anxiety', 'depression',
-  'sleep apnea', 'osa', 'cpap', 'insomnia', 'migraine', 'headache', 'tbi',
-  'traumatic brain', 'burn pit', 'agent orange', 'gulf war', 'toxic exposure',
-  'sinusitis', 'rhinitis', 'asthma', 'copd', 'respiratory', 'gerd', 'ibs',
-  'gastro', 'knee', 'back pain', 'lumbar', 'cervical', 'shoulder', 'arthritis',
-  'radiculopathy', 'sciatica', 'neuropathy', 'fibromyalgia', 'chronic pain',
-  'diabetes', 'hypertension', 'heart', 'cardiac', 'cancer', 'tumor',
-  'erectile', 'kidney', 'liver', 'thyroid', 'seizure', 'epilepsy',
-  'skin condition', 'eczema', 'psoriasis', 'mst', 'military sexual trauma',
-  'substance', 'alcohol', 'suicidal', 'homicidal', 'bipolar', 'schizophrenia',
-  'gulf war illness', 'chronic fatigue', 'pact act', 'presumptive',
-  // VA claim language
-  'service connected', 'service-connected', ' sc ', 'compensable', 'rated at',
-  'disability rating', 'c&p', 'comp and pen', 'nexus', 'at least as likely',
-  'more likely than not', 'caused by military', 'aggravated by', 'due to service',
-  'consistent with service', 'in-service', 'secondary to',
-  // Clinical significance markers
-  'diagnosis', 'diagnosed', 'assessment', 'impression', 'abnormal', 'positive',
-  'elevated', 'decreased', 'chronic', 'bilateral', 'limited range', 'limitation of motion',
-  'functional impairment', 'occupational impairment', 'unemployability', 'tdiu',
-  'individual unemployability', 'flare', 'exacerbation', 'worsening',
-  // ICD / procedure codes
-  'icd', 'f43', 'f32', 'f41', 'g43', 'g47', 'h93', 'j45', 'm54', 'k21',
-  // Section headers (VA Blue Button)
-  'problem list', 'active diagnoses', 'clinical notes', 'progress note',
-  'c&p exam', 'compensation', 'disability', 'medical history',
+const CORE_KEYWORDS = [
+  // Top conditions (highest VA claim frequency)
+  'tinnitus', 'hearing loss', 'ptsd', 'post-traumatic', 'sleep apnea',
+  'migraine', 'tbi', 'traumatic brain', 'anxiety', 'depression',
+  // Toxic exposure / PACT Act
+  'burn pit', 'agent orange', 'gulf war', 'toxic exposure', 'pact act', 'presumptive',
+  // Musculoskeletal
+  'back pain', 'lumbar', 'radiculopathy', 'knee', 'shoulder', 'arthritis',
+  // Respiratory
+  'sinusitis', 'rhinitis', 'asthma', 'copd',
+  // GI / Other conditions
+  'gerd', 'sleep apnea', 'neuropathy', 'chronic pain', 'fibromyalgia',
+  'diabetes', 'hypertension', 'erectile', 'mst', 'military sexual trauma',
+  // VA claim language (highest signal)
+  'service connected', 'service-connected', 'nexus', 'at least as likely',
+  'more likely than not', 'secondary to', 'aggravated by', 'in-service',
+  'c&p', 'compensable', 'rated at', 'disability rating', 'tdiu',
+  'unemployability', 'sc ',
+  // Clinical markers
+  'diagnosis', 'diagnosed', 'abnormal', 'chronic', 'bilateral',
+  'functional impairment', 'limitation of motion', 'worsening',
+  'problem list', 'active diagnoses',
 ];
 
-// Compile a single regex from all keywords for fast paragraph scoring
-const KEYWORDS_REGEX = new RegExp(
-  MEDICAL_KEYWORDS.map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'),
+// Noise phrases — paragraphs containing these are administrative junk
+const NOISE_PHRASES = [
+  'appointment scheduled', 'next appointment', 'check-in', 'checked in',
+  'no show', 'cancelled appointment', 'refill request', 'medication refill',
+  'secure message', 'my healthevet', 'travel reimbursement', 'copay',
+  'emergency contact', 'next of kin', 'pharmacy', 'prescription mailed',
+  'demographics updated', 'insurance', 'eligibility', 'means test',
+  'flu shot', 'covid vaccine', 'immunization', 'routine vital signs',
+  'vital signs within normal', 'height:', 'weight:', 'bmi:',
+];
+
+// Compile individual keyword regexes for counting matches per paragraph
+const KEYWORD_PATTERNS = CORE_KEYWORDS.map(k =>
+  new RegExp(k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i')
+);
+
+// Compile noise regex
+const NOISE_REGEX = new RegExp(
+  NOISE_PHRASES.map(p => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'),
   'i'
 );
 
-// ─── Screening Prompt (Phase 2 — grok-3-mini) ───────────────────────────────
-// Simplified prompt: just find and list quotes. No analysis. Fast.
-
-const SCREENING_PROMPT = `You are a fast medical records scanner. Your ONLY job is to find and extract exact quotes from VA medical records that are relevant to disability claims.
-
-Look for ANY mention of:
-- Diagnoses, conditions, symptoms (physical and mental)
-- Service connection language ("service connected", "SC", "nexus", "at least as likely as not")
-- Disability ratings or C&P exam findings
-- PACT Act / burn pit / toxic exposure references
-- Medications that indicate serious conditions
-- Abnormal lab results or clinical findings
-- Functional limitations or impairment statements
-
-For each finding, output EXACTLY this format (one per line):
-FLAG|[Condition/Topic]|[High/Medium/Low]|[Exact quote from the text, 1-2 sentences]|[Page number if visible, else "N/A"]|[Date if visible, else "N/A"]
-
-Rules:
-- Output ONLY FLAG lines. No explanations, no headers, no disclaimers.
-- Be thorough — extract every relevant quote you find.
-- Do NOT flag normal/routine results (normal vitals, routine labs, appointment scheduling).
-- Include 1-2 surrounding sentences for context in the quote.
-- If nothing relevant found, output exactly: NO_FLAGS_FOUND`;
-
-// ─── Synthesis Prompt (Phase 3 — Grok 4) ────────────────────────────────────
-// Takes pre-screened quotes and produces final structured analysis
+// ─── Synthesis Prompt (Phase 2 — Grok 4, single call) ────────────────────────
+// Takes the entire pre-filtered text and produces structured analysis
 
 const SYNTHESIS_PROMPT = `You are an expert VA disability claims evidence analyst with deep knowledge of VA rating schedules, presumptive conditions, the PACT Act, and how clinical notes support claims.
 
-Below are raw flagged excerpts extracted from a veteran's VA medical records. Your job is to:
+You are given pre-filtered excerpts from a veteran's VA medical records. These have already been keyword-filtered so every paragraph is potentially relevant. Your job is to:
 
-1. Deduplicate — merge flags that reference the same condition
-2. Assign accurate confidence levels (High = direct diagnosis/rating language, Medium = clinical evidence suggesting condition, Low = indirect/circumstantial)
-3. Map each flag to the correct VA disability category
-4. Provide a 1-sentence nexus/relevance explanation for each
-5. Identify any PACT Act presumptive conditions
-6. Suggest concrete next steps
+1. Identify every claim-relevant finding (diagnoses, conditions, symptoms, claim language, PACT Act presumptives)
+2. Extract exact quotes from the text for each finding
+3. Deduplicate — merge flags that reference the same condition
+4. Assign accurate confidence levels (High = direct diagnosis/rating language, Medium = clinical evidence suggesting condition, Low = indirect/circumstantial)
+5. Map each flag to the correct VA disability category
+6. Provide a 1-sentence nexus/relevance explanation for each
+7. Suggest concrete next steps
 
 Output in clean, numbered bullet list format. For each flag:
 - Condition name
 - Confidence: High / Medium / Low
 - Category: (e.g., Mental Health, Musculoskeletal, Sleep Disorders, Hearing, Respiratory, etc.)
-- Exact quote: "[the excerpt]"
+- Exact quote: "[the excerpt from the records]"
 - Page number: [if available]
 - Date: [if available]
 - Relevance: [1-sentence explanation of claim relevance]
 
-If the excerpts contain no meaningful evidence, state: 'No strong claim-relevant evidence flags were identified in this report.'
+If the text contains no meaningful evidence, state: 'No strong claim-relevant evidence flags were identified in this report.'
 
 End with this exact bold disclaimer:
 **This report is for informational purposes only and does not constitute medical or legal advice. This tool does not file claims. Please share this report with your accredited VSO or claims representative for professional review.**
 
-Be accurate, professional, and veteran-focused.`;
+Be thorough, accurate, professional, and veteran-focused. Extract EVERY relevant finding.`;
 
 // ─── PDF Text Extraction ──────────────────────────────────────────────────────
 
@@ -207,21 +197,81 @@ function extractTextWithRegex(base64Data: string): string {
   } catch { return ''; }
 }
 
-// ─── Phase 1: Smart Pre-Filter (No AI) ──────────────────────────────────────
-// Scores every paragraph against MEDICAL_KEYWORDS and keeps only high-signal ones.
-// Reduces a 1001-page VA Blue Button export by ~75% before any API call.
+// ─── Phase 1: Aggressive Pre-Filter (No AI) ─────────────────────────────────
+// v4: Requires 2+ keyword matches per paragraph, excludes noise phrases,
+// and hard-caps output at FILTERED_TEXT_CAP chars (~8K tokens).
+// Also extracts live keyword-based flags for immediate client feedback.
 
-function preFilterText(text: string): { filtered: string; totalParagraphs: number; keptParagraphs: number } {
+interface KeywordFlag {
+  condition: string;
+  confidence: 'high' | 'medium' | 'low';
+  excerpt: string;
+}
+
+function aggressivePreFilter(text: string): {
+  filtered: string;
+  totalParagraphs: number;
+  keptParagraphs: number;
+  keywordFlags: KeywordFlag[];
+} {
   const paragraphs = text.split(/\n{2,}|\r\n{2,}/);
   const kept: string[] = [];
+  const keywordFlags: KeywordFlag[] = [];
+  const seenConditions = new Set<string>();
+  let totalChars = 0;
 
   for (const para of paragraphs) {
     const trimmed = para.trim();
-    // Skip very short paragraphs (headers with no content, blank lines)
-    if (trimmed.length < 20) continue;
-    // Keep if it matches any medical/claim keyword
-    if (KEYWORDS_REGEX.test(trimmed)) {
+    // Skip short paragraphs
+    if (trimmed.length < MIN_PARAGRAPH_LENGTH) continue;
+    // Skip noise (appointment scheduling, demographics, etc.)
+    if (NOISE_REGEX.test(trimmed)) continue;
+
+    // Count keyword matches in this paragraph
+    const matchedKeywords: string[] = [];
+    for (let i = 0; i < KEYWORD_PATTERNS.length; i++) {
+      if (KEYWORD_PATTERNS[i].test(trimmed)) {
+        matchedKeywords.push(CORE_KEYWORDS[i]);
+      }
+    }
+
+    // Require 2+ keyword matches (strict filtering)
+    if (matchedKeywords.length >= MIN_KEYWORD_MATCHES) {
+      // Hard cap on total filtered text size
+      if (totalChars + trimmed.length > FILTERED_TEXT_CAP) {
+        // Still add if we haven't hit the cap yet (allow partial)
+        if (totalChars < FILTERED_TEXT_CAP) {
+          kept.push(trimmed.substring(0, FILTERED_TEXT_CAP - totalChars));
+          totalChars = FILTERED_TEXT_CAP;
+        }
+        break; // Stop adding more paragraphs
+      }
+
       kept.push(trimmed);
+      totalChars += trimmed.length;
+
+      // Extract live keyword flags for client feedback
+      // Pick the most specific matched keyword as the condition name
+      const primaryKeyword = matchedKeywords[0];
+      const conditionKey = primaryKeyword.toLowerCase().replace(/[^a-z]/g, '');
+      if (!seenConditions.has(conditionKey)) {
+        seenConditions.add(conditionKey);
+
+        // Determine confidence from keyword type
+        const claimLanguage = ['service connected', 'service-connected', 'nexus', 'at least as likely',
+          'more likely than not', 'compensable', 'rated at', 'disability rating', 'tdiu', 'c&p'];
+        const isClaimLanguage = matchedKeywords.some(k => claimLanguage.includes(k));
+        const confidence: 'high' | 'medium' | 'low' = isClaimLanguage ? 'high'
+          : matchedKeywords.length >= 3 ? 'high'
+          : matchedKeywords.length >= 2 ? 'medium'
+          : 'low';
+
+        keywordFlags.push({
+          condition: primaryKeyword.charAt(0).toUpperCase() + primaryKeyword.slice(1),
+          confidence,
+          excerpt: trimmed.substring(0, 120),
+        });
+      }
     }
   }
 
@@ -229,183 +279,8 @@ function preFilterText(text: string): { filtered: string; totalParagraphs: numbe
     filtered: kept.join('\n\n'),
     totalParagraphs: paragraphs.length,
     keptParagraphs: kept.length,
+    keywordFlags,
   };
-}
-
-// ─── Text Chunking (for pre-filtered text) ──────────────────────────────────
-
-function chunkText(text: string): string[] {
-  const chunks: string[] = [];
-  const paragraphs = text.split(/\n{2,}/);
-  let current = '';
-
-  for (const para of paragraphs) {
-    if (current.length + para.length > SCREENING_CHUNK_SIZE && current.length > 0) {
-      chunks.push(current.trim());
-      current = para;
-    } else {
-      current += (current ? '\n\n' : '') + para;
-    }
-  }
-  if (current.trim().length > 50) chunks.push(current.trim());
-  if (chunks.length === 0 && text.length > 0) return [text.substring(0, SCREENING_CHUNK_SIZE)];
-
-  // Safety cap
-  if (chunks.length > MAX_SCREENING_CHUNKS) {
-    const kept = chunks.slice(0, MAX_SCREENING_CHUNKS - 1);
-    const overflow = chunks.slice(MAX_SCREENING_CHUNKS - 1).join('\n\n');
-    kept.push(overflow.substring(0, SCREENING_CHUNK_SIZE * 2));
-    return kept;
-  }
-
-  return chunks;
-}
-
-// ─── Grok API Calls ───────────────────────────────────────────────────────────
-
-function getApiKey(): string {
-  return process.env.XAI_API_KEY || '';
-}
-
-async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: number): Promise<Response> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const resp = await fetch(url, { ...options, signal: controller.signal });
-    return resp;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-// Shared retry wrapper for all Grok API calls
-async function callGrokAPI(
-  model: string,
-  messages: Array<{ role: string; content: string | Array<{ type: string; text?: string; image_url?: { url: string } }> }>,
-  timeoutMs: number,
-  label: string,
-  maxTokens: number = 4000,
-): Promise<string> {
-  const apiKey = getApiKey();
-  if (!apiKey) throw new Error('XAI_API_KEY is not configured in environment variables.');
-
-  let lastError = '';
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      const response = await fetchWithTimeout('https://api.x.ai/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, messages, temperature: 0.1, max_tokens: maxTokens }),
-      }, timeoutMs);
-
-      if (!response.ok) {
-        const err = await response.text();
-        if (response.status === 429 && attempt < MAX_RETRIES) {
-          const retryAfter = parseInt(response.headers.get('retry-after') || '5', 10);
-          await new Promise(r => setTimeout(r, retryAfter * 1000));
-          lastError = `Rate limited (429). Retrying...`;
-          continue;
-        }
-        throw new Error(`${label} API error ${response.status}: ${err.substring(0, 200)}`);
-      }
-      const data = await response.json();
-      return data.choices?.[0]?.message?.content || '';
-    } catch (err) {
-      lastError = (err as Error).message || 'Unknown error';
-      if ((err as Error).name === 'AbortError') {
-        lastError = `${label} timed out after ${timeoutMs / 1000}s`;
-      }
-      if (attempt < MAX_RETRIES) {
-        await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
-        continue;
-      }
-    }
-  }
-  console.warn(`[MedicalDetective] ${label} failed after ${MAX_RETRIES + 1} attempts: ${lastError}`);
-  return '';
-}
-
-// Phase 2: Screen a chunk with grok-3-mini (fast)
-async function screenChunkWithMini(chunk: string, chunkIdx: number, totalChunks: number, fileName: string): Promise<string> {
-  return callGrokAPI(
-    MODEL_SCREENING,
-    [
-      { role: 'system', content: SCREENING_PROMPT },
-      { role: 'user', content: `Document: "${fileName}" | Section ${chunkIdx + 1} of ${totalChunks}\n\n${chunk}` },
-    ],
-    API_TIMEOUT_MS,
-    `Screening chunk ${chunkIdx + 1}/${totalChunks}`,
-    4000,
-  );
-}
-
-// Phase 2 (images): Screen an image with grok-3-mini
-async function screenImageWithVision(base64Data: string, mimeType: string, fileName: string): Promise<string> {
-  return callGrokAPI(
-    MODEL_VISION,
-    [
-      { role: 'system', content: SCREENING_PROMPT },
-      {
-        role: 'user',
-        content: [
-          { type: 'text', text: `Analyze this VA medical record image (${fileName}) for disability claim-relevant findings. Use the FLAG| format.` },
-          { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64Data}` } },
-        ],
-      },
-    ],
-    API_TIMEOUT_MS,
-    `Image screening: ${fileName}`,
-    4000,
-  );
-}
-
-// Phase 3: Synthesize all raw flags with Grok 4 (single call)
-async function synthesizeWithGrok4(rawFlags: string[], fileName: string): Promise<string> {
-  const flagText = rawFlags.join('\n');
-  return callGrokAPI(
-    MODEL_SYNTHESIS,
-    [
-      { role: 'system', content: SYNTHESIS_PROMPT },
-      { role: 'user', content: `Veteran's document: "${fileName}"\n\nRaw flagged excerpts from screening:\n\n${flagText}` },
-    ],
-    SYNTHESIS_TIMEOUT_MS,
-    'Grok 4 synthesis',
-    6000,
-  );
-}
-
-// ─── Parse Screening Output (Phase 2 FLAG| format) ──────────────────────────
-
-interface RawScreeningFlag {
-  condition: string;
-  confidence: 'high' | 'medium' | 'low';
-  excerpt: string;
-  pageNumber: string;
-  dateFound: string;
-}
-
-function parseScreeningOutput(rawText: string): RawScreeningFlag[] {
-  if (!rawText || rawText.includes('NO_FLAGS_FOUND')) return [];
-  const flags: RawScreeningFlag[] = [];
-  const lines = rawText.split('\n');
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed.startsWith('FLAG|')) continue;
-    const parts = trimmed.split('|');
-    if (parts.length < 6) continue;
-
-    const confidence = (parts[2] || 'medium').trim().toLowerCase();
-    flags.push({
-      condition: (parts[1] || '').trim(),
-      confidence: (['high', 'medium', 'low'].includes(confidence) ? confidence : 'medium') as 'high' | 'medium' | 'low',
-      excerpt: (parts[3] || '').trim(),
-      pageNumber: (parts[4] || 'N/A').trim(),
-      dateFound: (parts[5] || 'N/A').trim(),
-    });
-  }
-
-  return flags;
 }
 
 // ─── Parse Synthesis Output (Phase 3 — numbered list) ───────────────────────
@@ -474,17 +349,15 @@ function parseSynthesisOutput(rawText: string): FlaggedItem[] {
   return items;
 }
 
-// ─── Fallback: Convert screening flags directly (if Grok 4 synthesis fails) ─
+// ─── Fallback: Convert keyword flags to FlaggedItems (if Grok 4 fails) ──────
 
-function screeningFlagsToFlaggedItems(rawFlags: RawScreeningFlag[]): FlaggedItem[] {
-  return rawFlags.map((f, i) => ({
-    flagId: `${f.condition.toLowerCase().replace(/[^a-z0-9]/g, '_').substring(0, 30)}_${i}`,
+function keywordFlagsToFlaggedItems(flags: KeywordFlag[]): FlaggedItem[] {
+  return flags.map((f, i) => ({
+    flagId: `kw_${f.condition.toLowerCase().replace(/[^a-z0-9]/g, '_').substring(0, 25)}_${i}`,
     label: f.condition,
     category: mapToCategory(f.condition),
     excerpt: f.excerpt,
-    context: f.condition,
-    dateFound: f.dateFound !== 'N/A' ? f.dateFound : undefined,
-    pageNumber: f.pageNumber !== 'N/A' ? f.pageNumber : undefined,
+    context: `Keyword-detected: ${f.condition}. Review with your VSO for full assessment.`,
     suggestedClaimCategory: mapToCategory(f.condition),
     confidence: f.confidence,
   }));
@@ -504,7 +377,7 @@ function deduplicateFlags(items: FlaggedItem[]): FlaggedItem[] {
 
 // ─── Report Builder ───────────────────────────────────────────────────────────
 
-function buildReport(flags: FlaggedItem[], filesProcessed: number, processingTime: number): DetectiveReport {
+function buildReport(flags: FlaggedItem[], filesProcessed: number, processingTime: number, aiModel: string): DetectiveReport {
   return {
     disclaimer: DISCLAIMER,
     summary: flags.length > 0
@@ -526,11 +399,119 @@ function buildReport(flags: FlaggedItem[], filesProcessed: number, processingTim
           'Request your full C-file from the VA by submitting VA Form 3288',
           'Visit va.gov/disability for information on filing a claim',
         ],
-    processingDetails: { filesProcessed, processingTime, aiModel: `${MODEL_SCREENING} (screening) + ${MODEL_SYNTHESIS} (analysis)` },
+    processingDetails: { filesProcessed, processingTime, aiModel },
   };
 }
 
-// ─── Streaming POST Handler — 3-Phase Pipeline ─────────────────────────────
+// ─── Grok API Calls ───────────────────────────────────────────────────────────
+
+function getApiKey(): string {
+  return process.env.XAI_API_KEY || '';
+}
+
+async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Shared retry wrapper for Grok API calls (v4: 1 retry only — fail fast)
+async function callGrokAPI(
+  model: string,
+  messages: Array<{ role: string; content: string | Array<{ type: string; text?: string; image_url?: { url: string } }> }>,
+  timeoutMs: number,
+  label: string,
+  maxTokens: number = 6000,
+): Promise<string> {
+  const apiKey = getApiKey();
+  if (!apiKey) throw new Error('XAI_API_KEY is not configured in environment variables.');
+
+  let lastError = '';
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const response = await fetchWithTimeout('https://api.x.ai/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model, messages, temperature: 0.1, max_tokens: maxTokens }),
+      }, timeoutMs);
+
+      if (!response.ok) {
+        const err = await response.text();
+        if (response.status === 429 && attempt < MAX_RETRIES) {
+          const retryAfter = parseInt(response.headers.get('retry-after') || '5', 10);
+          await new Promise(r => setTimeout(r, retryAfter * 1000));
+          lastError = `Rate limited (429). Retrying...`;
+          continue;
+        }
+        throw new Error(`${label} API error ${response.status}: ${err.substring(0, 200)}`);
+      }
+      const data = await response.json();
+      return data.choices?.[0]?.message?.content || '';
+    } catch (err) {
+      lastError = (err as Error).message || 'Unknown error';
+      if ((err as Error).name === 'AbortError') {
+        lastError = `${label} timed out after ${timeoutMs / 1000}s`;
+      }
+      if (attempt < MAX_RETRIES) {
+        await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
+        continue;
+      }
+    }
+  }
+  console.warn(`[MedicalDetective] ${label} failed after ${MAX_RETRIES + 1} attempts: ${lastError}`);
+  return '';
+}
+
+// Phase 2: Single Grok-4 synthesis on pre-filtered text (v4 — replaces grok-3-mini batching)
+async function synthesizeWithGrok4(filteredText: string, fileNames: string): Promise<string> {
+  return callGrokAPI(
+    MODEL_SYNTHESIS,
+    [
+      { role: 'system', content: SYNTHESIS_PROMPT },
+      { role: 'user', content: `Veteran's documents: "${fileNames}"\n\nPre-filtered medical record excerpts (high-signal paragraphs only):\n\n${filteredText}` },
+    ],
+    SYNTHESIS_TIMEOUT_MS,
+    'Grok 4 synthesis',
+    6000,
+  );
+}
+
+// Image analysis with grok-3-mini (fast on single images)
+async function screenImageWithVision(base64Data: string, mimeType: string, fileName: string): Promise<string> {
+  const imagePrompt = `You are an expert VA disability claims evidence analyst. Analyze this VA medical record image for disability claim-relevant findings.
+
+For each finding, output in numbered bullet list format:
+- Condition name
+- Confidence: High / Medium / Low
+- Category: (e.g., Mental Health, Musculoskeletal, Sleep Disorders, Hearing, Respiratory, etc.)
+- Exact quote: "[text visible in the image]"
+- Relevance: [1-sentence explanation]
+
+If nothing relevant found, state: 'No strong claim-relevant evidence flags were identified.'`;
+
+  return callGrokAPI(
+    MODEL_VISION,
+    [
+      { role: 'system', content: imagePrompt },
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: `Analyze this VA medical record image (${fileName}) for disability claim-relevant findings.` },
+          { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64Data}` } },
+        ],
+      },
+    ],
+    IMAGE_TIMEOUT_MS,
+    `Image analysis: ${fileName}`,
+    4000,
+  );
+}
+
+// ─── Streaming POST Handler — v4 Two-Phase Pipeline ─────────────────────────
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
@@ -564,201 +545,138 @@ export async function POST(request: NextRequest) {
         emit({ type: 'progress', message: 'Starting analysis...', percent: 2, phase: 'init' });
 
         // ═══════════════════════════════════════════════════════════════════
-        // PHASE 1: Extract + Pre-Filter (No AI — instant)
+        // PHASE 1: Extract + Aggressive Pre-Filter (No AI — ~1-2s)
         // ═══════════════════════════════════════════════════════════════════
 
-        type FileInfo = {
-          name: string;
-          chunks: string[];
-          numPages: number;
-          isImage: boolean;
-          imageData?: string;
-          imageMime?: string;
-          totalParagraphs: number;
-          keptParagraphs: number;
-        };
-        const fileInfos: FileInfo[] = [];
-        let totalScreeningChunks = 0;
+        let allFilteredText = '';
+        let allKeywordFlags: KeywordFlag[] = [];
+        let totalPages = 0;
+        const imageFiles: Array<{ name: string; data: string; mime: string }> = [];
 
         for (let fi = 0; fi < files.length; fi++) {
           const file = files[fi];
-          emit({ type: 'progress', message: `Phase 1: Extracting text from "${file.name}"...`, percent: 5 + (fi / files.length) * 10, phase: 'extract' });
+          emit({ type: 'progress', message: `Phase 1: Extracting text from "${file.name}"...`, percent: 5 + (fi / files.length) * 15, phase: 'filter' });
 
           if (file.type.startsWith('image/')) {
-            fileInfos.push({
-              name: file.name, chunks: ['__IMAGE__'], numPages: 1,
-              isImage: true, imageData: file.data, imageMime: file.type,
-              totalParagraphs: 0, keptParagraphs: 0,
-            });
-            totalScreeningChunks += 1;
+            // Images go directly to vision API in Phase 2
+            imageFiles.push({ name: file.name, data: file.data, mime: file.type });
+            file.data = ''; // clear from request payload
           } else if (file.type === 'application/pdf') {
             const { text, numPages } = await extractPDFData(file.data);
-            file.data = ''; // clear raw data immediately
+            file.data = ''; // clear raw data immediately — zero HIPAA exposure
+            totalPages += numPages;
 
-            // Pre-filter: remove administrative noise
-            emit({ type: 'progress', message: `Phase 1: Pre-filtering "${file.name}" (${numPages} pages)...`, percent: 10 + (fi / files.length) * 10, phase: 'filter' });
-            const { filtered, totalParagraphs, keptParagraphs } = preFilterText(text);
+            emit({ type: 'progress', message: `Phase 1: Pre-filtering "${file.name}" (${numPages} pages)...`, percent: 10 + (fi / files.length) * 15, phase: 'filter' });
 
-            // Chunk the filtered text
-            const chunks = filtered.length > 50 ? chunkText(filtered) : [text.substring(0, SCREENING_CHUNK_SIZE)];
-            fileInfos.push({
-              name: file.name, chunks, numPages,
-              isImage: false,
-              totalParagraphs, keptParagraphs,
-            });
-            totalScreeningChunks += chunks.length;
+            const { filtered, totalParagraphs, keptParagraphs, keywordFlags } = aggressivePreFilter(text);
+            allFilteredText += (allFilteredText ? '\n\n---\n\n' : '') + filtered;
+            allKeywordFlags.push(...keywordFlags);
 
             const reductionPct = totalParagraphs > 0 ? Math.round((1 - keptParagraphs / totalParagraphs) * 100) : 0;
             emit({
               type: 'file_ready',
               fileName: file.name,
               numPages,
-              numChunks: chunks.length,
-              filteredChunks: chunks.length,
+              filteredChunks: keptParagraphs,
               totalParagraphs,
               keptParagraphs,
               reductionPct,
             });
-          }
-        }
 
-        emit({
-          type: 'progress',
-          message: `Phase 1 complete — ${totalScreeningChunks} section(s) to screen with ${MODEL_SCREENING}`,
-          percent: 20,
-          phase: 'filter_done',
-        });
-
-        // ═══════════════════════════════════════════════════════════════════
-        // PHASE 2: Fast Screening with grok-3-mini (parallel batches)
-        // ═══════════════════════════════════════════════════════════════════
-
-        const allRawFlags: RawScreeningFlag[] = [];
-        const allRawFlagLines: string[] = []; // raw text for Phase 3 synthesis
-        let processedChunks = 0;
-
-        // Flatten work queue
-        type WorkItem = { fileInfo: FileInfo; chunkIdx: number };
-        const workQueue: WorkItem[] = [];
-        for (const info of fileInfos) {
-          for (let ci = 0; ci < info.chunks.length; ci++) {
-            workQueue.push({ fileInfo: info, chunkIdx: ci });
-          }
-        }
-
-        // Process in parallel batches
-        for (let batchStart = 0; batchStart < workQueue.length; batchStart += CONCURRENT_BATCH_SIZE) {
-          const batch = workQueue.slice(batchStart, batchStart + CONCURRENT_BATCH_SIZE);
-          const batchIdx = Math.floor(batchStart / CONCURRENT_BATCH_SIZE) + 1;
-          const totalBatches = Math.ceil(workQueue.length / CONCURRENT_BATCH_SIZE);
-
-          emit({
-            type: 'progress',
-            message: `Phase 2: Screening batch ${batchIdx} of ${totalBatches} with ${MODEL_SCREENING}...`,
-            percent: Math.round(20 + (processedChunks / totalScreeningChunks) * 50),
-            phase: 'screening',
-          });
-
-          // Run batch in parallel
-          const batchPromises = batch.map(async (item) => {
-            const { fileInfo: info, chunkIdx: ci } = item;
-            let rawOutput = '';
-            if (info.isImage && info.imageData && info.imageMime) {
-              rawOutput = await screenImageWithVision(info.imageData, info.imageMime, info.name);
-              info.imageData = ''; // clear immediately
-            } else {
-              rawOutput = await screenChunkWithMini(info.chunks[ci], ci, info.chunks.length, info.name);
-            }
-            return { rawOutput, ci, info };
-          });
-
-          const batchResults = await Promise.all(batchPromises);
-
-          for (const result of batchResults) {
-            processedChunks++;
-            const flags = parseScreeningOutput(result.rawOutput);
-            allRawFlags.push(...flags);
-
-            // Collect raw flag lines for Phase 3 synthesis
-            const flagLines = result.rawOutput.split('\n').filter(l => l.trim().startsWith('FLAG|'));
-            allRawFlagLines.push(...flagLines);
-
-            // Emit live flags to client as they're found
-            for (const flag of flags) {
+            // Emit live keyword flags as they're found
+            for (const flag of keywordFlags) {
               emit({
-                type: 'screening_flag',
+                type: 'keyword_flag',
                 flag: { condition: flag.condition, confidence: flag.confidence, excerpt: flag.excerpt.substring(0, 120) },
               });
             }
           }
+        }
 
-          const elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
-          const estimatedRemaining = processedChunks > 0
-            ? Math.round(((Date.now() - startTime) / processedChunks) * (totalScreeningChunks - processedChunks) / 1000)
-            : 0;
-          emit({
-            type: 'progress',
-            message: `Phase 2: ${processedChunks}/${totalScreeningChunks} screened — ${allRawFlags.length} flags found (${elapsed}s elapsed${estimatedRemaining > 0 ? `, ~${estimatedRemaining}s remaining` : ''})`,
-            percent: Math.round(20 + (processedChunks / totalScreeningChunks) * 50),
-            phase: 'screening',
-          });
+        const filteredTokenEstimate = Math.round(allFilteredText.length / 4);
+        emit({
+          type: 'progress',
+          message: `Phase 1 complete — ${allKeywordFlags.length} potential flags detected, ~${filteredTokenEstimate} tokens to analyze${imageFiles.length > 0 ? `, ${imageFiles.length} image(s) queued` : ''}`,
+          percent: 25,
+          phase: 'filter_done',
+        });
+
+        // ═══════════════════════════════════════════════════════════════════
+        // PHASE 2: Single Grok-4 Synthesis (one API call, ~20-45s)
+        // + Image vision analysis (if any images uploaded)
+        // ═══════════════════════════════════════════════════════════════════
+
+        let finalFlags: FlaggedItem[] = [];
+        let usedModel = MODEL_SYNTHESIS;
+        let usedFallback = false;
+
+        // Process images with vision API (parallel with text synthesis)
+        const imagePromise = imageFiles.length > 0
+          ? Promise.all(imageFiles.map(async (img) => {
+              emit({ type: 'progress', message: `Phase 2: Analyzing image "${img.name}" with ${MODEL_VISION}...`, percent: 30, phase: 'synthesis' });
+              const output = await screenImageWithVision(img.data, img.mime, img.name);
+              img.data = ''; // clear immediately
+              return { name: img.name, output };
+            }))
+          : Promise.resolve([]);
+
+        // Process text with single Grok-4 call
+        const textPromise = allFilteredText.length > 50
+          ? (async () => {
+              emit({
+                type: 'progress',
+                message: `Phase 2: ${MODEL_SYNTHESIS} is analyzing ${allKeywordFlags.length} flagged areas (~${filteredTokenEstimate} tokens)...`,
+                percent: 35,
+                phase: 'synthesis',
+              });
+              const fileNames = files.map(f => f.name).join(', ');
+              return synthesizeWithGrok4(allFilteredText, fileNames);
+            })()
+          : Promise.resolve('');
+
+        // Wait for both to complete (parallel execution)
+        const [imageResults, synthesisOutput] = await Promise.all([imagePromise, textPromise]);
+
+        // Parse text synthesis output
+        if (synthesisOutput) {
+          emit({ type: 'progress', message: 'Phase 2: Processing analysis results...', percent: 85, phase: 'synthesis' });
+          finalFlags = parseSynthesisOutput(synthesisOutput);
+        }
+
+        // Parse image analysis output (reuse parseSynthesisOutput — same format)
+        for (const imgResult of imageResults) {
+          if (imgResult.output) {
+            const imgFlags = parseSynthesisOutput(imgResult.output);
+            finalFlags.push(...imgFlags);
+          }
+        }
+
+        // Fallback: if Grok-4 returned nothing but keywords found flags, use keyword flags
+        if (finalFlags.length === 0 && allKeywordFlags.length > 0) {
+          console.warn('[MedicalDetective] Grok 4 synthesis returned no flags — using keyword fallback');
+          finalFlags = keywordFlagsToFlaggedItems(allKeywordFlags);
+          usedModel = 'keyword-fallback';
+          usedFallback = true;
         }
 
         emit({
           type: 'progress',
-          message: `Phase 2 complete — ${allRawFlags.length} raw flags found. Sending to ${MODEL_SYNTHESIS} for deep analysis...`,
-          percent: 75,
-          phase: 'screening_done',
+          message: usedFallback
+            ? `Analysis complete — ${finalFlags.length} flags from keyword scan (AI analysis unavailable)`
+            : `Phase 2 complete — ${finalFlags.length} verified flag(s)`,
+          percent: 95,
+          phase: 'synthesis_done',
         });
-
-        // ═══════════════════════════════════════════════════════════════════
-        // PHASE 3: Grok 4 Synthesis (single call on pre-screened quotes)
-        // ═══════════════════════════════════════════════════════════════════
-
-        let finalFlags: FlaggedItem[] = [];
-
-        if (allRawFlags.length > 0) {
-          emit({
-            type: 'progress',
-            message: `Phase 3: ${MODEL_SYNTHESIS} is analyzing ${allRawFlags.length} flagged excerpts...`,
-            percent: 80,
-            phase: 'synthesis',
-          });
-
-          const fileNames = fileInfos.map(f => f.name).join(', ');
-          const synthesisOutput = await synthesizeWithGrok4(allRawFlagLines, fileNames);
-
-          if (synthesisOutput) {
-            finalFlags = parseSynthesisOutput(synthesisOutput);
-          }
-
-          // Fallback: if Grok 4 synthesis fails or returns nothing, use screening flags directly
-          if (finalFlags.length === 0 && allRawFlags.length > 0) {
-            console.warn('[MedicalDetective] Grok 4 synthesis returned no flags — using screening flags as fallback');
-            finalFlags = screeningFlagsToFlaggedItems(allRawFlags);
-          }
-
-          emit({
-            type: 'progress',
-            message: `Phase 3 complete — ${finalFlags.length} verified flags`,
-            percent: 95,
-            phase: 'synthesis_done',
-          });
-        } else {
-          emit({
-            type: 'progress',
-            message: 'No flags found during screening — generating report...',
-            percent: 95,
-            phase: 'synthesis_done',
-          });
-        }
 
         // ═══════════════════════════════════════════════════════════════════
         // BUILD REPORT
         // ═══════════════════════════════════════════════════════════════════
 
         const deduped = deduplicateFlags(finalFlags);
-        const report = buildReport(deduped, files.length, Date.now() - startTime);
+        const modelLabel = imageFiles.length > 0
+          ? `${usedModel} (text) + ${MODEL_VISION} (images)`
+          : usedModel;
+        const report = buildReport(deduped, files.length, Date.now() - startTime, modelLabel);
         emit({ type: 'complete', report, percent: 100 });
 
       } catch (err) {
