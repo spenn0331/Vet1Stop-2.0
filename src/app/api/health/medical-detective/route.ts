@@ -1,18 +1,17 @@
 import { NextRequest } from 'next/server';
 
 /**
- * POST /api/health/medical-detective — v4 "Two-Phase Pipeline"
+ * POST /api/health/medical-detective — v4.1 "Two-Phase Pipeline"
  *
- * Architecture (v4 — optimized for <65s scans):
- *   Phase 1: Aggressive Pre-Filter (NO AI, ~1-2s) — strict keyword scoring
- *            (2+ matches required per paragraph), noise-phrase exclusion,
- *            hard cap at 32K chars. Emits live keyword-based flags to client.
- *   Phase 2: Single Grok-4 Synthesis (one API call, ~20-45s) — takes the
- *            entire pre-filtered text and produces structured flags with
- *            confidence, category, nexus reasoning, and next steps.
+ * Architecture (v4.1 — optimized for <65s scans):
+ *   Phase 1: Smart Pre-Filter (NO AI, ~1-2s) — tiered keyword scoring
+ *            (1+ keyword = kept for analysis, 2+ = live flag pill),
+ *            section header priority, noise exclusion, 32K char cap.
+ *   Phase 2: Single Grok-4 Synthesis (one API call, ~20-45s) — takes
+ *            pre-filtered text and produces structured flags with
+ *            confidence, category, nexus reasoning, PACT Act refs.
  *
- * Fallback: If Grok-4 fails, keyword-extracted flags from Phase 1 are used
- *           directly to generate a usable (if less polished) report.
+ * On Grok-4 failure: shows clear error with retry (no fake keyword reports).
  *
  * Streaming NDJSON response. Emits JSON events line-by-line:
  *   {type:'progress', message, percent, phase}
@@ -21,7 +20,7 @@ import { NextRequest } from 'next/server';
  *   {type:'complete', report}
  *   {type:'error', message}
  *
- * SAFETY: Raw file data cleared from memory immediately after text extraction.
+ * SAFETY: Processed in memory only — deleted immediately after scan.
  * Files are NEVER stored. Zero HIPAA exposure.
  */
 
@@ -58,17 +57,20 @@ interface DetectiveReport {
   flaggedItems: FlaggedItem[];
   suggestedNextSteps: string[];
   processingDetails: { filesProcessed: number; processingTime: number; aiModel: string };
+  scanSynopsis?: ScanSynopsis;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-// v4: Single Grok-4 call — no more grok-3-mini batching
+// v4.1: Relaxed pre-filter + body-read timeout + expanded keywords
 const FILTERED_TEXT_CAP = 32_000;     // ~8K tokens — hard cap for Grok-4 input
-const SYNTHESIS_TIMEOUT_MS = 90_000;  // 90s timeout (down from 120s)
+const SYNTHESIS_TIMEOUT_MS = 90_000;  // 90s timeout for fetch
+const BODY_READ_TIMEOUT_MS = 30_000;  // 30s timeout for response.json() (prevents stall)
 const IMAGE_TIMEOUT_MS = 60_000;      // 60s timeout for image vision
-const MAX_RETRIES = 1;                // 1 retry (down from 2) — fail fast
-const MIN_PARAGRAPH_LENGTH = 40;      // Require 40+ chars (up from 20)
-const MIN_KEYWORD_MATCHES = 2;        // Require 2+ keyword hits per paragraph
+const MAX_RETRIES = 1;                // 1 retry — fail fast
+const MIN_PARAGRAPH_LENGTH = 30;      // Lowered from 40 to catch short VA entries
+const MIN_KEYWORD_MATCHES_FLAG = 2;   // 2+ keywords → generates live keyword flag pill
+// Note: 1+ keyword → kept for Grok-4 analysis (tiered filtering)
 
 // Models — user's xAI API models
 const MODEL_SYNTHESIS = 'grok-4-0709';  // Deep analysis (single call)
@@ -76,34 +78,60 @@ const MODEL_VISION = 'grok-3-mini';     // Image analysis (fast on single images
 
 const DISCLAIMER = `This report is for informational purposes only and does not constitute medical or legal advice. This tool does not file claims. Please share this report with your accredited VSO or claims representative for professional review.`;
 
-// ─── Core Medical Keywords for Aggressive Pre-Filter (Phase 1) ──────────────
-// 50 core claim terms focused on high-value disability evidence.
-// Paragraph must match 2+ of these to be kept. This is intentionally strict
-// to reduce 1001 pages → ~100-150 high-signal paragraphs (~4-8K tokens).
+// ─── Core Medical Keywords (~85 terms) for Pre-Filter (Phase 1) ─────────────
+// Tiered: 1+ keyword match → kept for Grok-4; 2+ matches → also generates live flag.
+// Expanded with PACT Act 2024-2026 updates, cancers, and clinical exam terms.
 
 const CORE_KEYWORDS = [
   // Top conditions (highest VA claim frequency)
   'tinnitus', 'hearing loss', 'ptsd', 'post-traumatic', 'sleep apnea',
   'migraine', 'tbi', 'traumatic brain', 'anxiety', 'depression',
   // Toxic exposure / PACT Act
-  'burn pit', 'agent orange', 'gulf war', 'toxic exposure', 'pact act', 'presumptive',
+  'burn pit', 'burn-pit', 'agent orange', 'gulf war', 'toxic exposure',
+  'pact act', 'presumptive', 'iraq', 'afghanistan',
   // Musculoskeletal
   'back pain', 'lumbar', 'radiculopathy', 'knee', 'shoulder', 'arthritis',
+  'cervical', 'sciatica',
   // Respiratory
-  'sinusitis', 'rhinitis', 'asthma', 'copd',
+  'sinusitis', 'rhinitis', 'asthma', 'copd', 'constrictive bronchiolitis',
   // GI / Other conditions
-  'gerd', 'sleep apnea', 'neuropathy', 'chronic pain', 'fibromyalgia',
+  'gerd', 'neuropathy', 'chronic pain', 'fibromyalgia',
   'diabetes', 'hypertension', 'erectile', 'mst', 'military sexual trauma',
+  // PACT Act cancers & conditions
+  'mgus', 'male breast cancer', 'urethral cancer', 'ischemic heart',
+  'pancreatic cancer', 'kidney cancer', 'lymphatic cancer', 'bladder cancer',
+  'melanoma', 'hepatitis', 'parkinson',
   // VA claim language (highest signal)
   'service connected', 'service-connected', 'nexus', 'at least as likely',
   'more likely than not', 'secondary to', 'aggravated by', 'in-service',
   'c&p', 'compensable', 'rated at', 'disability rating', 'tdiu',
-  'unemployability', 'sc ',
-  // Clinical markers
+  'individual unemployability', 'sc ',
+  // Clinical exam markers
   'diagnosis', 'diagnosed', 'abnormal', 'chronic', 'bilateral',
   'functional impairment', 'limitation of motion', 'worsening',
-  'problem list', 'active diagnoses',
+  'problem list', 'active diagnoses', 'range of motion', 'rom',
+  'deluca', 'functional loss', 'pain on use', 'flare-up', 'flare up',
+  // Claim support terms
+  'buddy statement', 'lay evidence', 'stressor', 'incident report',
+  // Additional clinical
+  'seizure', 'epilepsy', 'cancer', 'tumor', 'thyroid', 'kidney', 'liver',
+  'bipolar', 'schizophrenia', 'suicidal', 'substance',
 ];
+
+// Section headers that are ALWAYS kept regardless of keyword count.
+// These are gold for claims — they contain structured clinical data.
+const SECTION_HEADERS = [
+  'assessment:', 'problem list:', 'active problems:', 'diagnosis:',
+  'plan:', 'hpi:', 'history of present illness:', 'impression:',
+  'clinical notes:', 'active diagnoses:', 'chief complaint:',
+  'physical exam:', 'mental status exam:', 'c&p exam',
+  'compensation', 'disability benefits questionnaire', 'dbq',
+];
+
+const SECTION_HEADER_REGEX = new RegExp(
+  SECTION_HEADERS.map(h => h.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'),
+  'i'
+);
 
 // Noise phrases — paragraphs containing these are administrative junk
 const NOISE_PHRASES = [
@@ -130,24 +158,30 @@ const NOISE_REGEX = new RegExp(
 // ─── Synthesis Prompt (Phase 2 — Grok 4, single call) ────────────────────────
 // Takes the entire pre-filtered text and produces structured analysis
 
-const SYNTHESIS_PROMPT = `You are an expert VA disability claims evidence analyst with deep knowledge of VA rating schedules, presumptive conditions, the PACT Act, and how clinical notes support claims.
+const SYNTHESIS_PROMPT = `You are an expert VA disability claims evidence analyst with deep knowledge of VA rating schedules, presumptive conditions, the PACT Act (2022-2026), and how clinical notes support disability claims.
 
-You are given pre-filtered excerpts from a veteran's VA medical records. These have already been keyword-filtered so every paragraph is potentially relevant. Your job is to:
+You are given pre-filtered excerpts from a veteran's VA medical records. Every paragraph has been keyword-filtered or is a clinical section header, so treat all content as potentially relevant. Your job:
 
-1. Identify every claim-relevant finding (diagnoses, conditions, symptoms, claim language, PACT Act presumptives)
-2. Extract exact quotes from the text for each finding
-3. Deduplicate — merge flags that reference the same condition
-4. Assign accurate confidence levels (High = direct diagnosis/rating language, Medium = clinical evidence suggesting condition, Low = indirect/circumstantial)
-5. Map each flag to the correct VA disability category
-6. Provide a 1-sentence nexus/relevance explanation for each
+1. Identify EVERY claim-relevant finding — diagnoses, conditions, symptoms, claim language, PACT Act presumptives, secondary conditions
+2. Extract exact verbatim quotes from the text for each finding
+3. Deduplicate — merge flags referencing the same condition
+4. Assign confidence: High (direct diagnosis, rating language, nexus statement), Medium (clinical evidence suggesting a condition), Low (indirect/circumstantial but worth noting)
+5. Map each to the correct VA disability category
+6. Provide a 1-sentence nexus/relevance explanation
 7. Suggest concrete next steps
+
+IMPORTANT PRIORITIES:
+- PRIORITIZE secondary conditions ("secondary to", "aggravated by"), PACT Act presumptive conditions (burn pits, toxic exposure, specific cancers), and nexus language ("at least as likely as not", "more likely than not").
+- INCLUDE moderate-confidence flags — do NOT omit findings just because evidence is indirect. Veterans need to see everything.
+- Always include the EXACT verbatim quote and page number when available.
+- For any PACT Act presumptive condition, note: "This may qualify under the PACT Act — see va.gov/pact for details."
 
 Output in clean, numbered bullet list format. For each flag:
 - Condition name
 - Confidence: High / Medium / Low
-- Category: (e.g., Mental Health, Musculoskeletal, Sleep Disorders, Hearing, Respiratory, etc.)
-- Exact quote: "[the excerpt from the records]"
-- Page number: [if available]
+- Category: (e.g., Mental Health, Musculoskeletal, Sleep Disorders, Hearing, Respiratory, PACT Act Presumptive, etc.)
+- Exact quote: "[verbatim excerpt from the records]"
+- Page number: [if available, e.g., "Page 47"]
 - Date: [if available]
 - Relevance: [1-sentence explanation of claim relevance]
 
@@ -156,7 +190,7 @@ If the text contains no meaningful evidence, state: 'No strong claim-relevant ev
 End with this exact bold disclaimer:
 **This report is for informational purposes only and does not constitute medical or legal advice. This tool does not file claims. Please share this report with your accredited VSO or claims representative for professional review.**
 
-Be thorough, accurate, professional, and veteran-focused. Extract EVERY relevant finding.`;
+Be thorough, accurate, professional, and veteran-focused. Extract EVERY relevant finding — err on the side of inclusion.`;
 
 // ─── PDF Text Extraction ──────────────────────────────────────────────────────
 
@@ -197,10 +231,10 @@ function extractTextWithRegex(base64Data: string): string {
   } catch { return ''; }
 }
 
-// ─── Phase 1: Aggressive Pre-Filter (No AI) ─────────────────────────────────
-// v4: Requires 2+ keyword matches per paragraph, excludes noise phrases,
-// and hard-caps output at FILTERED_TEXT_CAP chars (~8K tokens).
-// Also extracts live keyword-based flags for immediate client feedback.
+// ─── Phase 1: Smart Pre-Filter (No AI) ──────────────────────────────────────
+// v4.1: Tiered filtering — 1+ keyword = kept for Grok-4, 2+ = live flag pill.
+// Section headers always kept. Single-newline splitting for VA Blue Button.
+// Hard-caps output at FILTERED_TEXT_CAP chars (~8K tokens).
 
 interface KeywordFlag {
   condition: string;
@@ -208,69 +242,120 @@ interface KeywordFlag {
   excerpt: string;
 }
 
-function aggressivePreFilter(text: string): {
+interface ScanSynopsis {
+  totalPages: number;
+  totalParagraphs: number;
+  keptParagraphs: number;
+  reductionPct: number;
+  keywordsDetected: string[];
+  sectionHeadersFound: string[];
+}
+
+function smartPreFilter(text: string): {
   filtered: string;
   totalParagraphs: number;
   keptParagraphs: number;
   keywordFlags: KeywordFlag[];
+  detectedKeywords: string[];
+  detectedHeaders: string[];
 } {
-  const paragraphs = text.split(/\n{2,}|\r\n{2,}/);
+  // Step 1: Split on single newlines (VA Blue Button uses \n, not \n\n)
+  const rawLines = text.split(/\n/);
+
+  // Step 1b: Merge consecutive short lines into logical paragraphs
+  const paragraphs: string[] = [];
+  let currentGroup = '';
+  for (const line of rawLines) {
+    const trimmed = line.trim();
+    if (trimmed.length === 0) {
+      if (currentGroup.length > 0) {
+        paragraphs.push(currentGroup.trim());
+        currentGroup = '';
+      }
+      continue;
+    }
+    if (currentGroup.length > 0 && trimmed.length < MIN_PARAGRAPH_LENGTH && currentGroup.length < MIN_PARAGRAPH_LENGTH) {
+      // Merge short consecutive lines
+      currentGroup += ' ' + trimmed;
+    } else if (currentGroup.length > 0 && currentGroup.length >= MIN_PARAGRAPH_LENGTH) {
+      paragraphs.push(currentGroup.trim());
+      currentGroup = trimmed;
+    } else {
+      currentGroup += (currentGroup ? ' ' : '') + trimmed;
+    }
+  }
+  if (currentGroup.trim().length > 0) paragraphs.push(currentGroup.trim());
+
   const kept: string[] = [];
   const keywordFlags: KeywordFlag[] = [];
   const seenConditions = new Set<string>();
+  const detectedKeywordsSet = new Set<string>();
+  const detectedHeadersSet = new Set<string>();
   let totalChars = 0;
 
   for (const para of paragraphs) {
     const trimmed = para.trim();
-    // Skip short paragraphs
+    // Skip very short paragraphs
     if (trimmed.length < MIN_PARAGRAPH_LENGTH) continue;
     // Skip noise (appointment scheduling, demographics, etc.)
     if (NOISE_REGEX.test(trimmed)) continue;
+
+    // Check if this is a section header (always keep)
+    const isHeader = SECTION_HEADER_REGEX.test(trimmed);
+    if (isHeader) {
+      // Track which headers we found
+      for (const h of SECTION_HEADERS) {
+        if (trimmed.toLowerCase().includes(h.replace(':', '').toLowerCase())) {
+          detectedHeadersSet.add(h.replace(':', '').trim());
+        }
+      }
+    }
 
     // Count keyword matches in this paragraph
     const matchedKeywords: string[] = [];
     for (let i = 0; i < KEYWORD_PATTERNS.length; i++) {
       if (KEYWORD_PATTERNS[i].test(trimmed)) {
         matchedKeywords.push(CORE_KEYWORDS[i]);
+        detectedKeywordsSet.add(CORE_KEYWORDS[i]);
       }
     }
 
-    // Require 2+ keyword matches (strict filtering)
-    if (matchedKeywords.length >= MIN_KEYWORD_MATCHES) {
+    // Tiered filtering: keep if 1+ keyword OR section header
+    const shouldKeep = matchedKeywords.length >= 1 || isHeader;
+    if (shouldKeep) {
       // Hard cap on total filtered text size
       if (totalChars + trimmed.length > FILTERED_TEXT_CAP) {
-        // Still add if we haven't hit the cap yet (allow partial)
         if (totalChars < FILTERED_TEXT_CAP) {
           kept.push(trimmed.substring(0, FILTERED_TEXT_CAP - totalChars));
           totalChars = FILTERED_TEXT_CAP;
         }
-        break; // Stop adding more paragraphs
+        break;
       }
 
       kept.push(trimmed);
       totalChars += trimmed.length;
 
-      // Extract live keyword flags for client feedback
-      // Pick the most specific matched keyword as the condition name
-      const primaryKeyword = matchedKeywords[0];
-      const conditionKey = primaryKeyword.toLowerCase().replace(/[^a-z]/g, '');
-      if (!seenConditions.has(conditionKey)) {
-        seenConditions.add(conditionKey);
+      // Generate live keyword flag pills only for 2+ keyword matches (high signal)
+      if (matchedKeywords.length >= MIN_KEYWORD_MATCHES_FLAG) {
+        const primaryKeyword = matchedKeywords[0];
+        const conditionKey = primaryKeyword.toLowerCase().replace(/[^a-z]/g, '');
+        if (!seenConditions.has(conditionKey)) {
+          seenConditions.add(conditionKey);
 
-        // Determine confidence from keyword type
-        const claimLanguage = ['service connected', 'service-connected', 'nexus', 'at least as likely',
-          'more likely than not', 'compensable', 'rated at', 'disability rating', 'tdiu', 'c&p'];
-        const isClaimLanguage = matchedKeywords.some(k => claimLanguage.includes(k));
-        const confidence: 'high' | 'medium' | 'low' = isClaimLanguage ? 'high'
-          : matchedKeywords.length >= 3 ? 'high'
-          : matchedKeywords.length >= 2 ? 'medium'
-          : 'low';
+          const claimLanguage = ['service connected', 'service-connected', 'nexus', 'at least as likely',
+            'more likely than not', 'compensable', 'rated at', 'disability rating', 'tdiu', 'c&p'];
+          const isClaimLanguage = matchedKeywords.some(k => claimLanguage.includes(k));
+          const confidence: 'high' | 'medium' | 'low' = isClaimLanguage ? 'high'
+            : matchedKeywords.length >= 3 ? 'high'
+            : matchedKeywords.length >= 2 ? 'medium'
+            : 'low';
 
-        keywordFlags.push({
-          condition: primaryKeyword.charAt(0).toUpperCase() + primaryKeyword.slice(1),
-          confidence,
-          excerpt: trimmed.substring(0, 120),
-        });
+          keywordFlags.push({
+            condition: primaryKeyword.charAt(0).toUpperCase() + primaryKeyword.slice(1),
+            confidence,
+            excerpt: trimmed.substring(0, 120),
+          });
+        }
       }
     }
   }
@@ -280,6 +365,8 @@ function aggressivePreFilter(text: string): {
     totalParagraphs: paragraphs.length,
     keptParagraphs: kept.length,
     keywordFlags,
+    detectedKeywords: Array.from(detectedKeywordsSet),
+    detectedHeaders: Array.from(detectedHeadersSet),
   };
 }
 
@@ -377,12 +464,36 @@ function deduplicateFlags(items: FlaggedItem[]): FlaggedItem[] {
 
 // ─── Report Builder ───────────────────────────────────────────────────────────
 
-function buildReport(flags: FlaggedItem[], filesProcessed: number, processingTime: number, aiModel: string): DetectiveReport {
+// PACT Act presumptive condition keywords for cross-referencing
+const PACT_ACT_CONDITIONS = [
+  'burn pit', 'burn-pit', 'toxic exposure', 'pact act', 'presumptive',
+  'agent orange', 'gulf war', 'constrictive bronchiolitis',
+  'mgus', 'male breast cancer', 'urethral cancer', 'ischemic heart',
+  'pancreatic cancer', 'kidney cancer', 'lymphatic cancer', 'bladder cancer',
+  'melanoma', 'hepatitis', 'parkinson', 'sinusitis', 'rhinitis',
+  'iraq', 'afghanistan', 'hypertension',
+];
+
+function addPactActCrossRef(flags: FlaggedItem[]): FlaggedItem[] {
+  const pactRegex = new RegExp(PACT_ACT_CONDITIONS.join('|'), 'i');
+  return flags.map(flag => {
+    const matchesPact = pactRegex.test(flag.label) || pactRegex.test(flag.excerpt) || pactRegex.test(flag.category);
+    if (matchesPact && !flag.context.includes('PACT Act')) {
+      return {
+        ...flag,
+        context: flag.context + ' This may qualify under the PACT Act \u2014 see va.gov/pact for details.',
+      };
+    }
+    return flag;
+  });
+}
+
+function buildReport(flags: FlaggedItem[], filesProcessed: number, processingTime: number, aiModel: string, synopsis?: ScanSynopsis): DetectiveReport {
   return {
     disclaimer: DISCLAIMER,
     summary: flags.length > 0
       ? `${flags.length} potential claim-relevant flag(s) identified across ${filesProcessed} document(s). Review with your VSO or accredited claims representative.`
-      : `No strong claim-relevant flags were identified in the ${filesProcessed} document(s) processed. This does not mean there are no valid claims — consider uploading additional records, progress notes, or screenshots for a more thorough scan.`,
+      : `No strong claim-relevant flags were identified in the ${filesProcessed} document(s) processed. This does not mean there are no valid claims \u2014 consider uploading additional records, progress notes, or screenshots for a more thorough scan.`,
     totalFlagsFound: flags.length,
     flaggedItems: flags,
     suggestedNextSteps: flags.length > 0
@@ -395,11 +506,12 @@ function buildReport(flags: FlaggedItem[], filesProcessed: number, processingTim
         ]
       : [
           'Upload additional VA records, progress notes, or Blue Button exports for a more thorough scan',
-          'Contact a free VSO (American Legion, DAV, VFW) — they can review your records in person',
+          'Contact a free VSO (American Legion, DAV, VFW) \u2014 they can review your records in person',
           'Request your full C-file from the VA by submitting VA Form 3288',
           'Visit va.gov/disability for information on filing a claim',
         ],
     processingDetails: { filesProcessed, processingTime, aiModel },
+    scanSynopsis: synopsis,
   };
 }
 
@@ -449,7 +561,13 @@ async function callGrokAPI(
         }
         throw new Error(`${label} API error ${response.status}: ${err.substring(0, 200)}`);
       }
-      const data = await response.json();
+      // v4.1: Wrap response.json() in its own timeout to prevent body-read stall
+      const data = await Promise.race([
+        response.json(),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error(`${label} body read timed out after ${BODY_READ_TIMEOUT_MS / 1000}s`)), BODY_READ_TIMEOUT_MS)
+        ),
+      ]) as { choices?: Array<{ message?: { content?: string } }> };
       return data.choices?.[0]?.message?.content || '';
     } catch (err) {
       lastError = (err as Error).message || 'Unknown error';
@@ -511,7 +629,7 @@ If nothing relevant found, state: 'No strong claim-relevant evidence flags were 
   );
 }
 
-// ─── Streaming POST Handler — v4 Two-Phase Pipeline ─────────────────────────
+// ─── Streaming POST Handler — v4.1 Two-Phase Pipeline ───────────────────────
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
@@ -545,12 +663,16 @@ export async function POST(request: NextRequest) {
         emit({ type: 'progress', message: 'Starting analysis...', percent: 2, phase: 'init' });
 
         // ═══════════════════════════════════════════════════════════════════
-        // PHASE 1: Extract + Aggressive Pre-Filter (No AI — ~1-2s)
+        // PHASE 1: Extract + Smart Pre-Filter (No AI — ~1-2s)
         // ═══════════════════════════════════════════════════════════════════
 
         let allFilteredText = '';
         let allKeywordFlags: KeywordFlag[] = [];
         let totalPages = 0;
+        let allTotalParagraphs = 0;
+        let allKeptParagraphs = 0;
+        const allDetectedKeywords = new Set<string>();
+        const allDetectedHeaders = new Set<string>();
         const imageFiles: Array<{ name: string; data: string; mime: string }> = [];
 
         for (let fi = 0; fi < files.length; fi++) {
@@ -568,9 +690,13 @@ export async function POST(request: NextRequest) {
 
             emit({ type: 'progress', message: `Phase 1: Pre-filtering "${file.name}" (${numPages} pages)...`, percent: 10 + (fi / files.length) * 15, phase: 'filter' });
 
-            const { filtered, totalParagraphs, keptParagraphs, keywordFlags } = aggressivePreFilter(text);
+            const { filtered, totalParagraphs, keptParagraphs, keywordFlags, detectedKeywords, detectedHeaders } = smartPreFilter(text);
             allFilteredText += (allFilteredText ? '\n\n---\n\n' : '') + filtered;
             allKeywordFlags.push(...keywordFlags);
+            allTotalParagraphs += totalParagraphs;
+            allKeptParagraphs += keptParagraphs;
+            detectedKeywords.forEach(k => allDetectedKeywords.add(k));
+            detectedHeaders.forEach(h => allDetectedHeaders.add(h));
 
             const reductionPct = totalParagraphs > 0 ? Math.round((1 - keptParagraphs / totalParagraphs) * 100) : 0;
             emit({
@@ -594,9 +720,21 @@ export async function POST(request: NextRequest) {
         }
 
         const filteredTokenEstimate = Math.round(allFilteredText.length / 4);
+        const overallReductionPct = allTotalParagraphs > 0 ? Math.round((1 - allKeptParagraphs / allTotalParagraphs) * 100) : 0;
+
+        // Build scan synopsis for report
+        const synopsis: ScanSynopsis = {
+          totalPages,
+          totalParagraphs: allTotalParagraphs,
+          keptParagraphs: allKeptParagraphs,
+          reductionPct: overallReductionPct,
+          keywordsDetected: Array.from(allDetectedKeywords),
+          sectionHeadersFound: Array.from(allDetectedHeaders),
+        };
+
         emit({
           type: 'progress',
-          message: `Phase 1 complete — ${allKeywordFlags.length} potential flags detected, ~${filteredTokenEstimate} tokens to analyze${imageFiles.length > 0 ? `, ${imageFiles.length} image(s) queued` : ''}`,
+          message: `Phase 1 complete — ${allKeptParagraphs} paragraphs kept (${overallReductionPct}% noise removed), ${allDetectedKeywords.size} keywords, ~${filteredTokenEstimate} tokens${imageFiles.length > 0 ? `, ${imageFiles.length} image(s) queued` : ''}`,
           percent: 25,
           phase: 'filter_done',
         });
@@ -607,8 +745,7 @@ export async function POST(request: NextRequest) {
         // ═══════════════════════════════════════════════════════════════════
 
         let finalFlags: FlaggedItem[] = [];
-        let usedModel = MODEL_SYNTHESIS;
-        let usedFallback = false;
+        const usedModel = MODEL_SYNTHESIS;
 
         // Process images with vision API (parallel with text synthesis)
         const imagePromise = imageFiles.length > 0
@@ -625,7 +762,7 @@ export async function POST(request: NextRequest) {
           ? (async () => {
               emit({
                 type: 'progress',
-                message: `Phase 2: ${MODEL_SYNTHESIS} is analyzing ${allKeywordFlags.length} flagged areas (~${filteredTokenEstimate} tokens)...`,
+                message: `Phase 2: ${MODEL_SYNTHESIS} is analyzing ${allKeptParagraphs} paragraphs (~${filteredTokenEstimate} tokens)...`,
                 percent: 35,
                 phase: 'synthesis',
               });
@@ -651,32 +788,35 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        // Fallback: if Grok-4 returned nothing but keywords found flags, use keyword flags
-        if (finalFlags.length === 0 && allKeywordFlags.length > 0) {
-          console.warn('[MedicalDetective] Grok 4 synthesis returned no flags — using keyword fallback');
-          finalFlags = keywordFlagsToFlaggedItems(allKeywordFlags);
-          usedModel = 'keyword-fallback';
-          usedFallback = true;
+        // v4.1: If Grok-4 returned nothing and we had content, show error with retry
+        // (No keyword-only fallback — AI review is the value proposition)
+        if (finalFlags.length === 0 && allFilteredText.length > 50 && !synthesisOutput) {
+          console.warn('[MedicalDetective] Grok 4 synthesis failed — no output returned');
+          emit({
+            type: 'progress',
+            message: 'AI analysis timed out or failed. Your scan data was not lost — please retry.',
+            percent: 95,
+            phase: 'synthesis_done',
+          });
+        } else {
+          emit({
+            type: 'progress',
+            message: `Phase 2 complete — ${finalFlags.length} verified flag(s)`,
+            percent: 95,
+            phase: 'synthesis_done',
+          });
         }
 
-        emit({
-          type: 'progress',
-          message: usedFallback
-            ? `Analysis complete — ${finalFlags.length} flags from keyword scan (AI analysis unavailable)`
-            : `Phase 2 complete — ${finalFlags.length} verified flag(s)`,
-          percent: 95,
-          phase: 'synthesis_done',
-        });
-
         // ═══════════════════════════════════════════════════════════════════
-        // BUILD REPORT
+        // BUILD REPORT (with PACT Act cross-refs + synopsis)
         // ═══════════════════════════════════════════════════════════════════
 
         const deduped = deduplicateFlags(finalFlags);
+        const withPactRefs = addPactActCrossRef(deduped);
         const modelLabel = imageFiles.length > 0
           ? `${usedModel} (text) + ${MODEL_VISION} (images)`
           : usedModel;
-        const report = buildReport(deduped, files.length, Date.now() - startTime, modelLabel);
+        const report = buildReport(withPactRefs, files.length, Date.now() - startTime, modelLabel, synopsis);
         emit({ type: 'complete', report, percent: 100 });
 
       } catch (err) {

@@ -36,6 +36,15 @@ interface FlaggedItem {
   confidence: 'high' | 'medium' | 'low';
 }
 
+interface ScanSynopsis {
+  totalPages: number;
+  totalParagraphs: number;
+  keptParagraphs: number;
+  reductionPct: number;
+  keywordsDetected: string[];
+  sectionHeadersFound: string[];
+}
+
 interface DetectiveReport {
   disclaimer: string;
   summary: string;
@@ -47,6 +56,7 @@ interface DetectiveReport {
     processingTime: number;
     aiModel: string;
   };
+  scanSynopsis?: ScanSynopsis;
 }
 
 type PanelState = 'upload' | 'processing' | 'results' | 'no_flags' | 'error';
@@ -632,7 +642,7 @@ body{font-family:'Segoe UI',sans-serif;padding:40px;color:#1F2937;line-height:1.
           </div>
 
           <p className="text-xs text-gray-400 text-center mt-2">
-            2-phase pipeline: Aggressive pre-filter removes noise → single Grok 4 call produces your final report (~25-65s).
+            2-phase pipeline: Smart pre-filter (85 keywords + section headers) → single Grok 4 deep analysis (~25-65s).
           </p>
           <p className="text-xs text-gray-400 text-center mt-1">
             Files are processed in memory only — never stored permanently.
@@ -661,6 +671,30 @@ body{font-family:'Segoe UI',sans-serif;padding:40px;color:#1F2937;line-height:1.
             <p className="text-sm text-gray-600 max-w-lg mx-auto mb-4">
               The AI did not find strong evidence flags in the uploaded document(s). This does <strong>not</strong> mean there are no valid claims — it may mean additional records are needed.
             </p>
+
+            {/* Scan Synopsis — default OPEN on no_flags */}
+            {report.scanSynopsis && (
+              <details open className="bg-white border border-gray-200 rounded-lg p-4 text-left mb-4">
+                <summary className="text-sm font-semibold text-[#1A2C5B] cursor-pointer select-none">What was scanned</summary>
+                <div className="mt-3 space-y-2 text-xs text-gray-600">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    <div className="bg-gray-50 rounded p-2"><strong className="block text-gray-800">{report.scanSynopsis.totalPages}</strong>Pages scanned</div>
+                    <div className="bg-gray-50 rounded p-2"><strong className="block text-gray-800">{report.scanSynopsis.totalParagraphs.toLocaleString()}</strong>Total paragraphs</div>
+                    <div className="bg-gray-50 rounded p-2"><strong className="block text-gray-800">{report.scanSynopsis.keptParagraphs.toLocaleString()}</strong>Kept for analysis</div>
+                    <div className="bg-gray-50 rounded p-2"><strong className="block text-gray-800">{report.scanSynopsis.reductionPct}%</strong>Noise removed</div>
+                    <div className="bg-gray-50 rounded p-2"><strong className="block text-gray-800">{report.scanSynopsis.keywordsDetected.length}</strong>Keywords detected</div>
+                    <div className="bg-gray-50 rounded p-2"><strong className="block text-gray-800">{report.scanSynopsis.sectionHeadersFound.length}</strong>Clinical sections</div>
+                  </div>
+                  {report.scanSynopsis.keywordsDetected.length > 0 && (
+                    <p className="text-xs"><strong>Keywords found:</strong> {report.scanSynopsis.keywordsDetected.slice(0, 15).join(', ')}{report.scanSynopsis.keywordsDetected.length > 15 ? ` (+${report.scanSynopsis.keywordsDetected.length - 15} more)` : ''}</p>
+                  )}
+                  {report.scanSynopsis.sectionHeadersFound.length > 0 && (
+                    <p className="text-xs"><strong>Sections found:</strong> {report.scanSynopsis.sectionHeadersFound.join(', ')}</p>
+                  )}
+                </div>
+              </details>
+            )}
+
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-left mb-4">
               <p className="text-sm font-semibold text-[#1A2C5B] mb-2">What to try next:</p>
               <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
@@ -673,6 +707,7 @@ body{font-family:'Segoe UI',sans-serif;padding:40px;color:#1F2937;line-height:1.
             <p className="text-xs text-gray-500">
               Processed {report.processingDetails.filesProcessed} file(s) in {(report.processingDetails.processingTime / 1000).toFixed(1)}s using {report.processingDetails.aiModel}
             </p>
+            <p className="text-xs text-gray-400 mt-1">Processed in memory only — deleted immediately after scan.</p>
           </div>
 
           <div className="flex flex-col sm:flex-row gap-3">
@@ -747,6 +782,30 @@ body{font-family:'Segoe UI',sans-serif;padding:40px;color:#1F2937;line-height:1.
               ))}
             </div>
           </div>
+
+          {/* Scan Synopsis — default CLOSED on results */}
+          {report.scanSynopsis && (
+            <details className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6">
+              <summary className="text-sm font-semibold text-[#1A2C5B] cursor-pointer select-none">What was scanned</summary>
+              <div className="mt-3 space-y-2 text-xs text-gray-600">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  <div className="bg-white rounded p-2"><strong className="block text-gray-800">{report.scanSynopsis.totalPages}</strong>Pages scanned</div>
+                  <div className="bg-white rounded p-2"><strong className="block text-gray-800">{report.scanSynopsis.totalParagraphs.toLocaleString()}</strong>Total paragraphs</div>
+                  <div className="bg-white rounded p-2"><strong className="block text-gray-800">{report.scanSynopsis.keptParagraphs.toLocaleString()}</strong>Kept for analysis</div>
+                  <div className="bg-white rounded p-2"><strong className="block text-gray-800">{report.scanSynopsis.reductionPct}%</strong>Noise removed</div>
+                  <div className="bg-white rounded p-2"><strong className="block text-gray-800">{report.scanSynopsis.keywordsDetected.length}</strong>Keywords detected</div>
+                  <div className="bg-white rounded p-2"><strong className="block text-gray-800">{report.scanSynopsis.sectionHeadersFound.length}</strong>Clinical sections</div>
+                </div>
+                {report.scanSynopsis.keywordsDetected.length > 0 && (
+                  <p className="text-xs"><strong>Keywords found:</strong> {report.scanSynopsis.keywordsDetected.slice(0, 15).join(', ')}{report.scanSynopsis.keywordsDetected.length > 15 ? ` (+${report.scanSynopsis.keywordsDetected.length - 15} more)` : ''}</p>
+                )}
+                {report.scanSynopsis.sectionHeadersFound.length > 0 && (
+                  <p className="text-xs"><strong>Sections found:</strong> {report.scanSynopsis.sectionHeadersFound.join(', ')}</p>
+                )}
+                <p className="text-xs text-gray-400 mt-1">Processed in memory only — deleted immediately after scan.</p>
+              </div>
+            </details>
+          )}
 
           {/* Next Steps */}
           <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
