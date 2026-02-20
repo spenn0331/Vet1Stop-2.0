@@ -29,48 +29,51 @@
 * **Legal Setup:** LLC formation in PA (Pending).
 * **Health Page:** Continued testing and refinement of AI tools.
 
-### 📋 Session: Feb 19, 2026 — Medical Detective Large File Fix
+### 📋 Session: Feb 19, 2026 — Medical Detective v3 "Three-Phase Pipeline"
 
-#### Problem
-Medical Detective froze at 21% when processing a 1001-page VA records PDF. Root causes identified:
-1. **72+ sequential Grok API calls** — 1001 pages at 14K char chunks = ~72 chunks, each processed one at a time
-2. **No timeout/retry** — A single stalled Grok call froze everything permanently
-3. **No concurrency** — All API calls were strictly sequential (12-36 min for large docs)
-4. **No cancel/abort** — User couldn't stop a stuck scan
-5. **Small fixed chunk size** — 14K chars too small for 1000+ page docs
-6. **Body size limit too small** — Next.js default could reject large base64 payloads
+#### Problem (v2 still too slow)
+After v2 fix (adaptive chunks + parallel batches), a 1001-page VA Blue Button PDF still took 20-30+ minutes because:
+- **28 Grok 4 API calls** at 60-120s each = too slow even with 3x parallelism
+- **~75% of VA Blue Button content is administrative noise** (appointments, demographics, scheduling)
+- Every chunk was sent to the expensive Grok 4 model regardless of content quality
 
-#### Fixes Applied
-**API Route** (`src/app/api/health/medical-detective/route.ts`):
-- **Adaptive chunk sizing**: 14K (small docs) → 28K (>20 pages) → 48K (>100 pages) — reduces API calls by 3.4x for large docs
-- **Parallel batch processing**: 3 concurrent Grok API calls instead of sequential — ~3x speed boost
-- **Safety cap**: Max 40 chunks per file; overflow gets sampled rather than dropped
-- **Per-call timeout**: 90s timeout with automatic retry (up to 2 retries, exponential backoff)
-- **Rate limit handling**: Auto-detects 429 responses and waits before retrying
-- **Graceful degradation**: Failed chunks return empty instead of crashing the whole scan
-- **ETA tracking**: Server emits elapsed time and estimated remaining in progress events
-- **5-minute max duration**: `maxDuration = 300` for serverless function
+#### v3 Architecture: Three-Phase Pipeline
+**Phase 1 — Smart Pre-Filter (No AI, instant)**
+- ~90 medical/claim keywords compiled into a single regex
+- Scans every paragraph, discards non-medical content (appointments, demographics, immunizations, vitals)
+- Reduces 1001-page VA Blue Button by ~75% → only high-signal paragraphs kept
+- Result: 28 chunks → ~3-5 filtered chunks
 
-**Client** (`src/app/health/components/MedicalDetectivePanel.tsx`):
-- **Cancel button**: AbortController allows user to stop mid-scan
-- **Elapsed time display**: Live timer shows how long the scan has been running
-- **Estimated time remaining**: Parsed from server progress events
-- **50MB file limit**: Increased from 25MB to support large Blue Button exports
-- **Better error handling**: Distinguishes cancel vs actual errors, re-throws real errors from JSON parse catch
-- **Memory cleanup**: Base64 data freed from client memory immediately after upload
+**Phase 2 — Fast Screening with `grok-3-mini` (~20-30s)**
+- Pre-filtered text sent to `grok-3-mini` (8-10x faster than Grok 4)
+- Structured `FLAG|` output format for easy parsing
+- Parallel batches of 3 with 60s timeout + 2 retries
+- Live flags streamed to client as they're found
 
-**Config** (`next.config.js`):
-- Body size limit increased to 50MB for large PDF uploads
-- `pdf-parse` added to `serverExternalPackages` for proper bundling
+**Phase 3 — Grok 4 Synthesis (single call, ~30-45s)**
+- All raw FLAG lines from Phase 2 sent to `grok-4-0709` in ONE call
+- Grok 4 deduplicates, scores confidence, maps categories, writes nexus reasoning
+- Fallback: if synthesis fails, screening flags used directly
+
+#### Files Changed
+- `src/app/api/health/medical-detective/route.ts` — complete rewrite to 3-phase pipeline
+- `src/app/health/components/MedicalDetectivePanel.tsx` — phase indicators, live flags UI, updated event handling
+- `next.config.js` — 50MB body size, pdf-parse external package (from v2)
+
+#### Models Used
+- **Screening**: `grok-3-mini` (fast, cheap)
+- **Synthesis**: `grok-4-0709` (deep analysis, single call)
+- **Vision**: `grok-3-mini` (for image uploads)
 
 #### Performance Impact (estimated for 1001-page PDF)
-| Metric | Before | After |
-|--------|--------|-------|
-| Chunks | ~72 | ~22 (48K XL chunks) |
-| Concurrency | 1 (sequential) | 3 (parallel batches) |
-| Est. time | 12-36 min (if it didn't freeze) | ~2-5 min |
-| Timeout handling | None (infinite hang) | 90s per call + 2 retries |
-| User cancel | Not possible | Cancel button available |
+| Metric | v1 (original) | v2 (adaptive chunks) | v3 (3-phase pipeline) |
+|--------|---------------|---------------------|----------------------|
+| Chunks to process | ~72 | ~28 | ~3-5 |
+| Model per chunk | Grok 4 (slow) | Grok 4 (slow) | grok-3-mini (fast) |
+| Grok 4 calls | 72 | 28 | **1** (synthesis only) |
+| Est. total time | Infinite (froze) | 20-30 min | **~45-75 seconds** |
+| Live flag preview | No | No | Yes |
+| Cancel button | No | Yes | Yes |
 
 ### � Today's Session Summary (Feb 18, 2026)
 

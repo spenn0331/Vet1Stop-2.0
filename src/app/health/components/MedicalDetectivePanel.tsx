@@ -89,6 +89,8 @@ export default function MedicalDetectivePanel() {
   const [isDragOver, setIsDragOver] = useState(false);
   const [elapsedTime, setElapsedTime] = useState(0);
   const [estimatedRemaining, setEstimatedRemaining] = useState<number | null>(null);
+  const [currentPhase, setCurrentPhase] = useState<string>('init');
+  const [liveFlags, setLiveFlags] = useState<Array<{ condition: string; confidence: string; excerpt: string }>>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -203,6 +205,8 @@ export default function MedicalDetectivePanel() {
     setProgressMsg('Preparing files...');
     setError('');
     setEstimatedRemaining(null);
+    setCurrentPhase('init');
+    setLiveFlags([]);
 
     // Create abort controller for cancellation
     const abortController = new AbortController();
@@ -270,17 +274,18 @@ export default function MedicalDetectivePanel() {
             if (event.type === 'progress') {
               setProgressMsg(event.message || '');
               if (typeof event.percent === 'number') setProgress(event.percent);
+              if (event.phase) setCurrentPhase(event.phase);
               // Parse estimated remaining from server message
               const etaMatch = (event.message || '').match(/~(\d+)s remaining/);
               if (etaMatch) setEstimatedRemaining(parseInt(etaMatch[1], 10));
             } else if (event.type === 'file_ready') {
-              const modeLabel = event.chunkMode === 'XL' ? ' (XL chunks for speed)' : event.chunkMode === 'L' ? ' (large chunks)' : '';
-              setProgressMsg(`"${event.fileName}" ready — ${event.numPages} page(s), ${event.numChunks} chunk(s)${modeLabel}`);
-            } else if (event.type === 'chunk_start') {
-              setProgressMsg(event.message || `Analyzing chunk ${event.chunk} of ${event.totalChunks}...`);
-              if (typeof event.percent === 'number') setProgress(event.percent);
-            } else if (event.type === 'chunk_complete') {
-              // progress bar already updated by chunk_start / progress events
+              const reduction = event.reductionPct ? ` — ${event.reductionPct}% noise removed` : '';
+              setProgressMsg(`"${event.fileName}" ready — ${event.numPages} pages → ${event.filteredChunks || event.numChunks} section(s)${reduction}`);
+            } else if (event.type === 'screening_flag') {
+              // Live flag from Phase 2 screening
+              if (event.flag) {
+                setLiveFlags(prev => [...prev, event.flag]);
+              }
             } else if (event.type === 'complete') {
               const r: DetectiveReport = event.report;
               setReport(r);
@@ -550,9 +555,28 @@ body{font-family:'Segoe UI',sans-serif;padding:40px;color:#1F2937;line-height:1.
       {/* ─── Processing State ─── */}
       {panelState === 'processing' && (
         <div className="py-10">
-          <h3 className="text-xl font-bold text-[#1A2C5B] text-center mb-6">
+          <h3 className="text-xl font-bold text-[#1A2C5B] text-center mb-4">
             Scanning Your Records...
           </h3>
+
+          {/* Phase indicator */}
+          <div className="flex justify-center gap-2 mb-4">
+            {['filter', 'screening', 'synthesis'].map((phase, i) => {
+              const labels = ['Pre-Filter', 'AI Screening', 'Deep Analysis'];
+              const phaseOrder = ['filter', 'screening', 'synthesis'];
+              const currentIdx = phaseOrder.indexOf(currentPhase.replace('_done', ''));
+              const isDone = i < currentIdx || currentPhase.includes('_done') && i <= currentIdx;
+              const isActive = currentPhase.startsWith(phase);
+              return (
+                <div key={phase} className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                  isDone ? 'bg-green-100 text-green-800' : isActive ? 'bg-blue-100 text-blue-800 animate-pulse' : 'bg-gray-100 text-gray-400'
+                }`}>
+                  {isDone && <CheckCircleIcon className="h-3.5 w-3.5" />}
+                  <span>{labels[i]}</span>
+                </div>
+              );
+            })}
+          </div>
 
           {/* Progress bar */}
           <div className="mb-4">
@@ -576,6 +600,26 @@ body{font-family:'Segoe UI',sans-serif;padding:40px;color:#1F2937;line-height:1.
             )}
           </div>
 
+          {/* Live flags found during screening */}
+          {liveFlags.length > 0 && (
+            <div className="mb-4 border border-green-200 rounded-lg bg-green-50/50 p-3">
+              <p className="text-xs font-semibold text-green-800 mb-2">
+                <FlagIcon className="inline h-3.5 w-3.5 mr-1" />
+                {liveFlags.length} flag{liveFlags.length !== 1 ? 's' : ''} found so far:
+              </p>
+              <div className="space-y-1 max-h-32 overflow-y-auto">
+                {liveFlags.map((flag, i) => (
+                  <div key={i} className="flex items-start gap-2 text-xs">
+                    <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${
+                      flag.confidence === 'high' ? 'bg-red-100 text-red-700' : flag.confidence === 'medium' ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-600'
+                    }`}>{flag.confidence}</span>
+                    <span className="text-gray-700 font-medium">{flag.condition}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Cancel button */}
           <div className="text-center mb-4">
             <button
@@ -588,7 +632,7 @@ body{font-family:'Segoe UI',sans-serif;padding:40px;color:#1F2937;line-height:1.
           </div>
 
           <p className="text-xs text-gray-400 text-center mt-2">
-            Grok 4 is analyzing your documents chunk by chunk for claim-relevant evidence. Large PDFs (100+ pages) use parallel batch processing.
+            3-phase pipeline: Pre-filter removes noise → grok-3-mini screens for flags → Grok 4 produces your final report.
           </p>
           <p className="text-xs text-gray-400 text-center mt-1">
             Files are processed in memory only — never stored permanently.
