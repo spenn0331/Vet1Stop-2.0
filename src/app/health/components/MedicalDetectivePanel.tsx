@@ -45,6 +45,19 @@ interface ScanSynopsis {
   sectionHeadersFound: string[];
 }
 
+interface KeywordFlag {
+  condition: string;
+  confidence: string;
+  excerpt: string;
+}
+
+interface CachedScan {
+  filteredText: string;
+  keywordFlags: KeywordFlag[];
+  synopsis: ScanSynopsis;
+  fileNames: string;
+}
+
 interface DetectiveReport {
   disclaimer: string;
   summary: string;
@@ -57,6 +70,8 @@ interface DetectiveReport {
     aiModel: string;
   };
   scanSynopsis?: ScanSynopsis;
+  isInterim?: boolean;
+  interimNote?: string;
 }
 
 type PanelState = 'upload' | 'processing' | 'results' | 'no_flags' | 'error';
@@ -101,6 +116,7 @@ export default function MedicalDetectivePanel() {
   const [estimatedRemaining, setEstimatedRemaining] = useState<number | null>(null);
   const [currentPhase, setCurrentPhase] = useState<string>('init');
   const [liveFlags, setLiveFlags] = useState<Array<{ condition: string; confidence: string; excerpt: string }>>([]);
+  const [cachedScan, setCachedScan] = useState<CachedScan | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -196,6 +212,86 @@ export default function MedicalDetectivePanel() {
     setError('');
   };
 
+  // Retry deep analysis using cached filtered text — skips re-upload
+  const handleRetry = useCallback(async () => {
+    if (!cachedScan) return;
+
+    setPanelState('processing');
+    setProgress(30);
+    setProgressMsg('Retrying deep AI analysis (using cached scan data)...');
+    setError('');
+    setEstimatedRemaining(null);
+    setCurrentPhase('synthesis');
+    setLiveFlags([]);
+
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+
+    try {
+      const response = await fetch('/api/health/medical-detective', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          retryFilteredText: cachedScan.filteredText,
+          retrySynopsis: cachedScan.synopsis,
+          retryKeywordFlags: cachedScan.keywordFlags,
+          retryFileNames: cachedScan.fileNames,
+        }),
+        signal: abortController.signal,
+      });
+
+      if (!response.ok || !response.body) {
+        throw new Error('Server error on retry. Please try again.');
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        if (abortController.signal.aborted) { reader.cancel(); throw new Error('Scan cancelled by user.'); }
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const event = JSON.parse(line);
+            if (event.type === 'progress') {
+              setProgressMsg(event.message || '');
+              if (typeof event.percent === 'number') setProgress(event.percent);
+              if (event.phase) setCurrentPhase(event.phase);
+            } else if (event.type === 'complete') {
+              const r: DetectiveReport = event.report;
+              setReport(r);
+              setProgress(100);
+              setEstimatedRemaining(null);
+              setPanelState(r.totalFlagsFound > 0 ? 'results' : 'no_flags');
+              return;
+            } else if (event.type === 'error') {
+              throw new Error(event.message || 'Retry failed.');
+            }
+          } catch (parseErr) {
+            if (parseErr instanceof Error && (parseErr.message.includes('cancelled') || parseErr.message.includes('failed'))) throw parseErr;
+          }
+        }
+      }
+    } catch (err) {
+      const msg = (err as Error).message || 'Retry failed.';
+      if ((err as Error).name === 'AbortError' || msg.includes('cancelled')) {
+        setError('Scan cancelled. Your files were not stored.');
+      } else {
+        setError(msg);
+      }
+      setPanelState('error');
+    } finally {
+      abortControllerRef.current = null;
+    }
+  }, [cachedScan]);
+
   // Cancel an in-progress scan
   const handleCancel = useCallback(() => {
     if (abortControllerRef.current) {
@@ -204,6 +300,18 @@ export default function MedicalDetectivePanel() {
     }
     setError('Scan cancelled by user.');
     setPanelState('error');
+  }, []);
+
+  // Reset back to upload state
+  const handleReset = useCallback(() => {
+    setFiles([]);
+    setReport(null);
+    setError('');
+    setProgress(0);
+    setProgressMsg('Starting...');
+    setLiveFlags([]);
+    setPanelState('upload');
+    // Note: cachedScan intentionally preserved so Retry still works after reset
   }, []);
 
   // Process files — streaming NDJSON fetch
@@ -217,6 +325,7 @@ export default function MedicalDetectivePanel() {
     setEstimatedRemaining(null);
     setCurrentPhase('init');
     setLiveFlags([]);
+    setCachedScan(null); // clear previous cached scan on new upload
 
     // Create abort controller for cancellation
     const abortController = new AbortController();
@@ -296,6 +405,14 @@ export default function MedicalDetectivePanel() {
               if (event.flag) {
                 setLiveFlags(prev => [...prev, event.flag]);
               }
+            } else if (event.type === 'scan_cache') {
+              // Store filtered text + synopsis for fast retry (no re-upload)
+              setCachedScan({
+                filteredText: event.filteredText || '',
+                keywordFlags: event.keywordFlags || [],
+                synopsis: event.synopsis,
+                fileNames: event.fileNames || '',
+              });
             } else if (event.type === 'complete') {
               const r: DetectiveReport = event.report;
               setReport(r);
@@ -423,16 +540,6 @@ body{font-family:'Segoe UI',sans-serif;padding:40px;color:#1F2937;line-height:1.
     const url = URL.createObjectURL(blob);
     const win = window.open(url, '_blank');
     if (win) win.onload = () => URL.revokeObjectURL(url);
-  };
-
-  // Reset to upload state
-  const handleReset = () => {
-    setFiles([]);
-    setReport(null);
-    setError('');
-    setProgress(0);
-    setProgressMsg('Starting...');
-    setPanelState('upload');
   };
 
   // Format file size
@@ -727,19 +834,46 @@ body{font-family:'Segoe UI',sans-serif;padding:40px;color:#1F2937;line-height:1.
       {/* ─── Results State ─── */}
       {panelState === 'results' && report && (
         <div>
-          {/* Summary banner */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-            <div className="flex items-start gap-3">
-              <CheckCircleIcon className="h-6 w-6 text-green-600 flex-shrink-0 mt-0.5" />
-              <div>
-                <h4 className="font-semibold text-[#1A2C5B] mb-1">Scan Complete — {report.totalFlagsFound} Flag(s) Found</h4>
-                <p className="text-sm text-gray-700">{report.summary}</p>
-                <p className="text-xs text-gray-500 mt-1">
-                  {report.processingDetails.filesProcessed} file(s) · {(report.processingDetails.processingTime / 1000).toFixed(1)}s · {report.processingDetails.aiModel}
-                </p>
+          {/* Summary banner — amber for interim, blue for full */}
+          {report.isInterim ? (
+            <div className="bg-amber-50 border border-amber-300 rounded-lg p-4 mb-6">
+              <div className="flex items-start gap-3">
+                <ExclamationTriangleIcon className="h-6 w-6 text-amber-500 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
+                    <h4 className="font-semibold text-amber-900">Interim Report — {report.totalFlagsFound} Pre-Filter Flag(s)</h4>
+                    <span className="text-xs bg-amber-200 text-amber-900 px-2 py-0.5 rounded-full font-medium">Interim</span>
+                  </div>
+                  <p className="text-sm text-amber-800 mb-2">{report.interimNote}</p>
+                  <p className="text-xs text-amber-700">
+                    {report.processingDetails.filesProcessed} file(s) · {(report.processingDetails.processingTime / 1000).toFixed(1)}s · {report.processingDetails.aiModel}
+                  </p>
+                  {cachedScan && (
+                    <button
+                      onClick={handleRetry}
+                      className="mt-3 inline-flex items-center px-4 py-2 rounded-lg bg-[#1A2C5B] text-white text-sm font-semibold hover:bg-[#0F1D3D] transition-colors focus:outline-none focus:ring-4 focus:ring-blue-200"
+                    >
+                      <ArrowRightIcon className="mr-1.5 h-4 w-4" />
+                      Retry Deep Analysis
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
+          ) : (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+              <div className="flex items-start gap-3">
+                <CheckCircleIcon className="h-6 w-6 text-green-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <h4 className="font-semibold text-[#1A2C5B] mb-1">Scan Complete — {report.totalFlagsFound} Flag(s) Found</h4>
+                  <p className="text-sm text-gray-700">{report.summary}</p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {report.processingDetails.filesProcessed} file(s) · {(report.processingDetails.processingTime / 1000).toFixed(1)}s · {report.processingDetails.aiModel}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Flagged Items */}
           <div className="mb-6">
@@ -783,9 +917,9 @@ body{font-family:'Segoe UI',sans-serif;padding:40px;color:#1F2937;line-height:1.
             </div>
           </div>
 
-          {/* Scan Synopsis — default CLOSED on results */}
+          {/* Scan Synopsis — auto-open on interim, closed on full */}
           {report.scanSynopsis && (
-            <details className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6">
+            <details {...(report.isInterim ? { open: true } : {})} className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6">
               <summary className="text-sm font-semibold text-[#1A2C5B] cursor-pointer select-none">What was scanned</summary>
               <div className="mt-3 space-y-2 text-xs text-gray-600">
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -822,13 +956,21 @@ body{font-family:'Segoe UI',sans-serif;padding:40px;color:#1F2937;line-height:1.
             <button onClick={handleDownloadReport}
               className="flex-1 inline-flex items-center justify-center px-6 py-3 rounded-lg bg-[#1A2C5B] text-white font-semibold hover:bg-[#0F1D3D] transition-colors focus:outline-none focus:ring-4 focus:ring-blue-200">
               <DocumentArrowDownIcon className="mr-2 h-5 w-5" />
-              Download Evidence Report (PDF)
+              {report.isInterim ? 'Download Interim Report' : 'Download Evidence Report (PDF)'}
             </button>
-            <a href="https://www.va.gov/vso/" target="_blank" rel="noopener noreferrer"
-              className="flex-1 inline-flex items-center justify-center px-6 py-3 rounded-lg bg-[#EAB308] text-[#1A2C5B] font-semibold hover:bg-[#FACC15] transition-colors focus:outline-none focus:ring-4 focus:ring-yellow-200">
-              Share with Your VSO
-              <ArrowRightIcon className="ml-2 h-5 w-5" />
-            </a>
+            {report.isInterim && cachedScan ? (
+              <button onClick={handleRetry}
+                className="flex-1 inline-flex items-center justify-center px-6 py-3 rounded-lg bg-[#EAB308] text-[#1A2C5B] font-semibold hover:bg-[#FACC15] transition-colors focus:outline-none focus:ring-4 focus:ring-yellow-200">
+                <ArrowRightIcon className="mr-2 h-5 w-5" />
+                Retry Deep Analysis
+              </button>
+            ) : (
+              <a href="https://www.va.gov/vso/" target="_blank" rel="noopener noreferrer"
+                className="flex-1 inline-flex items-center justify-center px-6 py-3 rounded-lg bg-[#EAB308] text-[#1A2C5B] font-semibold hover:bg-[#FACC15] transition-colors focus:outline-none focus:ring-4 focus:ring-yellow-200">
+                Share with Your VSO
+                <ArrowRightIcon className="ml-2 h-5 w-5" />
+              </a>
+            )}
           </div>
 
           <div className="mt-4 text-center">

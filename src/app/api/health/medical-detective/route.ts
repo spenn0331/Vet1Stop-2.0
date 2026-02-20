@@ -58,16 +58,17 @@ interface DetectiveReport {
   suggestedNextSteps: string[];
   processingDetails: { filesProcessed: number; processingTime: number; aiModel: string };
   scanSynopsis?: ScanSynopsis;
+  isInterim?: boolean;
+  interimNote?: string;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-// v4.1: Relaxed pre-filter + body-read timeout + expanded keywords
+// v4.2: AbortSignal.timeout + MAX_RETRIES=0 + interim report fallback
 const FILTERED_TEXT_CAP = 32_000;     // ~8K tokens — hard cap for Grok-4 input
-const SYNTHESIS_TIMEOUT_MS = 90_000;  // 90s timeout for fetch
-const BODY_READ_TIMEOUT_MS = 30_000;  // 30s timeout for response.json() (prevents stall)
+const SYNTHESIS_TIMEOUT_MS = 90_000;  // 90s — AbortSignal.timeout kills entire call
 const IMAGE_TIMEOUT_MS = 60_000;      // 60s timeout for image vision
-const MAX_RETRIES = 1;                // 1 retry — fail fast
+const MAX_RETRIES = 0;                // NO retry — fail fast at 90s, show interim report
 const MIN_PARAGRAPH_LENGTH = 30;      // Lowered from 40 to catch short VA entries
 const MIN_KEYWORD_MATCHES_FLAG = 2;   // 2+ keywords → generates live keyword flag pill
 // Note: 1+ keyword → kept for Grok-4 analysis (tiered filtering)
@@ -488,7 +489,7 @@ function addPactActCrossRef(flags: FlaggedItem[]): FlaggedItem[] {
   });
 }
 
-function buildReport(flags: FlaggedItem[], filesProcessed: number, processingTime: number, aiModel: string, synopsis?: ScanSynopsis): DetectiveReport {
+function buildReport(flags: FlaggedItem[], filesProcessed: number, processingTime: number, aiModel: string, synopsis?: ScanSynopsis, isInterim?: boolean, interimNote?: string): DetectiveReport {
   return {
     disclaimer: DISCLAIMER,
     summary: flags.length > 0
@@ -512,26 +513,26 @@ function buildReport(flags: FlaggedItem[], filesProcessed: number, processingTim
         ],
     processingDetails: { filesProcessed, processingTime, aiModel },
     scanSynopsis: synopsis,
+    isInterim,
+    interimNote,
   };
 }
 
 // ─── Grok API Calls ───────────────────────────────────────────────────────────
 
+// v4.2: Typed error so POST handler can catch synthesis timeouts specifically
+class GrokTimeoutError extends Error {
+  constructor(label: string, timeoutMs: number) {
+    super(`${label} timed out after ${timeoutMs / 1000}s — Grok-4 was slow. Interim report generated.`);
+    this.name = 'GrokTimeoutError';
+  }
+}
+
 function getApiKey(): string {
   return process.env.XAI_API_KEY || '';
 }
 
-async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: number): Promise<Response> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetch(url, { ...options, signal: controller.signal });
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-// Shared retry wrapper for Grok API calls (v4: 1 retry only — fail fast)
+// v4.2: Uses native AbortSignal.timeout() — kills entire call (headers + body) cleanly
 async function callGrokAPI(
   model: string,
   messages: Array<{ role: string; content: string | Array<{ type: string; text?: string; image_url?: { url: string } }> }>,
@@ -542,49 +543,33 @@ async function callGrokAPI(
   const apiKey = getApiKey();
   if (!apiKey) throw new Error('XAI_API_KEY is not configured in environment variables.');
 
-  let lastError = '';
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      const response = await fetchWithTimeout('https://api.x.ai/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, messages, temperature: 0.1, max_tokens: maxTokens }),
-      }, timeoutMs);
+  try {
+    const response = await fetch('https://api.x.ai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model, messages, temperature: 0.1, max_tokens: maxTokens }),
+      signal: AbortSignal.timeout(timeoutMs),  // kills entire round-trip at timeoutMs
+    });
 
-      if (!response.ok) {
-        const err = await response.text();
-        if (response.status === 429 && attempt < MAX_RETRIES) {
-          const retryAfter = parseInt(response.headers.get('retry-after') || '5', 10);
-          await new Promise(r => setTimeout(r, retryAfter * 1000));
-          lastError = `Rate limited (429). Retrying...`;
-          continue;
-        }
-        throw new Error(`${label} API error ${response.status}: ${err.substring(0, 200)}`);
-      }
-      // v4.1: Wrap response.json() in its own timeout to prevent body-read stall
-      const data = await Promise.race([
-        response.json(),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error(`${label} body read timed out after ${BODY_READ_TIMEOUT_MS / 1000}s`)), BODY_READ_TIMEOUT_MS)
-        ),
-      ]) as { choices?: Array<{ message?: { content?: string } }> };
-      return data.choices?.[0]?.message?.content || '';
-    } catch (err) {
-      lastError = (err as Error).message || 'Unknown error';
-      if ((err as Error).name === 'AbortError') {
-        lastError = `${label} timed out after ${timeoutMs / 1000}s`;
-      }
-      if (attempt < MAX_RETRIES) {
-        await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
-        continue;
-      }
+    if (!response.ok) {
+      const err = await response.text();
+      throw new Error(`${label} API error ${response.status}: ${err.substring(0, 200)}`);
     }
+
+    const data = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
+    return data.choices?.[0]?.message?.content || '';
+  } catch (err) {
+    const error = err as Error;
+    // AbortSignal.timeout() throws TimeoutError (name: 'TimeoutError') on Node 18+
+    if (error.name === 'TimeoutError' || error.name === 'AbortError') {
+      throw new GrokTimeoutError(label, timeoutMs);
+    }
+    console.warn(`[MedicalDetective] ${label} failed: ${error.message}`);
+    throw error;
   }
-  console.warn(`[MedicalDetective] ${label} failed after ${MAX_RETRIES + 1} attempts: ${lastError}`);
-  return '';
 }
 
-// Phase 2: Single Grok-4 synthesis on pre-filtered text (v4 — replaces grok-3-mini batching)
+// Phase 2: Single Grok-4 synthesis — throws GrokTimeoutError on timeout (no retry)
 async function synthesizeWithGrok4(filteredText: string, fileNames: string): Promise<string> {
   return callGrokAPI(
     MODEL_SYNTHESIS,
@@ -596,6 +581,7 @@ async function synthesizeWithGrok4(filteredText: string, fileNames: string): Pro
     'Grok 4 synthesis',
     6000,
   );
+  // GrokTimeoutError propagates up — caught in POST handler for interim report
 }
 
 // Image analysis with grok-3-mini (fast on single images)
@@ -629,7 +615,7 @@ If nothing relevant found, state: 'No strong claim-relevant evidence flags were 
   );
 }
 
-// ─── Streaming POST Handler — v4.1 Two-Phase Pipeline ───────────────────────
+// ─── Streaming POST Handler — v4.2 Two-Phase Pipeline ───────────────────────
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
@@ -645,13 +631,49 @@ export async function POST(request: NextRequest) {
         const body = await request.json();
         const files: FilePayload[] = body.files || [];
 
+        // ═══════════════════════════════════════════════════════════════════
+        // RETRY PATH: retryFilteredText skips Phase 1 entirely — jump to Phase 2
+        // Frontend sends cached filteredText + synopsis from previous scan
+        // ═══════════════════════════════════════════════════════════════════
+        const retryFilteredText: string = body.retryFilteredText || '';
+        const retrySynopsis: ScanSynopsis | undefined = body.retrySynopsis;
+        const retryKeywordFlags: KeywordFlag[] = body.retryKeywordFlags || [];
+        const retryFileNames: string = body.retryFileNames || 'cached documents';
+
+        if (retryFilteredText) {
+          emit({ type: 'progress', message: 'Retrying deep AI analysis (skipping pre-filter — using cached scan data)...', percent: 30, phase: 'synthesis' });
+          emit({ type: 'progress', message: `Sending cached text to ${MODEL_SYNTHESIS}...`, percent: 35, phase: 'synthesis' });
+
+          try {
+            const synthesisOutput = await synthesizeWithGrok4(retryFilteredText, retryFileNames);
+            const retryFlags = synthesisOutput ? parseSynthesisOutput(synthesisOutput) : [];
+            const deduped = deduplicateFlags(retryFlags);
+            const withPactRefs = addPactActCrossRef(deduped);
+            emit({ type: 'progress', message: `Deep analysis complete — ${withPactRefs.length} verified flag(s)`, percent: 95, phase: 'synthesis_done' });
+            const report = buildReport(withPactRefs, 1, Date.now() - startTime, MODEL_SYNTHESIS, retrySynopsis);
+            emit({ type: 'complete', report, percent: 100 });
+          } catch (retryErr) {
+            if ((retryErr as Error).name === 'GrokTimeoutError') {
+              // Still timing out — build interim from cached keyword flags
+              emit({ type: 'progress', message: 'Deep analysis timed out again. Showing keyword flags.', percent: 100, phase: 'synthesis_done' });
+              const interimFlags = addPactActCrossRef(deduplicateFlags(keywordFlagsToFlaggedItems(retryKeywordFlags)));
+              const report = buildReport(interimFlags, 1, Date.now() - startTime, 'keyword pre-filter (Grok-4 unavailable)', retrySynopsis, true, 'Interim Report – Grok-4 was slow today. Deep AI analysis recommended for secondary conditions & full PACT Act nuance.');
+              emit({ type: 'complete', report, percent: 100 });
+            } else {
+              throw retryErr;
+            }
+          }
+          controller.close();
+          return;
+        }
+
+        // Normal scan — validate files
         if (files.length === 0) {
           emit({ type: 'error', message: 'No files provided.' });
           controller.close();
           return;
         }
 
-        // Validate file sizes
         for (const f of files) {
           if (f.size > 50 * 1024 * 1024) {
             emit({ type: 'error', message: `"${f.name}" exceeds 50MB limit.` });
@@ -680,9 +702,8 @@ export async function POST(request: NextRequest) {
           emit({ type: 'progress', message: `Phase 1: Extracting text from "${file.name}"...`, percent: 5 + (fi / files.length) * 15, phase: 'filter' });
 
           if (file.type.startsWith('image/')) {
-            // Images go directly to vision API in Phase 2
             imageFiles.push({ name: file.name, data: file.data, mime: file.type });
-            file.data = ''; // clear from request payload
+            file.data = '';
           } else if (file.type === 'application/pdf') {
             const { text, numPages } = await extractPDFData(file.data);
             file.data = ''; // clear raw data immediately — zero HIPAA exposure
@@ -699,22 +720,10 @@ export async function POST(request: NextRequest) {
             detectedHeaders.forEach(h => allDetectedHeaders.add(h));
 
             const reductionPct = totalParagraphs > 0 ? Math.round((1 - keptParagraphs / totalParagraphs) * 100) : 0;
-            emit({
-              type: 'file_ready',
-              fileName: file.name,
-              numPages,
-              filteredChunks: keptParagraphs,
-              totalParagraphs,
-              keptParagraphs,
-              reductionPct,
-            });
+            emit({ type: 'file_ready', fileName: file.name, numPages, filteredChunks: keptParagraphs, totalParagraphs, keptParagraphs, reductionPct });
 
-            // Emit live keyword flags as they're found
             for (const flag of keywordFlags) {
-              emit({
-                type: 'keyword_flag',
-                flag: { condition: flag.condition, confidence: flag.confidence, excerpt: flag.excerpt.substring(0, 120) },
-              });
+              emit({ type: 'keyword_flag', flag: { condition: flag.condition, confidence: flag.confidence, excerpt: flag.excerpt.substring(0, 120) } });
             }
           }
         }
@@ -722,7 +731,6 @@ export async function POST(request: NextRequest) {
         const filteredTokenEstimate = Math.round(allFilteredText.length / 4);
         const overallReductionPct = allTotalParagraphs > 0 ? Math.round((1 - allKeptParagraphs / allTotalParagraphs) * 100) : 0;
 
-        // Build scan synopsis for report
         const synopsis: ScanSynopsis = {
           totalPages,
           totalParagraphs: allTotalParagraphs,
@@ -739,6 +747,15 @@ export async function POST(request: NextRequest) {
           phase: 'filter_done',
         });
 
+        // Emit cached scan data so frontend can store for retry (no re-upload needed)
+        emit({
+          type: 'scan_cache',
+          filteredText: allFilteredText,
+          keywordFlags: allKeywordFlags,
+          synopsis,
+          fileNames: files.map(f => f.name).join(', '),
+        });
+
         // ═══════════════════════════════════════════════════════════════════
         // PHASE 2: Single Grok-4 Synthesis (one API call, ~20-45s)
         // + Image vision analysis (if any images uploaded)
@@ -752,27 +769,54 @@ export async function POST(request: NextRequest) {
           ? Promise.all(imageFiles.map(async (img) => {
               emit({ type: 'progress', message: `Phase 2: Analyzing image "${img.name}" with ${MODEL_VISION}...`, percent: 30, phase: 'synthesis' });
               const output = await screenImageWithVision(img.data, img.mime, img.name);
-              img.data = ''; // clear immediately
+              img.data = '';
               return { name: img.name, output };
             }))
           : Promise.resolve([]);
 
-        // Process text with single Grok-4 call
+        // Process text with Grok-4 — GrokTimeoutError caught below for interim report
+        let synthesisTimedOut = false;
+        const fileNames = files.map(f => f.name).join(', ');
+
         const textPromise = allFilteredText.length > 50
-          ? (async () => {
-              emit({
-                type: 'progress',
-                message: `Phase 2: ${MODEL_SYNTHESIS} is analyzing ${allKeptParagraphs} paragraphs (~${filteredTokenEstimate} tokens)...`,
-                percent: 35,
-                phase: 'synthesis',
-              });
-              const fileNames = files.map(f => f.name).join(', ');
-              return synthesizeWithGrok4(allFilteredText, fileNames);
-            })()
+          ? synthesizeWithGrok4(allFilteredText, fileNames).catch((err) => {
+              if ((err as Error).name === 'GrokTimeoutError') {
+                synthesisTimedOut = true;
+                console.warn('[MedicalDetective] Grok-4 synthesis timed out — building interim report');
+                return '';
+              }
+              throw err;
+            })
           : Promise.resolve('');
 
-        // Wait for both to complete (parallel execution)
+        emit({
+          type: 'progress',
+          message: `Phase 2: ${MODEL_SYNTHESIS} is analyzing ${allKeptParagraphs} paragraphs (~${filteredTokenEstimate} tokens)...`,
+          percent: 35,
+          phase: 'synthesis',
+        });
+
         const [imageResults, synthesisOutput] = await Promise.all([imagePromise, textPromise]);
+
+        // ═══════════════════════════════════════════════════════════════════
+        // TIMEOUT PATH: Build Interim Report from keyword flags
+        // ═══════════════════════════════════════════════════════════════════
+        if (synthesisTimedOut) {
+          emit({ type: 'progress', message: 'Grok-4 timed out — generating Interim Report from pre-filter flags...', percent: 100, phase: 'synthesis_done' });
+          const interimFlags = addPactActCrossRef(deduplicateFlags(keywordFlagsToFlaggedItems(allKeywordFlags)));
+          const report = buildReport(
+            interimFlags,
+            files.length,
+            Date.now() - startTime,
+            'keyword pre-filter (Grok-4 timed out)',
+            synopsis,
+            true,
+            'Interim Report – Grok-4 was slow today. Deep AI analysis recommended for secondary conditions & full PACT Act nuance.',
+          );
+          emit({ type: 'complete', report, percent: 100 });
+          controller.close();
+          return;
+        }
 
         // Parse text synthesis output
         if (synthesisOutput) {
@@ -780,35 +824,22 @@ export async function POST(request: NextRequest) {
           finalFlags = parseSynthesisOutput(synthesisOutput);
         }
 
-        // Parse image analysis output (reuse parseSynthesisOutput — same format)
+        // Parse image analysis output
         for (const imgResult of imageResults) {
           if (imgResult.output) {
-            const imgFlags = parseSynthesisOutput(imgResult.output);
-            finalFlags.push(...imgFlags);
+            finalFlags.push(...parseSynthesisOutput(imgResult.output));
           }
         }
 
-        // v4.1: If Grok-4 returned nothing and we had content, show error with retry
-        // (No keyword-only fallback — AI review is the value proposition)
-        if (finalFlags.length === 0 && allFilteredText.length > 50 && !synthesisOutput) {
-          console.warn('[MedicalDetective] Grok 4 synthesis failed — no output returned');
-          emit({
-            type: 'progress',
-            message: 'AI analysis timed out or failed. Your scan data was not lost — please retry.',
-            percent: 95,
-            phase: 'synthesis_done',
-          });
-        } else {
-          emit({
-            type: 'progress',
-            message: `Phase 2 complete — ${finalFlags.length} verified flag(s)`,
-            percent: 95,
-            phase: 'synthesis_done',
-          });
-        }
+        emit({
+          type: 'progress',
+          message: `Phase 2 complete — ${finalFlags.length} verified flag(s)`,
+          percent: 95,
+          phase: 'synthesis_done',
+        });
 
         // ═══════════════════════════════════════════════════════════════════
-        // BUILD REPORT (with PACT Act cross-refs + synopsis)
+        // BUILD FULL REPORT (PACT Act cross-refs + synopsis)
         // ═══════════════════════════════════════════════════════════════════
 
         const deduped = deduplicateFlags(finalFlags);
