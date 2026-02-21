@@ -236,6 +236,7 @@ export default function MedicalDetectivePanel() {
           retrySynopsis: cachedScan.synopsis,
           retryKeywordFlags: cachedScan.keywordFlags,
           retryFileNames: cachedScan.fileNames,
+          useReducedCap: true,
         }),
         signal: abortController.signal,
       });
@@ -676,7 +677,7 @@ body{font-family:'Segoe UI',sans-serif;padding:40px;color:#1F2937;line-height:1.
             Scanning Your Records...
           </h3>
 
-          {/* Phase indicator — v4: 2 phases only */}
+          {/* Phase indicator — v4.2: 2 phases */}
           <div className="flex justify-center gap-2 mb-4">
             {['filter', 'synthesis'].map((phase, i) => {
               const labels = ['Phase 1: Live Flags', 'Phase 2: Deep Synthesis'];
@@ -770,7 +771,7 @@ body{font-family:'Segoe UI',sans-serif;padding:40px;color:#1F2937;line-height:1.
           )}
 
           <p className="text-xs text-gray-400 text-center mt-2">
-            2-phase pipeline: Phase 1 live keyword flags → Phase 2 Grok 4 deep synthesis (auto-retry on timeout).
+            2-phase pipeline: Live Flags (85 keywords + section headers) → Streaming Deep Synthesis (70s + auto-retry).
           </p>
           <p className="text-xs text-gray-400 text-center mt-1">
             Files are processed in memory only — never stored permanently.
@@ -855,7 +856,7 @@ body{font-family:'Segoe UI',sans-serif;padding:40px;color:#1F2937;line-height:1.
       {/* ─── Results State ─── */}
       {panelState === 'results' && report && (
         <div>
-          {/* Summary banner — amber for interim, blue for full */}
+          {/* Summary banner — green for interim, blue for full */}
           {report.isInterim ? (
             <div className="bg-green-50 border border-green-300 rounded-lg p-4 mb-6">
               <div className="flex items-start gap-3">
@@ -974,13 +975,15 @@ body{font-family:'Segoe UI',sans-serif;padding:40px;color:#1F2937;line-height:1.
             </ol>
           </div>
 
-          {/* Action Buttons */}
+          {/* Action Buttons — PDF always enabled when flags exist */}
           <div className="flex flex-col sm:flex-row gap-3">
-            <button onClick={handleDownloadReport}
-              className="flex-1 inline-flex items-center justify-center px-6 py-3 rounded-lg bg-[#1A2C5B] text-white font-semibold hover:bg-[#0F1D3D] transition-colors focus:outline-none focus:ring-4 focus:ring-blue-200">
-              <DocumentArrowDownIcon className="mr-2 h-5 w-5" />
-              {report.isInterim ? 'Download Interim Report' : 'Download Evidence Report (PDF)'}
-            </button>
+            {report.totalFlagsFound > 0 && (
+              <button onClick={handleDownloadReport}
+                className="flex-1 inline-flex items-center justify-center px-6 py-3 rounded-lg bg-[#1A2C5B] text-white font-semibold hover:bg-[#0F1D3D] transition-colors focus:outline-none focus:ring-4 focus:ring-blue-200">
+                <DocumentArrowDownIcon className="mr-2 h-5 w-5" />
+                {report.isInterim ? 'Generate PDF (Interim Data)' : 'Generate PDF (Full Report)'}
+              </button>
+            )}
             {report.isInterim && cachedScan ? (
               <button onClick={handleRetry}
                 className="flex-1 inline-flex items-center justify-center px-6 py-3 rounded-lg bg-green-700 text-white font-semibold hover:bg-green-800 transition-colors focus:outline-none focus:ring-4 focus:ring-green-200">
