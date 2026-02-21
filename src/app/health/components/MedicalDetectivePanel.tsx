@@ -30,6 +30,8 @@ interface FlaggedItem {
   category: string;
   excerpt: string;
   context: string;
+  claimType?: string;
+  nextAction?: string;
   dateFound?: string;
   pageNumber?: string;
   suggestedClaimCategory: string;
@@ -461,14 +463,15 @@ export default function MedicalDetectivePanel() {
           <span class="flag-label">${item.label}</span>
           <span class="flag-badge">${item.category}</span>
           <span class="conf-badge conf-${item.confidence}">${item.confidence.toUpperCase()}</span>
+          ${item.claimType ? `<span class="flag-badge" style="background:#DBEAFE;color:#1E40AF">${item.claimType}</span>` : ''}
         </div>
-        ${item.excerpt ? `<div class="flag-quote">&ldquo;${item.excerpt}&rdquo;</div>` : ''}
         <div class="flag-meta">
-          ${item.dateFound ? `<span>📅 Date: <strong>${item.dateFound}</strong></span>` : ''}
-          ${item.pageNumber ? `<span>📄 Page: <strong>${item.pageNumber}</strong></span>` : ''}
-          <span>Category: <strong>${item.suggestedClaimCategory}</strong></span>
+          ${item.dateFound ? `<span>📅 <strong>${item.dateFound}</strong></span>` : ''}
+          ${item.pageNumber ? `<span>📄 Page <strong>${item.pageNumber}</strong></span>` : ''}
         </div>
-        ${item.context && item.context !== item.label ? `<div class="flag-context">${item.context}</div>` : ''}
+        ${item.excerpt ? `<div class="flag-quote"><strong>Highlighted Excerpt:</strong><br>&ldquo;${item.excerpt}&rdquo;</div>` : ''}
+        ${item.context && item.context !== item.label ? `<div class="flag-context"><strong>Claim Relevance:</strong> ${item.context}</div>` : ''}
+        ${item.nextAction ? `<div class="flag-context" style="background:#F0FDF4;border-left-color:#16A34A"><strong>Next Step:</strong> ${item.nextAction}</div>` : ''}
       </div>`).join('');
 
     const html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
@@ -884,36 +887,53 @@ body{font-family:'Segoe UI',sans-serif;padding:40px;color:#1F2937;line-height:1.
               <FlagIcon className="h-5 w-5" />
               Flagged Findings ({report.totalFlagsFound})
             </h4>
-            <div className="space-y-3">
+            <div className="space-y-4">
               {report.flaggedItems.map((item, idx) => (
-                <div key={idx} className={`bg-white border rounded-lg p-4 ${
+                <div key={idx} className={`bg-white border rounded-lg overflow-hidden ${
                   item.confidence === 'high' ? 'border-l-4 border-l-[#1A2C5B] border-gray-200'
                   : item.confidence === 'medium' ? 'border-l-4 border-l-[#EAB308] border-gray-200'
                   : 'border-gray-200'
                 }`}>
-                  <div className="flex items-start justify-between gap-3 mb-2">
-                    <h5 className="font-semibold text-[#1A2C5B]">{item.label}</h5>
-                    <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${CATEGORY_COLORS[item.category] || CATEGORY_COLORS['Other']}`}>
-                      {item.category}
-                    </span>
-                  </div>
-                  {item.excerpt && (
-                    <div className="bg-amber-50 border border-amber-200 rounded p-3 mb-2">
-                      <p className="text-sm text-amber-900 italic">&quot;{item.excerpt}&quot;</p>
+                  <div className="p-4">
+                    <div className="flex items-start justify-between gap-3 mb-1">
+                      <h5 className="font-bold text-[#1A2C5B] text-base">{item.label}</h5>
+                      <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${CATEGORY_COLORS[item.category] || CATEGORY_COLORS['Other']}`}>
+                        {item.category}
+                      </span>
                     </div>
-                  )}
-                  {item.context && item.context !== item.label && (
-                    <p className="text-xs text-gray-600 mb-2 bg-gray-50 rounded p-2">{item.context}</p>
-                  )}
-                  <div className="flex flex-wrap gap-3 text-xs text-gray-500">
-                    {item.dateFound && <span>📅 <strong>{item.dateFound}</strong></span>}
-                    {item.pageNumber && <span>📄 Page <strong>{item.pageNumber}</strong></span>}
-                    <span>Category: <strong>{item.suggestedClaimCategory}</strong></span>
-                    <span className={`px-2 py-0.5 rounded font-medium ${
-                      item.confidence === 'high' ? 'bg-blue-100 text-blue-800'
-                      : item.confidence === 'medium' ? 'bg-yellow-100 text-yellow-800'
-                      : 'bg-gray-100 text-gray-600'
-                    }`}>{item.confidence} confidence</span>
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      <span className={`text-xs px-2 py-0.5 rounded font-semibold ${
+                        item.confidence === 'high' ? 'bg-blue-100 text-blue-800'
+                        : item.confidence === 'medium' ? 'bg-yellow-100 text-yellow-800'
+                        : 'bg-gray-100 text-gray-600'
+                      }`}>{item.confidence.toUpperCase()}</span>
+                      {item.claimType && (
+                        <span className="text-xs px-2 py-0.5 rounded bg-[#1A2C5B]/10 text-[#1A2C5B] font-medium">{item.claimType}</span>
+                      )}
+                      {item.dateFound && <span className="text-xs text-gray-500">📅 {item.dateFound}</span>}
+                      {item.pageNumber && <span className="text-xs text-gray-500">📄 Page {item.pageNumber}</span>}
+                    </div>
+
+                    {item.excerpt && (
+                      <div className="bg-amber-50 border-l-3 border-l-amber-400 border border-amber-200 rounded p-3 mb-3">
+                        <p className="text-xs font-semibold text-amber-700 mb-1">Highlighted Excerpt</p>
+                        <p className="text-sm text-amber-900 italic leading-relaxed">&quot;{item.excerpt}&quot;</p>
+                      </div>
+                    )}
+
+                    {item.context && item.context !== item.label && (
+                      <div className="bg-blue-50/50 border border-blue-100 rounded p-3 mb-3">
+                        <p className="text-xs font-semibold text-[#1A2C5B] mb-1">Why This Matters for Your Claim</p>
+                        <p className="text-sm text-gray-700 leading-relaxed">{item.context}</p>
+                      </div>
+                    )}
+
+                    {item.nextAction && (
+                      <div className="bg-green-50 border border-green-200 rounded p-3">
+                        <p className="text-xs font-semibold text-green-800 mb-1">Recommended Next Step</p>
+                        <p className="text-sm text-green-900">{item.nextAction}</p>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
