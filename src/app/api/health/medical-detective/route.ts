@@ -64,14 +64,24 @@ interface DetectiveReport {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-// v4.2: AbortSignal.timeout + MAX_RETRIES=0 + interim report fallback
-const FILTERED_TEXT_CAP = 32_000;     // ~8K tokens — hard cap for Grok-4 input
-const SYNTHESIS_TIMEOUT_MS = 90_000;  // 90s — AbortSignal.timeout kills entire call
-const IMAGE_TIMEOUT_MS = 60_000;      // 60s timeout for image vision
-const MAX_RETRIES = 0;                // NO retry — fail fast at 90s, show interim report
-const MIN_PARAGRAPH_LENGTH = 30;      // Lowered from 40 to catch short VA entries
-const MIN_KEYWORD_MATCHES_FLAG = 2;   // 2+ keywords → generates live keyword flag pill
-// Note: 1+ keyword → kept for Grok-4 analysis (tiered filtering)
+// v4.3: Sorted input + section guarantee + setTimeout bail-out + smaller token budget
+const FILTERED_TEXT_CAP = 10_000;       // ~2,500 tokens (was 32K) — Grok-4 target: <30s
+const MAX_PARAGRAPHS_TO_SEND = 80;      // hard paragraph cap after sorting
+const SECTION_GUARANTEE_COUNT = 3;      // min paragraphs guaranteed per major section
+const SYNTHESIS_TIMEOUT_MS = 90_000;    // 90s AbortSignal (connection-level safety net)
+const BAIL_TIMEOUT_MS = 70_000;         // 70s Promise.race bail-out — ALWAYS fires
+const IMAGE_TIMEOUT_MS = 60_000;        // 60s for image vision
+const MAX_RETRIES = 0;                  // no retry — fail fast, show interim
+const MIN_PARAGRAPH_LENGTH = 30;
+const MIN_KEYWORD_MATCHES_FLAG = 2;     // 2+ keywords → live flag pill
+// Note: 1+ keyword → kept for Grok-4 (tiered filtering)
+
+// Major clinical sections — top 3 paragraphs from each are always included
+const GUARANTEED_SECTIONS = [
+  'assessment', 'problem list', 'active problems', 'active diagnoses',
+  'hpi', 'history of present illness', 'diagnosis', 'diagnoses',
+  'plan', 'impression', 'chief complaint',
+];
 
 // Models — user's xAI API models
 const MODEL_SYNTHESIS = 'grok-4-0709';  // Deep analysis (single call)
@@ -260,7 +270,7 @@ function smartPreFilter(text: string): {
   detectedKeywords: string[];
   detectedHeaders: string[];
 } {
-  // Step 1: Split on single newlines (VA Blue Button uses \n, not \n\n)
+  // Step 1: Split on single newlines (VA Blue Button format)
   const rawLines = text.split(/\n/);
 
   // Step 1b: Merge consecutive short lines into logical paragraphs
@@ -269,14 +279,10 @@ function smartPreFilter(text: string): {
   for (const line of rawLines) {
     const trimmed = line.trim();
     if (trimmed.length === 0) {
-      if (currentGroup.length > 0) {
-        paragraphs.push(currentGroup.trim());
-        currentGroup = '';
-      }
+      if (currentGroup.length > 0) { paragraphs.push(currentGroup.trim()); currentGroup = ''; }
       continue;
     }
     if (currentGroup.length > 0 && trimmed.length < MIN_PARAGRAPH_LENGTH && currentGroup.length < MIN_PARAGRAPH_LENGTH) {
-      // Merge short consecutive lines
       currentGroup += ' ' + trimmed;
     } else if (currentGroup.length > 0 && currentGroup.length >= MIN_PARAGRAPH_LENGTH) {
       paragraphs.push(currentGroup.trim());
@@ -287,32 +293,41 @@ function smartPreFilter(text: string): {
   }
   if (currentGroup.trim().length > 0) paragraphs.push(currentGroup.trim());
 
-  const kept: string[] = [];
-  const keywordFlags: KeywordFlag[] = [];
-  const seenConditions = new Set<string>();
+  // Step 2: Score ALL paragraphs (no cap during collection — cap applied after sort)
+  interface ScoredPara {
+    text: string;
+    keywordCount: number;
+    matchedKeywords: string[];
+    isHeader: boolean;
+    sectionKey: string | null; // which guaranteed section it belongs to (if any)
+  }
+
+  const scored: ScoredPara[] = [];
   const detectedKeywordsSet = new Set<string>();
   const detectedHeadersSet = new Set<string>();
-  let totalChars = 0;
 
   for (const para of paragraphs) {
     const trimmed = para.trim();
-    // Skip very short paragraphs
     if (trimmed.length < MIN_PARAGRAPH_LENGTH) continue;
-    // Skip noise (appointment scheduling, demographics, etc.)
     if (NOISE_REGEX.test(trimmed)) continue;
 
-    // Check if this is a section header (always keep)
+    const lower = trimmed.toLowerCase();
+
+    // Detect section header membership (for guarantee rule)
+    let sectionKey: string | null = null;
+    for (const s of GUARANTEED_SECTIONS) {
+      if (lower.includes(s)) { sectionKey = s; break; }
+    }
+
     const isHeader = SECTION_HEADER_REGEX.test(trimmed);
     if (isHeader) {
-      // Track which headers we found
       for (const h of SECTION_HEADERS) {
-        if (trimmed.toLowerCase().includes(h.replace(':', '').toLowerCase())) {
+        if (lower.includes(h.replace(':', '').toLowerCase())) {
           detectedHeadersSet.add(h.replace(':', '').trim());
         }
       }
     }
 
-    // Count keyword matches in this paragraph
     const matchedKeywords: string[] = [];
     for (let i = 0; i < KEYWORD_PATTERNS.length; i++) {
       if (KEYWORD_PATTERNS[i].test(trimmed)) {
@@ -321,42 +336,71 @@ function smartPreFilter(text: string): {
       }
     }
 
-    // Tiered filtering: keep if 1+ keyword OR section header
-    const shouldKeep = matchedKeywords.length >= 1 || isHeader;
-    if (shouldKeep) {
-      // Hard cap on total filtered text size
-      if (totalChars + trimmed.length > FILTERED_TEXT_CAP) {
-        if (totalChars < FILTERED_TEXT_CAP) {
-          kept.push(trimmed.substring(0, FILTERED_TEXT_CAP - totalChars));
-          totalChars = FILTERED_TEXT_CAP;
-        }
-        break;
+    // Keep if 1+ keyword OR section header
+    if (matchedKeywords.length >= 1 || isHeader) {
+      scored.push({ text: trimmed, keywordCount: matchedKeywords.length, matchedKeywords, isHeader, sectionKey });
+    }
+  }
+
+  // Step 3: Sort by keyword count descending (highest signal first)
+  scored.sort((a, b) => b.keywordCount - a.keywordCount);
+
+  // Step 4: Two-pass selection
+  // Pass 1 — Section Guarantee: collect up to SECTION_GUARANTEE_COUNT paragraphs per section
+  const guaranteed: ScoredPara[] = [];
+  const sectionCounts = new Map<string, number>();
+  for (const sp of scored) {
+    if (sp.sectionKey) {
+      const count = sectionCounts.get(sp.sectionKey) || 0;
+      if (count < SECTION_GUARANTEE_COUNT) {
+        guaranteed.push(sp);
+        sectionCounts.set(sp.sectionKey, count + 1);
       }
+    }
+  }
+  const guaranteedTexts = new Set(guaranteed.map(g => g.text));
 
-      kept.push(trimmed);
-      totalChars += trimmed.length;
+  // Pass 2 — Fill remaining slots with highest-scored non-guaranteed paragraphs
+  const selected: ScoredPara[] = [...guaranteed];
+  for (const sp of scored) {
+    if (selected.length >= MAX_PARAGRAPHS_TO_SEND) break;
+    if (!guaranteedTexts.has(sp.text)) {
+      selected.push(sp);
+    }
+  }
 
-      // Generate live keyword flag pills only for 2+ keyword matches (high signal)
-      if (matchedKeywords.length >= MIN_KEYWORD_MATCHES_FLAG) {
-        const primaryKeyword = matchedKeywords[0];
-        const conditionKey = primaryKeyword.toLowerCase().replace(/[^a-z]/g, '');
-        if (!seenConditions.has(conditionKey)) {
-          seenConditions.add(conditionKey);
+  // Step 5: Apply FILTERED_TEXT_CAP on selected (already sorted/guaranteed)
+  const kept: string[] = [];
+  const keywordFlags: KeywordFlag[] = [];
+  const seenConditions = new Set<string>();
+  let totalChars = 0;
 
-          const claimLanguage = ['service connected', 'service-connected', 'nexus', 'at least as likely',
-            'more likely than not', 'compensable', 'rated at', 'disability rating', 'tdiu', 'c&p'];
-          const isClaimLanguage = matchedKeywords.some(k => claimLanguage.includes(k));
-          const confidence: 'high' | 'medium' | 'low' = isClaimLanguage ? 'high'
-            : matchedKeywords.length >= 3 ? 'high'
-            : matchedKeywords.length >= 2 ? 'medium'
-            : 'low';
+  for (const sp of selected) {
+    if (totalChars >= FILTERED_TEXT_CAP) break;
+    const chunk = sp.text.length + totalChars > FILTERED_TEXT_CAP
+      ? sp.text.substring(0, FILTERED_TEXT_CAP - totalChars)
+      : sp.text;
+    kept.push(chunk);
+    totalChars += chunk.length;
 
-          keywordFlags.push({
-            condition: primaryKeyword.charAt(0).toUpperCase() + primaryKeyword.slice(1),
-            confidence,
-            excerpt: trimmed.substring(0, 120),
-          });
-        }
+    // Live keyword flag pills for 2+ keyword matches
+    if (sp.matchedKeywords.length >= MIN_KEYWORD_MATCHES_FLAG) {
+      const primaryKeyword = sp.matchedKeywords[0];
+      const conditionKey = primaryKeyword.toLowerCase().replace(/[^a-z]/g, '');
+      if (!seenConditions.has(conditionKey)) {
+        seenConditions.add(conditionKey);
+        const claimLanguage = ['service connected', 'service-connected', 'nexus', 'at least as likely',
+          'more likely than not', 'compensable', 'rated at', 'disability rating', 'tdiu', 'c&p'];
+        const isClaimLanguage = sp.matchedKeywords.some(k => claimLanguage.includes(k));
+        const confidence: 'high' | 'medium' | 'low' = isClaimLanguage ? 'high'
+          : sp.matchedKeywords.length >= 3 ? 'high'
+          : sp.matchedKeywords.length >= 2 ? 'medium'
+          : 'low';
+        keywordFlags.push({
+          condition: primaryKeyword.charAt(0).toUpperCase() + primaryKeyword.slice(1),
+          confidence,
+          excerpt: sp.text.substring(0, 120),
+        });
       }
     }
   }
@@ -570,6 +614,7 @@ async function callGrokAPI(
 }
 
 // Phase 2: Single Grok-4 synthesis — throws GrokTimeoutError on timeout (no retry)
+// max_tokens reduced to 1_500 (was 6000) — enough for 12-15 detailed flags, halves generation time
 async function synthesizeWithGrok4(filteredText: string, fileNames: string): Promise<string> {
   return callGrokAPI(
     MODEL_SYNTHESIS,
@@ -579,7 +624,7 @@ async function synthesizeWithGrok4(filteredText: string, fileNames: string): Pro
     ],
     SYNTHESIS_TIMEOUT_MS,
     'Grok 4 synthesis',
-    6000,
+    1_500,
   );
   // GrokTimeoutError propagates up — caught in POST handler for interim report
 }
@@ -657,7 +702,7 @@ export async function POST(request: NextRequest) {
               // Still timing out — build interim from cached keyword flags
               emit({ type: 'progress', message: 'Deep analysis timed out again. Showing keyword flags.', percent: 100, phase: 'synthesis_done' });
               const interimFlags = addPactActCrossRef(deduplicateFlags(keywordFlagsToFlaggedItems(retryKeywordFlags)));
-              const report = buildReport(interimFlags, 1, Date.now() - startTime, 'keyword pre-filter (Grok-4 unavailable)', retrySynopsis, true, 'Interim Report – Grok-4 was slow today. Deep AI analysis recommended for secondary conditions & full PACT Act nuance.');
+              const report = buildReport(interimFlags, 1, Date.now() - startTime, 'keyword pre-filter (Grok-4 unavailable)', retrySynopsis, true, `Interim Report – Grok-4 was slow today. Deep AI analysis recommended for secondary conditions & full PACT Act nuance.${retrySynopsis ? ` Prioritized ${retrySynopsis.keptParagraphs} highest-signal paragraphs across all ${retrySynopsis.totalPages} pages.` : ''}`);
               emit({ type: 'complete', report, percent: 100 });
             } else {
               throw retryErr;
@@ -775,23 +820,29 @@ export async function POST(request: NextRequest) {
           : Promise.resolve([]);
 
         // Process text with Grok-4 — GrokTimeoutError caught below for interim report
+        // v4.3: BAIL_TIMEOUT_MS uses setTimeout which ALWAYS fires — independent of AbortSignal
         let synthesisTimedOut = false;
         const fileNames = files.map(f => f.name).join(', ');
 
+        const bailPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new GrokTimeoutError('Grok 4 synthesis', BAIL_TIMEOUT_MS)), BAIL_TIMEOUT_MS)
+        );
+
         const textPromise = allFilteredText.length > 50
-          ? synthesizeWithGrok4(allFilteredText, fileNames).catch((err) => {
-              if ((err as Error).name === 'GrokTimeoutError') {
-                synthesisTimedOut = true;
-                console.warn('[MedicalDetective] Grok-4 synthesis timed out — building interim report');
-                return '';
-              }
-              throw err;
-            })
+          ? Promise.race([synthesizeWithGrok4(allFilteredText, fileNames), bailPromise])
+              .catch((err) => {
+                if ((err as Error).name === 'GrokTimeoutError') {
+                  synthesisTimedOut = true;
+                  console.warn('[MedicalDetective] Grok-4 synthesis timed out at bail limit — building interim report');
+                  return '';
+                }
+                throw err;
+              })
           : Promise.resolve('');
 
         emit({
           type: 'progress',
-          message: `Phase 2: ${MODEL_SYNTHESIS} is analyzing ${allKeptParagraphs} paragraphs (~${filteredTokenEstimate} tokens)...`,
+          message: `Phase 2: ${MODEL_SYNTHESIS} analyzing ${allKeptParagraphs} highest-signal paragraphs (~${filteredTokenEstimate} tokens)...`,
           percent: 35,
           phase: 'synthesis',
         });
@@ -811,7 +862,7 @@ export async function POST(request: NextRequest) {
             'keyword pre-filter (Grok-4 timed out)',
             synopsis,
             true,
-            'Interim Report – Grok-4 was slow today. Deep AI analysis recommended for secondary conditions & full PACT Act nuance.',
+            `Interim Report – Grok-4 was slow today. Deep AI analysis recommended for secondary conditions & full PACT Act nuance. Prioritized ${synopsis.keptParagraphs} highest-signal paragraphs across all ${synopsis.totalPages} pages.`,
           );
           emit({ type: 'complete', report, percent: 100 });
           controller.close();
