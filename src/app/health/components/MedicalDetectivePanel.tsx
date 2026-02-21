@@ -220,7 +220,7 @@ export default function MedicalDetectivePanel() {
 
     setPanelState('processing');
     setProgress(30);
-    setProgressMsg('Retrying deep AI analysis (using cached scan data)...');
+    setProgressMsg('Retrying with focused scope...');
     setError('');
     setEstimatedRemaining(null);
     setCurrentPhase('synthesis');
@@ -466,12 +466,12 @@ export default function MedicalDetectivePanel() {
           ${item.claimType ? `<span class="flag-badge" style="background:#DBEAFE;color:#1E40AF">${item.claimType}</span>` : ''}
         </div>
         <div class="flag-meta">
-          ${item.dateFound ? `<span>📅 <strong>${item.dateFound}</strong></span>` : ''}
+          ${item.dateFound && item.dateFound !== 'Not specified' ? `<span style="background:#F1F5F9;padding:2px 8px;border-radius:4px;font-weight:600">Date: ${item.dateFound}</span>` : ''}
           ${item.pageNumber ? `<span>📄 Page <strong>${item.pageNumber}</strong></span>` : ''}
         </div>
         ${item.excerpt ? `<div class="flag-quote"><strong>Highlighted Excerpt:</strong><br>&ldquo;${item.excerpt}&rdquo;</div>` : ''}
-        ${item.context && item.context !== item.label ? `<div class="flag-context"><strong>Claim Relevance:</strong> ${item.context}</div>` : ''}
-        ${item.nextAction ? `<div class="flag-context" style="background:#F0FDF4;border-left-color:#16A34A"><strong>Next Step:</strong> ${item.nextAction}</div>` : ''}
+        ${item.context && item.context !== item.label && !item.context.startsWith('Keyword-detected') && item.context.length > 40 ? `<div class="flag-context" style="border-left:3px solid #3B82F6"><strong>Why This Matters:</strong> ${item.context}</div>` : ''}
+        ${item.nextAction ? `<div class="flag-context" style="background:#F0FDF4;border-left:3px solid #16A34A"><strong>Recommended Next Step:</strong> ${item.nextAction}</div>` : ''}
       </div>`).join('');
 
     const html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
@@ -881,7 +881,7 @@ body{font-family:'Segoe UI',sans-serif;padding:40px;color:#1F2937;line-height:1.
                       className="mt-3 inline-flex items-center px-4 py-2 rounded-lg bg-green-700 text-white text-sm font-semibold hover:bg-green-800 transition-colors focus:outline-none focus:ring-4 focus:ring-green-200"
                     >
                       <ArrowRightIcon className="mr-1.5 h-4 w-4" />
-                      Retry Deep Analysis (Reduced Cap)
+                      Retry with Focused Scope
                     </button>
                   )}
                 </div>
@@ -931,8 +931,10 @@ body{font-family:'Segoe UI',sans-serif;padding:40px;color:#1F2937;line-height:1.
                       {item.claimType && (
                         <span className="text-xs px-2 py-0.5 rounded bg-[#1A2C5B]/10 text-[#1A2C5B] font-medium">{item.claimType}</span>
                       )}
-                      {item.dateFound && <span className="text-xs text-gray-500">📅 {item.dateFound}</span>}
-                      {item.pageNumber && <span className="text-xs text-gray-500">📄 Page {item.pageNumber}</span>}
+                      {item.dateFound && item.dateFound !== 'Not specified' && (
+                        <span className="text-xs px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-medium">Date: {item.dateFound}</span>
+                      )}
+                      {item.pageNumber && <span className="text-xs text-gray-500">Page {item.pageNumber}</span>}
                     </div>
 
                     {item.excerpt && (
@@ -942,7 +944,9 @@ body{font-family:'Segoe UI',sans-serif;padding:40px;color:#1F2937;line-height:1.
                       </div>
                     )}
 
-                    {item.context && item.context !== item.label && (
+                    {item.context && item.context !== item.label &&
+                     !item.context.startsWith('Keyword-detected') &&
+                     item.context.length > 40 && (
                       <div className="bg-blue-50/50 border border-blue-100 rounded p-3 mb-3">
                         <p className="text-xs font-semibold text-[#1A2C5B] mb-1">Why This Matters for Your Claim</p>
                         <p className="text-sm text-gray-700 leading-relaxed">{item.context}</p>
@@ -1008,7 +1012,7 @@ body{font-family:'Segoe UI',sans-serif;padding:40px;color:#1F2937;line-height:1.
               <button onClick={handleRetry}
                 className="flex-1 inline-flex items-center justify-center px-6 py-3 rounded-lg bg-green-700 text-white font-semibold hover:bg-green-800 transition-colors focus:outline-none focus:ring-4 focus:ring-green-200">
                 <ArrowRightIcon className="mr-2 h-5 w-5" />
-                Retry Deep Analysis (Reduced Cap)
+                Retry with Focused Scope
               </button>
             ) : (
               <a href="https://www.va.gov/vso/" target="_blank" rel="noopener noreferrer"

@@ -1,14 +1,16 @@
 import { NextRequest } from 'next/server';
 
 /**
- * POST /api/health/medical-detective — v4.3 "Deep Evidence Synthesis"
+ * POST /api/health/medical-detective — v4.4 "Enforced Deep JSON + No Generics"
  *
  * Architecture (Phase 1 ★ per master-strategy.md Section 2):
  *   Phase 1: Smart Pre-Filter (NO AI, ~1-2s) — tiered keyword scoring,
- *            section header priority, noise exclusion, 10K char cap.
+ *            section header priority, noise exclusion, 8K/50-para cap.
+ *            Generics excluded from standalone flags.
  *   Phase 2: Streaming Grok-4 Synthesis (SSE, 70s + 30s idle timeout) —
- *            produces deep structured JSON per flag: excerpts, dates,
- *            context, claim type, next action. Auto-retry at 60% cap.
+ *            strict JSON array enforcement, deep context per flag: excerpts,
+ *            dates (YYYY-MM-DD), nexus context, claim type, next action.
+ *            Auto-retry at 5K/30-para cap. Format-error auto-retry once.
  *
  * Upload-only. In-memory processing. Auto-delete after scan. No storage.
  * No claim filing. No HIPAA exposure. Bold disclaimers on every output.
@@ -62,12 +64,12 @@ interface DetectiveReport {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const FILTERED_TEXT_CAP = 10_000;
-const MAX_PARAGRAPHS_TO_SEND = 80;
+const FILTERED_TEXT_CAP = 8_000;
+const MAX_PARAGRAPHS_TO_SEND = 50;
 const SECTION_GUARANTEE_COUNT = 3;
 const SYNTHESIS_TIMEOUT_MS = 70_000;
 const IDLE_TIMEOUT_MS = 30_000;
-const RETRY_CAP_RATIO = 0.6;
+const RETRY_CHAR_CAP = 5_000;
 const MIN_PARAGRAPH_LENGTH = 30;
 const MIN_KEYWORD_MATCHES_FLAG = 2;
 
@@ -141,35 +143,83 @@ const NOISE_REGEX = new RegExp(
   'i'
 );
 
-// ─── Synthesis Prompt — JSON output with deep evidence fields ────────────────
+const GENERIC_STANDALONE_TERMS = new Set([
+  'diagnosed', 'diagnosis', 'chronic', 'abnormal', 'bilateral',
+  'problem list', 'active diagnoses', 'worsening',
+  'functional impairment', 'limitation of motion', 'pain on use',
+  'range of motion', 'rom', 'deluca', 'functional loss',
+  'flare-up', 'flare up',
+]);
+
+function extractDateFromText(text: string): string | undefined {
+  const iso = text.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return iso[0];
+  const mdy = text.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+  if (mdy) {
+    const [, m, d, y] = mdy;
+    return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+  }
+  const noteDate = text.match(/(?:note\s*date|date\s*of\s*service|dos|visit\s*date|encounter\s*date)[:\s]*(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/i);
+  if (noteDate) {
+    const y = noteDate[3].length === 2 ? `20${noteDate[3]}` : noteDate[3];
+    return `${y}-${noteDate[1].padStart(2, '0')}-${noteDate[2].padStart(2, '0')}`;
+  }
+  const months: Record<string, string> = {
+    january: '01', february: '02', march: '03', april: '04', june: '06',
+    july: '07', august: '08', september: '09', october: '10', november: '11', december: '12',
+    jan: '01', feb: '02', mar: '03', apr: '04', jun: '06',
+    jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12',
+  };
+  const named = text.match(/(\w{3,9})\s+(\d{1,2}),?\s+(\d{4})/);
+  if (named) {
+    const monthNum = months[named[1].toLowerCase()];
+    if (monthNum) return `${named[3]}-${monthNum}-${named[2].padStart(2, '0')}`;
+  }
+  return undefined;
+}
+
+// ─── Synthesis Prompt — strict JSON with deep evidence fields ────────────────
 
 const SYNTHESIS_PROMPT = `You are an expert VA disability claims evidence analyst with deep knowledge of 38 CFR rating schedules, presumptive conditions, the PACT Act (2022-2026), secondary service-connection, and how clinical notes support disability claims.
 
 You are given pre-filtered excerpts from a veteran's VA medical records. Every paragraph was keyword-filtered or is a clinical section header. Your job: identify EVERY claim-relevant finding with deep supporting detail.
 
-RULES:
-- Extract EXACT verbatim quotes from the text — 1-2 sentences that prove the finding
-- Identify the claim type: "Primary Service-Connected", "Secondary", "PACT Act Presumptive", "Aggravated", or "Rating Increase"
-- For secondary conditions, name the primary condition it's secondary to in the context
-- For PACT Act presumptives, cite the specific PACT Act provision
-- Assign confidence: High (direct diagnosis/nexus/rating language), Medium (clinical evidence suggesting condition), Low (indirect but worth noting)
-- Provide a concrete next action specific to each finding
-- Include dates when visible in the text
+CRITICAL RULES:
+- Only flag SPECIFIC diagnosable conditions (e.g., "Sinusitis", "Radiculopathy", "PTSD", "Sleep Apnea"). NEVER flag generic clinical terms ("Diagnosed", "Chronic", "Problem List", "Assessment", "Abnormal") as conditions.
+- Extract EXACT verbatim quotes — 1-2 sentences that prove the finding
+- Identify claim type: "Primary Service-Connected", "Secondary", "PACT Act Presumptive", "Aggravated", or "Rating Increase"
+- For secondary conditions, name the primary condition it connects to
+- For PACT Act presumptives, cite the specific provision or exposure link
+- Confidence: High = direct diagnosis + nexus/rating language. Medium = clinical evidence suggesting condition. Low = indirect reference worth noting
+- Extract dates: look for "Note date:", "Date:", timestamps, or any date near the finding. Format as YYYY-MM-DD. Use "Not specified" if no date visible
+- Context MUST explain WHY this matters for a VA claim: cite rating schedule, nexus evidence, HPI links, service-connection pathway, estimated rating range
+- Next action MUST be specific and actionable (e.g., "File presumptive claim at va.gov/pact" or "Request DBQ from provider for secondary connection to lumbar DDD")
 - Deduplicate: merge flags for the same condition
 - Err on the side of INCLUSION — veterans need to see everything
 
-OUTPUT FORMAT — You MUST output ONLY a valid JSON array. No markdown. No prose before or after. Just the array:
+Output ONLY valid JSON — no intro text, no markdown fences, no explanation. Just the raw JSON array:
 [
   {
-    "condition": "Exact condition name",
+    "condition": "Sinusitis",
+    "confidence": "Medium",
+    "category": "Respiratory",
+    "claimType": "PACT Act Presumptive",
+    "excerpt": "Discharge diagnosis: SINUSITIS, BPPV",
+    "date": "2024-06-12",
+    "page": null,
+    "context": "Qualifies under PACT Act for Gulf War/post-9/11 veterans as presumptive toxic-exposure condition. HPI shows chronic symptoms — strong nexus for 10-30% rating under DC 6510.",
+    "nextAction": "File presumptive claim at va.gov/pact using this excerpt; request nexus letter from provider if needed."
+  },
+  {
+    "condition": "Lumbar Radiculopathy",
     "confidence": "High",
     "category": "Musculoskeletal",
     "claimType": "Secondary",
-    "excerpt": "Verbatim 1-2 sentence quote from records proving this finding",
-    "date": "01/15/2024",
+    "excerpt": "Assessment: lumbar radiculopathy, at least as likely as not secondary to service-connected DDD.",
+    "date": "2025-01-15",
     "page": null,
-    "context": "Found in Assessment section — diagnosed as secondary to service-connected lumbar DDD. Nexus language present: 'at least as likely as not'",
-    "nextAction": "Request nexus letter from treating physician linking this condition to service-connected lumbar spine"
+    "context": "Nexus language present ('at least as likely as not'). Secondary to service-connected lumbar DDD — rated under DC 5243, typically 10-40%. Strong evidence for secondary claim.",
+    "nextAction": "File secondary service-connection claim linking radiculopathy to lumbar DDD; include this excerpt and request DBQ."
   }
 ]
 
@@ -177,7 +227,7 @@ Category must be one of: Mental Health, Musculoskeletal, Hearing, Neurological, 
 
 claimType must be one of: Primary Service-Connected, Secondary, PACT Act Presumptive, Aggravated, Rating Increase.
 
-If no evidence found, output: []`;
+If no claim-relevant evidence found, output exactly: []`;
 
 // ─── PDF Text Extraction ──────────────────────────────────────────────────────
 
@@ -224,6 +274,7 @@ interface KeywordFlag {
   condition: string;
   confidence: 'high' | 'medium' | 'low';
   excerpt: string;
+  dateFound?: string;
 }
 
 interface ScanSynopsis {
@@ -345,22 +396,25 @@ function smartPreFilter(text: string): {
     totalChars += chunk.length;
 
     if (sp.matchedKeywords.length >= MIN_KEYWORD_MATCHES_FLAG) {
-      const primaryKeyword = sp.matchedKeywords[0];
-      const conditionKey = primaryKeyword.toLowerCase().replace(/[^a-z]/g, '');
-      if (!seenConditions.has(conditionKey)) {
-        seenConditions.add(conditionKey);
-        const claimLanguage = ['service connected', 'service-connected', 'nexus', 'at least as likely',
-          'more likely than not', 'compensable', 'rated at', 'disability rating', 'tdiu', 'c&p'];
-        const isClaimLanguage = sp.matchedKeywords.some(k => claimLanguage.includes(k));
-        const confidence: 'high' | 'medium' | 'low' = isClaimLanguage ? 'high'
-          : sp.matchedKeywords.length >= 3 ? 'high'
-          : sp.matchedKeywords.length >= 2 ? 'medium'
-          : 'low';
-        keywordFlags.push({
-          condition: primaryKeyword.charAt(0).toUpperCase() + primaryKeyword.slice(1),
-          confidence,
-          excerpt: sp.text.substring(0, 150),
-        });
+      const specificKeyword = sp.matchedKeywords.find(k => !GENERIC_STANDALONE_TERMS.has(k));
+      if (specificKeyword) {
+        const conditionKey = specificKeyword.toLowerCase().replace(/[^a-z]/g, '');
+        if (!seenConditions.has(conditionKey)) {
+          seenConditions.add(conditionKey);
+          const claimLanguage = ['service connected', 'service-connected', 'nexus', 'at least as likely',
+            'more likely than not', 'compensable', 'rated at', 'disability rating', 'tdiu', 'c&p'];
+          const isClaimLanguage = sp.matchedKeywords.some(k => claimLanguage.includes(k));
+          const confidence: 'high' | 'medium' | 'low' = isClaimLanguage ? 'high'
+            : sp.matchedKeywords.length >= 3 ? 'high'
+            : sp.matchedKeywords.length >= 2 ? 'medium'
+            : 'low';
+          keywordFlags.push({
+            condition: specificKeyword.charAt(0).toUpperCase() + specificKeyword.slice(1),
+            confidence,
+            excerpt: sp.text.substring(0, 150),
+            dateFound: extractDateFromText(sp.text),
+          });
+        }
       }
     }
   }
@@ -397,29 +451,56 @@ function mapToCategory(label: string): string {
 function parseSynthesisOutput(rawText: string): FlaggedItem[] {
   if (!rawText || rawText.trim() === '[]') return [];
 
-  // Strategy 1: Parse as JSON array
-  const jsonMatch = rawText.match(/\[[\s\S]*\]/);
+  const cleaned = rawText
+    .replace(/^```(?:json)?\s*/gm, '')
+    .replace(/```\s*$/gm, '')
+    .trim();
+
+  const jsonMatch = cleaned.match(/\[[\s\S]*\]/);
   if (jsonMatch) {
-    try {
-      const arr = JSON.parse(jsonMatch[0]);
-      if (Array.isArray(arr) && arr.length > 0) {
-        return arr.map((item: Record<string, string>, i: number) => ({
-          flagId: `grok_${(item.condition || '').toLowerCase().replace(/[^a-z0-9]/g, '_').substring(0, 25)}_${i}`,
-          label: item.condition || 'Unknown Condition',
-          category: item.category || mapToCategory(item.condition || ''),
-          excerpt: item.excerpt || '',
-          context: item.context || '',
-          claimType: item.claimType || 'Primary Service-Connected',
-          nextAction: item.nextAction || 'Review with your VSO for assessment.',
-          dateFound: item.date || undefined,
-          pageNumber: item.page || undefined,
-          suggestedClaimCategory: item.category || mapToCategory(item.condition || ''),
-          confidence: (['high', 'medium', 'low'].includes((item.confidence || '').toLowerCase())
-            ? (item.confidence || '').toLowerCase()
-            : 'medium') as 'high' | 'medium' | 'low',
-        }));
-      }
-    } catch { /* JSON parse failed — fall through to text parsing */ }
+    const mapItem = (item: Record<string, string>, i: number): FlaggedItem => ({
+      flagId: `grok_${(item.condition || '').toLowerCase().replace(/[^a-z0-9]/g, '_').substring(0, 25)}_${i}`,
+      label: item.condition || 'Unknown Condition',
+      category: item.category || mapToCategory(item.condition || ''),
+      excerpt: item.excerpt || '',
+      context: item.context || '',
+      claimType: item.claimType || 'Primary Service-Connected',
+      nextAction: item.nextAction || 'Review with your VSO for assessment.',
+      dateFound: item.date || undefined,
+      pageNumber: item.page || undefined,
+      suggestedClaimCategory: item.category || mapToCategory(item.condition || ''),
+      confidence: (['high', 'medium', 'low'].includes((item.confidence || '').toLowerCase())
+        ? (item.confidence || '').toLowerCase()
+        : 'medium') as 'high' | 'medium' | 'low',
+    });
+
+    const tryParse = (json: string): FlaggedItem[] | null => {
+      try {
+        const arr = JSON.parse(json);
+        if (Array.isArray(arr) && arr.length > 0) {
+          return arr
+            .filter((item: Record<string, string>) => {
+              const cond = (item.condition || '').toLowerCase();
+              return cond.length > 2 && !GENERIC_STANDALONE_TERMS.has(cond);
+            })
+            .map(mapItem);
+        }
+      } catch { /* parse failed */ }
+      return null;
+    };
+
+    const result = tryParse(jsonMatch[0]);
+    if (result) return result;
+
+    console.warn('[MedicalDetective] JSON parse failed — attempting cleanup...');
+    const fixedJson = jsonMatch[0]
+      .replace(/,\s*}/g, '}')
+      .replace(/,\s*\]/g, ']')
+      .replace(/[\x00-\x1F\x7F]/g, ' ');
+    const fixedResult = tryParse(fixedJson);
+    if (fixedResult) return fixedResult;
+
+    console.warn('[MedicalDetective] JSON cleanup also failed — falling through to text parser');
   }
 
   // Strategy 2: Parse numbered text list (backward compat)
@@ -479,6 +560,7 @@ function keywordFlagsToFlaggedItems(flags: KeywordFlag[]): FlaggedItem[] {
     context: `Keyword-detected in your records. Review with your VSO for full assessment.`,
     claimType: 'Primary Service-Connected',
     nextAction: `Discuss ${f.condition} with your VSO to determine if a claim or increase is warranted.`,
+    dateFound: f.dateFound,
     suggestedClaimCategory: mapToCategory(f.condition),
     confidence: f.confidence,
   }));
@@ -706,10 +788,10 @@ export async function POST(request: NextRequest) {
         if (retryFilteredText) {
           const useReducedCap = body.useReducedCap === true;
           const textForSynthesis = useReducedCap
-            ? retryFilteredText.substring(0, Math.floor(retryFilteredText.length * RETRY_CAP_RATIO))
+            ? retryFilteredText.substring(0, RETRY_CHAR_CAP)
             : retryFilteredText;
 
-          emit({ type: 'progress', message: `Retrying deep analysis${useReducedCap ? ' (reduced scope)' : ''}...`, percent: 30, phase: 'synthesis' });
+          emit({ type: 'progress', message: 'Retrying with focused scope...', percent: 30, phase: 'synthesis' });
 
           try {
             const output = await synthesizeWithGrok4(textForSynthesis, retryFileNames, (tc, mt) => {
@@ -828,9 +910,9 @@ export async function POST(request: NextRequest) {
           } catch (err1) {
             if ((err1 as Error).name !== 'GrokTimeoutError') throw err1;
 
-            console.warn('[MedicalDetective] Attempt 1 timed out — retrying at 60% cap');
-            emit({ type: 'progress', message: 'Phase 2: Retrying with reduced scope...', percent: 50, phase: 'synthesis' });
-            const reducedText = allFilteredText.substring(0, Math.floor(allFilteredText.length * RETRY_CAP_RATIO));
+            console.warn('[MedicalDetective] Attempt 1 timed out — retrying at reduced cap');
+            emit({ type: 'progress', message: 'Phase 2: Retrying with focused scope...', percent: 50, phase: 'synthesis' });
+            const reducedText = allFilteredText.substring(0, RETRY_CHAR_CAP);
 
             try {
               synthesisOutput = await synthesizeWithGrok4(reducedText, fileNames, (tc, mt) => {
@@ -855,6 +937,29 @@ export async function POST(request: NextRequest) {
         if (synthesisOutput) {
           emit({ type: 'progress', message: 'Phase 2: Processing results...', percent: 90, phase: 'synthesis' });
           finalFlags = parseSynthesisOutput(synthesisOutput);
+
+          if (finalFlags.length === 0 && synthesisOutput.length > 100) {
+            console.warn('[MedicalDetective] Format error — retrying synthesis once');
+            emit({ type: 'progress', message: 'Phase 2: Format error — retrying...', percent: 85, phase: 'synthesis' });
+            try {
+              const retryText = allFilteredText.substring(0, RETRY_CHAR_CAP);
+              const retryOutput = await synthesizeWithGrok4(retryText, fileNames, (tc, mt) => {
+                const pct = 85 + Math.round((tc / mt) * 10);
+                emit({ type: 'progress', message: `Phase 2: Retry — ${tc} tokens...`, percent: Math.min(pct, 95), phase: 'synthesis' });
+              });
+              if (retryOutput) {
+                const retryFlags = parseSynthesisOutput(retryOutput);
+                if (retryFlags.length > 0) finalFlags = retryFlags;
+              }
+            } catch (retryErr) {
+              console.warn('[MedicalDetective] Format retry also failed:', (retryErr as Error).message);
+            }
+          }
+
+          if (finalFlags.length === 0 && allKeywordFlags.length > 0) {
+            console.warn('[MedicalDetective] Synthesis produced no valid flags — falling back to keyword interim');
+            finalFlags = keywordFlagsToFlaggedItems(allKeywordFlags);
+          }
         }
 
         emit({ type: 'progress', message: `Phase 2 complete — ${finalFlags.length} verified flag(s)`, percent: 95, phase: 'synthesis_done' });
