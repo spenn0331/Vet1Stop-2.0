@@ -34,6 +34,9 @@ interface FlaggedItem {
   nextAction?: string;
   dateFound?: string;
   pageNumber?: string;
+  sectionFound?: string;
+  doctorName?: string;
+  ratingRange?: string;
   suggestedClaimCategory: string;
   confidence: 'high' | 'medium' | 'low';
 }
@@ -456,87 +459,107 @@ export default function MedicalDetectivePanel() {
   const handleDownloadReport = () => {
     if (!report) return;
     const date = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-    const flagRows = report.flaggedItems.map((item, i) => `
-      <div class="flag-item ${item.confidence}">
-        <div class="flag-header">
-          <span class="flag-num">${i + 1}.</span>
-          <span class="flag-label">${item.label}</span>
-          <span class="flag-badge">${item.category}</span>
-          <span class="conf-badge conf-${item.confidence}">${item.confidence.toUpperCase()}</span>
-          ${item.claimType ? `<span class="flag-badge" style="background:#DBEAFE;color:#1E40AF">${item.claimType}</span>` : ''}
+
+    const isDeep = (ctx: string) => ctx && ctx.length > 40 && !ctx.startsWith('Keyword-detected') && ctx !== '';
+    const flagRows = report.flaggedItems.map((item, i) => {
+      const meta = [
+        item.sectionFound ? `<span class="mp sec">${item.sectionFound}</span>` : '',
+        item.pageNumber ? `<span class="mp pg">Page ${item.pageNumber}</span>` : '',
+        item.dateFound && item.dateFound !== 'Not specified' ? `<span class="mp dt">${item.dateFound}</span>` : '',
+        item.doctorName ? `<span class="mp dr">${item.doctorName}</span>` : '',
+      ].filter(Boolean).join(' ');
+      return `
+      <div class="fc ${item.confidence}">
+        <div class="fh">
+          <div class="ft"><span class="fn">${i + 1}</span><h3>${item.label}</h3></div>
+          <div class="fb">
+            <span class="b c-${item.confidence}">${item.confidence.toUpperCase()}</span>
+            <span class="b cat">${item.category}</span>
+            ${item.claimType ? `<span class="b ct">${item.claimType}</span>` : ''}
+            ${item.ratingRange ? `<span class="b rt">Est. ${item.ratingRange}</span>` : ''}
+          </div>
         </div>
-        <div class="flag-meta">
-          ${item.dateFound && item.dateFound !== 'Not specified' ? `<span style="background:#F1F5F9;padding:2px 8px;border-radius:4px;font-weight:600">Date: ${item.dateFound}</span>` : ''}
-          ${item.pageNumber ? `<span style="background:#EDE9FE;padding:2px 8px;border-radius:4px;font-weight:600;color:#6D28D9">Page ${item.pageNumber}</span>` : ''}
-        </div>
-        ${item.excerpt ? `<div class="flag-quote"><strong>Highlighted Excerpt:</strong><br>&ldquo;${item.excerpt}&rdquo;</div>` : ''}
-        ${item.context && item.context !== item.label && !item.context.startsWith('Keyword-detected') && item.context.length > 40 ? `<div class="flag-context" style="border-left:3px solid #3B82F6"><strong>Why This Matters:</strong> ${item.context}</div>` : ''}
-        ${item.nextAction ? `<div class="flag-context" style="background:#F0FDF4;border-left:3px solid #16A34A"><strong>Recommended Next Step:</strong> ${item.nextAction}</div>` : ''}
-      </div>`).join('');
+        ${meta ? `<div class="fm">${meta}</div>` : ''}
+        ${item.excerpt ? `<div class="ex"><div class="el">HIGHLIGHTED EXCERPT</div><blockquote>&ldquo;${item.excerpt}&rdquo;</blockquote></div>` : ''}
+        ${isDeep(item.context) ? `<div class="cx"><div class="cl">WHY THIS MATTERS FOR YOUR CLAIM</div><p>${item.context}</p></div>` : ''}
+        ${item.ratingRange ? `<div class="rn"><strong>Estimated Rating Range:</strong> ${item.ratingRange} <em>(Final ratings determined solely by the VA)</em></div>` : ''}
+        ${item.nextAction ? `<div class="ax"><div class="al">RECOMMENDED NEXT STEPS</div><p>${item.nextAction}</p></div>` : ''}
+      </div>`;
+    }).join('');
 
     const html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
-<title>Vet1Stop Personal Evidence Report — ${date}</title>
+<title>Vet1Stop Personal Evidence Report</title>
 <style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Segoe UI',sans-serif;padding:40px;color:#1F2937;line-height:1.6}
-.header{text-align:center;border-bottom:3px solid #1A2C5B;padding-bottom:18px;margin-bottom:22px}
-.header h1{color:#1A2C5B;font-size:22px}
-.header p{color:#6B7280;font-size:11px;margin-top:4px}
-.disclaimer{background:#FEF3C7;border:2px solid #F59E0B;border-radius:8px;padding:14px;margin-bottom:22px;font-size:11px;color:#92400E}
-.disclaimer strong{display:block;font-size:13px;margin-bottom:5px}
-.summary{background:#EFF6FF;border-radius:8px;padding:14px;margin-bottom:22px}
-.summary h2{color:#1A2C5B;font-size:15px;margin-bottom:6px}
-.flag-section h2{color:#1A2C5B;font-size:17px;margin-bottom:14px;border-bottom:1px solid #E5E7EB;padding-bottom:5px}
-.flag-item{border:1px solid #E5E7EB;border-radius:8px;padding:14px;margin-bottom:10px;page-break-inside:avoid}
-.flag-item.high{border-left:4px solid #1A2C5B}
-.flag-item.medium{border-left:4px solid #F59E0B}
-.flag-item.low{border-left:4px solid #9CA3AF}
-.flag-header{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px}
-.flag-num{color:#6B7280;font-size:13px}
-.flag-label{font-weight:700;color:#1A2C5B;font-size:14px;flex:1}
-.flag-badge{background:#F3F4F6;padding:2px 8px;border-radius:4px;font-size:10px;color:#4B5563}
-.conf-badge{padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700}
-.conf-high{background:#DBEAFE;color:#1E40AF}
-.conf-medium{background:#FEF3C7;color:#92400E}
-.conf-low{background:#F3F4F6;color:#6B7280}
-.flag-quote{background:#FFFBEB;border-left:3px solid #F59E0B;padding:8px 12px;border-radius:4px;font-size:12px;color:#92400E;font-style:italic;margin-bottom:7px}
-.flag-meta{font-size:11px;color:#6B7280;display:flex;flex-wrap:wrap;gap:12px}
-.flag-context{font-size:11px;color:#374151;margin-top:6px;padding:6px 10px;background:#F9FAFB;border-radius:4px}
-.next-steps{background:#F0FDF4;border-radius:8px;padding:14px;margin-top:22px}
-.next-steps h2{color:#166534;font-size:15px;margin-bottom:8px}
-.next-steps ol{padding-left:20px}
-.next-steps li{font-size:12px;margin-bottom:4px}
-.footer{margin-top:28px;text-align:center;font-size:10px;color:#9CA3AF;border-top:1px solid #E5E7EB;padding-top:14px}
-.no-print{text-align:center;margin-top:20px}
-@media print{.no-print{display:none}body{padding:20px}}
+@page{margin:.75in}*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',Tahoma,sans-serif;color:#1F2937;line-height:1.55;font-size:11px}
+.hd{text-align:center;border-bottom:3px solid #1A2C5B;padding-bottom:16px;margin-bottom:18px}
+.hd h1{color:#1A2C5B;font-size:20px;letter-spacing:.5px;margin-bottom:2px}
+.hd .sub{color:#4B5563;font-size:11px}.hd .mt{color:#9CA3AF;font-size:9px;margin-top:5px}
+.dis{background:#FEF3C7;border:2px solid #F59E0B;border-radius:6px;padding:12px 14px;margin-bottom:16px}
+.dis strong{display:block;color:#92400E;font-size:11px;margin-bottom:3px}.dis p{color:#92400E;font-size:9.5px;line-height:1.5}
+.pn{background:#EFF6FF;border-left:4px solid #1A2C5B;border-radius:0 6px 6px 0;padding:10px 14px;margin-bottom:16px}
+.pn p{color:#1A2C5B;font-size:10px;font-weight:600}
+.sm{background:#F9FAFB;border-radius:6px;padding:12px 14px;margin-bottom:18px}
+.sm h2{color:#1A2C5B;font-size:13px;margin-bottom:4px}.sm p{font-size:10.5px;color:#374151}
+.st{color:#1A2C5B;font-size:14px;font-weight:700;border-bottom:2px solid #E5E7EB;padding-bottom:6px;margin-bottom:14px}
+.fc{border:1px solid #E5E7EB;border-radius:8px;padding:14px;margin-bottom:12px;page-break-inside:avoid}
+.fc.high{border-left:4px solid #1A2C5B}.fc.medium{border-left:4px solid #F59E0B}.fc.low{border-left:4px solid #9CA3AF}
+.fh{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:6px;flex-wrap:wrap}
+.ft{display:flex;align-items:baseline;gap:6px}.fn{color:#9CA3AF;font-size:11px;font-weight:600}
+.ft h3{color:#1A2C5B;font-size:13px;font-weight:700}
+.fb{display:flex;flex-wrap:wrap;gap:4px}
+.b{padding:1px 7px;border-radius:3px;font-size:8.5px;font-weight:700;white-space:nowrap}
+.c-high{background:#DBEAFE;color:#1E40AF}.c-medium{background:#FEF3C7;color:#92400E}.c-low{background:#F3F4F6;color:#6B7280}
+.b.cat{background:#F3F4F6;color:#4B5563;font-weight:500}.b.ct{background:#DBEAFE;color:#1E40AF;font-weight:600}
+.b.rt{background:#D1FAE5;color:#065F46;font-weight:600}
+.fm{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.mp{padding:1px 6px;border-radius:3px;font-size:9px;font-weight:500}
+.mp.sec{background:#F3F4F6;color:#374151}.mp.pg{background:#EDE9FE;color:#6D28D9}
+.mp.dt{background:#F1F5F9;color:#334155}.mp.dr{background:#E0F2FE;color:#0369A1}
+.ex{background:#FFFBEB;border-left:3px solid #F59E0B;border-radius:0 4px 4px 0;padding:8px 12px;margin-bottom:8px}
+.el{font-size:8.5px;font-weight:700;color:#B45309;margin-bottom:3px;letter-spacing:.5px}
+.ex blockquote{font-size:10.5px;color:#92400E;font-style:italic;line-height:1.5}
+.cx{background:#EFF6FF;border-left:3px solid #3B82F6;border-radius:0 4px 4px 0;padding:8px 12px;margin-bottom:8px}
+.cl{font-size:8.5px;font-weight:700;color:#1E40AF;margin-bottom:3px;letter-spacing:.5px}
+.cx p{font-size:10px;color:#1E3A5F;line-height:1.5}
+.rn{font-size:9px;color:#065F46;background:#ECFDF5;padding:5px 10px;border-radius:4px;margin-bottom:8px}
+.rn em{color:#6B7280;font-size:8.5px}
+.ax{background:#F0FDF4;border-left:3px solid #16A34A;border-radius:0 4px 4px 0;padding:8px 12px}
+.al{font-size:8.5px;font-weight:700;color:#166534;margin-bottom:3px;letter-spacing:.5px}
+.ax p{font-size:10px;color:#14532D;line-height:1.5}
+.ns{background:#F0FDF4;border-radius:6px;padding:12px 14px;margin-top:18px;page-break-inside:avoid}
+.ns h2{color:#166534;font-size:12px;margin-bottom:6px}.ns ol{padding-left:18px}.ns li{font-size:10px;margin-bottom:3px;color:#14532D}
+.rf{margin-top:24px;padding-top:12px;border-top:2px solid #E5E7EB;text-align:center}
+.rf p{font-size:8.5px;color:#9CA3AF;line-height:1.6}.rf strong{color:#6B7280}
+.np{text-align:center;margin-top:18px}
+@media print{.np{display:none}body{padding:0}}
 </style></head><body>
-<div class="header">
-  <h1>🔍 Vet1Stop Personal Evidence Report</h1>
-  <p>Generated: ${date} | Files Processed: ${report.processingDetails.filesProcessed} | Flags Found: ${report.totalFlagsFound}</p>
-  <p>Analyzed by: ${report.processingDetails.aiModel} | Processing Time: ${(report.processingDetails.processingTime / 1000).toFixed(1)}s</p>
+<div class="hd">
+  <h1>Vet1Stop Personal Evidence Report</h1>
+  <div class="sub">VA Medical Records Analysis &mdash; Claim Evidence Summary</div>
+  <div class="mt">Generated: ${date} &nbsp;|&nbsp; Files: ${report.processingDetails.filesProcessed} &nbsp;|&nbsp; Flags: ${report.totalFlagsFound} &nbsp;|&nbsp; Model: ${report.processingDetails.aiModel} &nbsp;|&nbsp; Time: ${(report.processingDetails.processingTime / 1000).toFixed(1)}s</div>
 </div>
-<div class="disclaimer">
-  <strong>⚠ IMPORTANT DISCLAIMER</strong>
-  ${DISCLAIMER_TEXT}
+<div class="dis">
+  <strong>IMPORTANT DISCLAIMER</strong>
+  <p>${DISCLAIMER_TEXT}</p>
 </div>
-<div class="summary"><h2>Summary</h2><p>${report.summary}</p></div>
-<div class="flag-section">
-  <h2>Flagged Findings (${report.totalFlagsFound})</h2>
-  ${flagRows || '<p style="color:#6B7280;font-size:13px">No flags identified.</p>'}
+<div class="pn">
+  <p>Findings are ordered by estimated claim value &mdash; highest-value, most verifiable opportunities listed first. All rating estimates are broad informational ranges; final ratings are determined solely by the VA.</p>
 </div>
-<div class="next-steps">
-  <h2>Suggested Next Steps</h2>
+<div class="sm"><h2>Summary</h2><p>${report.summary}</p></div>
+<h2 class="st">Flagged Findings (${report.totalFlagsFound})</h2>
+${flagRows || '<p style="color:#6B7280;font-size:11px">No flags identified.</p>'}
+<div class="ns">
+  <h2>General Next Steps</h2>
   <ol>${report.suggestedNextSteps.map(s => `<li>${s}</li>`).join('')}</ol>
 </div>
-<div class="footer">
-  <p>Generated by Vet1Stop Medical Detective — for informational purposes only.</p>
-  <p><strong>This is NOT medical or legal advice.</strong> Share with your VSO or accredited claims representative.</p>
-  <p>No files were stored. Zero HIPAA exposure.</p>
+<div class="rf">
+  <p><strong>Generated by Vet1Stop Medical Detective</strong> &mdash; for informational purposes only.</p>
+  <p><strong>This is NOT medical or legal advice.</strong> Share this report with your accredited VSO or claims representative for professional review.</p>
+  <p>No files were stored during this analysis. All processing occurred in memory with immediate deletion. Zero HIPAA exposure.</p>
 </div>
-<div class="no-print">
-  <button onclick="window.print()" style="padding:10px 28px;background:#1A2C5B;color:white;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-weight:600">
-    Print / Save as PDF
-  </button>
+<div class="np">
+  <button onclick="window.print()" style="padding:10px 28px;background:#1A2C5B;color:white;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-weight:600">Print / Save as PDF</button>
 </div>
 </body></html>`;
 
@@ -922,7 +945,7 @@ body{font-family:'Segoe UI',sans-serif;padding:40px;color:#1F2937;line-height:1.
                         {item.category}
                       </span>
                     </div>
-                    <div className="flex flex-wrap gap-2 mb-3">
+                    <div className="flex flex-wrap gap-2 mb-2">
                       <span className={`text-xs px-2 py-0.5 rounded font-semibold ${
                         item.confidence === 'high' ? 'bg-blue-100 text-blue-800'
                         : item.confidence === 'medium' ? 'bg-yellow-100 text-yellow-800'
@@ -931,11 +954,22 @@ body{font-family:'Segoe UI',sans-serif;padding:40px;color:#1F2937;line-height:1.
                       {item.claimType && (
                         <span className="text-xs px-2 py-0.5 rounded bg-[#1A2C5B]/10 text-[#1A2C5B] font-medium">{item.claimType}</span>
                       )}
-                      {item.dateFound && item.dateFound !== 'Not specified' && (
-                        <span className="text-xs px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-medium">Date: {item.dateFound}</span>
+                      {item.ratingRange && (
+                        <span className="text-xs px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-medium">Est. {item.ratingRange}</span>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5 text-xs text-gray-500 mb-3">
+                      {item.sectionFound && (
+                        <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 font-medium">{item.sectionFound}</span>
                       )}
                       {item.pageNumber && (
-                        <span className="text-xs px-2 py-0.5 rounded bg-violet-100 text-violet-700 font-medium">Page {item.pageNumber}</span>
+                        <span className="px-1.5 py-0.5 rounded bg-violet-100 text-violet-700 font-medium">Page {item.pageNumber}</span>
+                      )}
+                      {item.dateFound && item.dateFound !== 'Not specified' && (
+                        <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700">{item.dateFound}</span>
+                      )}
+                      {item.doctorName && (
+                        <span className="px-1.5 py-0.5 rounded bg-sky-100 text-sky-700">{item.doctorName}</span>
                       )}
                     </div>
 

@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 
 /**
- * POST /api/health/medical-detective — v4.5 "Strict Diagnosis Gating + Page Extraction + Deep Nexus"
+ * POST /api/health/medical-detective — v4.6 "VSO-Ready Personal Evidence Report"
  *
  * Architecture (Phase 1 ★ per master-strategy.md Section 2):
  *   Phase 1: Smart Pre-Filter (NO AI, ~1-2s) — tiered keyword scoring,
@@ -48,6 +48,9 @@ interface FlaggedItem {
   nextAction: string;
   dateFound?: string;
   pageNumber?: string;
+  sectionFound?: string;
+  doctorName?: string;
+  ratingRange?: string;
   suggestedClaimCategory: string;
   confidence: 'high' | 'medium' | 'low';
 }
@@ -192,30 +195,48 @@ function isNegativeContext(text: string, keyword: string): boolean {
   return NEGATIVE_CONTEXT_REGEX.test(prefix);
 }
 
+function isScreeningFalsePositive(text: string, keyword: string): boolean {
+  const lower = text.toLowerCase();
+  const kw = keyword.toLowerCase();
+  if (/phq-?9[:\s]*(?:score[:\s]*)?\s*(?:0|none|negative|nil)/i.test(lower) && (kw === 'depression' || kw === 'suicidal')) return true;
+  if (/c-?ssrs[:\s]*(?:negative|none|denied|no)/i.test(lower) && kw === 'suicidal') return true;
+  if (/gad-?7[:\s]*(?:score[:\s]*)?\s*(?:0|none|negative|nil)/i.test(lower) && kw === 'anxiety') return true;
+  if (/pc-?ptsd[:\s]*(?:score[:\s]*)?\s*(?:0|none|negative|nil)/i.test(lower) && (kw === 'ptsd' || kw === 'post-traumatic')) return true;
+  if (/audit-?c[:\s]*(?:score[:\s]*)?\s*(?:0|none|negative|nil)/i.test(lower) && kw === 'substance') return true;
+  if (/suicidal\s+ideation[:\s]*(?:0|none|denied|negative|absent)/i.test(lower) && kw === 'suicidal') return true;
+  return false;
+}
+
 // ─── Synthesis Prompt — strict JSON with deep evidence fields ────────────────
 
-const SYNTHESIS_PROMPT = `You are an expert VA disability claims evidence analyst. Deep knowledge of 38 CFR rating schedules, PACT Act (2022-2026), presumptive conditions, secondary service-connection, and how clinical notes support disability claims.
+const SYNTHESIS_PROMPT = `You are an expert VA disability claims evidence analyst building a Personal Evidence Report for VSO handoff. Deep knowledge of 38 CFR rating schedules, PACT Act (2022-2026), presumptive conditions, secondary service-connection, and clinical note interpretation.
 
-You are given pre-filtered excerpts from a veteran's VA medical records. Each paragraph is tagged with its page number like "[Page 45] text...". Identify EVERY claim-relevant finding with deep supporting detail.
+Each paragraph is tagged like "[Page 45 | Assessment] text..." showing page number and clinical section. Identify EVERY claim-relevant finding, ordered by claim value (highest first).
 
 ACCURACY RULES — CRITICAL:
-- ONLY flag SPECIFIC diagnosable conditions with POSITIVE clinical evidence (e.g., "Sinusitis", "Radiculopathy", "PTSD", "Sleep Apnea")
-- NEVER flag conditions in NEGATIVE context: "absence of", "denies", "no evidence of", "ruled out", "negative for" — these are EXCLUSIONS, not diagnoses
-- NEVER flag generic terms ("Diagnosed", "Chronic", "Problem List", "Assessment") as conditions
+- ONLY flag SPECIFIC diagnosable conditions with POSITIVE clinical evidence
+- NEVER flag NEGATIVE context: "absence of", "denies", "no evidence of", "ruled out", "negative for"
+- NEVER flag screening tool scores where veteran scored 0/negative/none (PHQ-9: 0, C-SSRS: negative, GAD-7: 0, AUDIT-C: 0, "suicidal ideation: denied")
+- NEVER flag generic terms ("Diagnosed", "Chronic", "Problem List") as conditions
 - Extract EXACT verbatim quotes — 1-2 sentences proving the finding
-- Include the page number from the [Page N] tag for each finding
 
-CLAIM ANALYSIS:
-- claimType: "Primary Service-Connected", "Secondary", "PACT Act Presumptive", "Aggravated", or "Rating Increase"
-- For secondary conditions, name the primary condition it connects to
-- For PACT Act presumptives, cite the exposure link (burn pit, Agent Orange, Gulf War illness)
-- Confidence: High = direct diagnosis + nexus/rating language. Medium = clinical evidence. Low = indirect reference
-- date: Extract from "Note date:", "Date:", or nearby timestamps. Format YYYY-MM-DD. Use "Not specified" if none
-- context MUST explain the claim pathway: cite rating schedule diagnostic code, nexus evidence, estimated rating range, and why this evidence matters
-- nextAction MUST be specific multi-step: "1. File [type] claim at va.gov/[path]. 2. Request [document] from [provider]. 3. Gather [evidence]."
-- Deduplicate: merge flags for the same condition
+PER-FLAG FIELDS (all required):
+- condition: Specific diagnosable condition name
+- confidence: "High" (diagnosis + nexus), "Medium" (clinical evidence), "Low" (indirect)
+- category: Mental Health | Musculoskeletal | Hearing | Neurological | Sleep Disorders | Respiratory | Cardiovascular | Gastrointestinal | Oncological | PACT Act Presumptive | Claim Language | Dermatological | Endocrine | Other
+- claimType: "Primary Service-Connected" | "Secondary" | "PACT Act Presumptive" | "Aggravated" | "Rating Increase"
+- excerpt: Verbatim 1-2 sentence quote from records
+- date: YYYY-MM-DD or "Not specified"
+- page: Page number from [Page N] tag
+- sectionFound: Clinical section from tag ("Assessment", "HPI", "Problem List", etc.) or null
+- doctorName: Provider name from "Attending:", "Provider:", "Cosigned by:", "Signed by:" or null
+- ratingRange: Estimated VA rating range (e.g., "10-30%") based on 38 CFR diagnostic codes, or null
+- context: Deep claim pathway — cite DC code, nexus evidence, why this matters, service-connection logic
+- nextAction: Multi-step: "1. File [type] claim at va.gov/[path]. 2. Request [document]. 3. Gather [evidence]."
 
-Output ONLY valid JSON — no intro text, no markdown fences, no explanation. ONLY the raw JSON array:
+ORDER results by claim value: PACT Act presumptives and strong nexus first, then secondaries, then lower confidence.
+
+Output ONLY valid JSON — no intro text, no markdown fences, no explanation:
 [
   {
     "condition": "Sinusitis",
@@ -225,8 +246,11 @@ Output ONLY valid JSON — no intro text, no markdown fences, no explanation. ON
     "excerpt": "Discharge diagnosis: SINUSITIS, BPPV — chronic symptoms noted since deployment.",
     "date": "2024-06-12",
     "page": "45",
-    "context": "Sinusitis qualifies under PACT Act as presumptive for burn pit/toxic exposure in post-9/11 veterans. HPI documents chronic post-deployment symptoms supporting nexus. Rated under DC 6510, typically 10-30% based on frequency of episodes.",
-    "nextAction": "1. File presumptive claim at va.gov/pact citing this diagnosis. 2. Request nexus letter from treating provider linking sinusitis to deployment exposure. 3. Submit buddy statement confirming burn pit exposure at duty station."
+    "sectionFound": "Assessment",
+    "doctorName": "Dr. Martinez",
+    "ratingRange": "10-30%",
+    "context": "Sinusitis qualifies under PACT Act as presumptive for burn pit/toxic exposure in post-9/11 veterans. HPI documents chronic post-deployment symptoms. Rated under DC 6510, 10-30% based on episode frequency.",
+    "nextAction": "1. File presumptive claim at va.gov/pact. 2. Request nexus letter from Dr. Martinez. 3. Submit buddy statement confirming burn pit exposure."
   },
   {
     "condition": "Lumbar Radiculopathy",
@@ -236,8 +260,11 @@ Output ONLY valid JSON — no intro text, no markdown fences, no explanation. ON
     "excerpt": "Assessment: lumbar radiculopathy, at least as likely as not secondary to service-connected DDD.",
     "date": "2025-01-15",
     "page": "72",
-    "context": "Direct nexus language present ('at least as likely as not'). Diagnosed secondary to service-connected lumbar DDD. Rated under DC 5243, typically 10-40% per affected extremity. Nexus opinion already documented — strong evidence.",
-    "nextAction": "1. File secondary service-connection claim linking radiculopathy to lumbar DDD at va.gov/disability. 2. Request DBQ from provider. 3. Include this clinical note as primary nexus evidence."
+    "sectionFound": "Assessment",
+    "doctorName": null,
+    "ratingRange": "10-40%",
+    "context": "Nexus language present ('at least as likely as not'). Secondary to service-connected lumbar DDD. Rated under DC 5243, 10-40% per extremity.",
+    "nextAction": "1. File secondary claim at va.gov/disability. 2. Request DBQ from provider. 3. Include this note as nexus evidence."
   },
   {
     "condition": "PTSD",
@@ -247,14 +274,13 @@ Output ONLY valid JSON — no intro text, no markdown fences, no explanation. ON
     "excerpt": "Axis I: PTSD, chronic, related to combat trauma per DSM-5 criteria.",
     "date": "2024-03-20",
     "page": "15",
-    "context": "Formal PTSD diagnosis meeting DSM-5 criteria with combat stressor. Rated under DC 9411, typically 30-70% based on occupational/social impairment. Combat veteran presumption (38 CFR 3.304(f)(2)) simplifies stressor verification.",
-    "nextAction": "1. File primary service-connection for PTSD at va.gov/disability. 2. Request C&P exam emphasizing occupational impairment. 3. Prepare personal statement describing stressor events and current symptoms."
+    "sectionFound": "HPI",
+    "doctorName": "Dr. Thompson",
+    "ratingRange": "30-70%",
+    "context": "Formal PTSD diagnosis meeting DSM-5 criteria. Combat presumption (38 CFR 3.304(f)(2)) simplifies stressor verification. Rated under DC 9411, 30-70%.",
+    "nextAction": "1. File primary claim at va.gov/disability. 2. Request C&P exam. 3. Prepare personal stressor statement."
   }
 ]
-
-Category: Mental Health, Musculoskeletal, Hearing, Neurological, Sleep Disorders, Respiratory, Cardiovascular, Gastrointestinal, Oncological, PACT Act Presumptive, Claim Language, Dermatological, Endocrine, Other.
-
-claimType: Primary Service-Connected, Secondary, PACT Act Presumptive, Aggravated, Rating Increase.
 
 If no claim-relevant evidence found, output exactly: []`;
 
@@ -325,6 +351,7 @@ interface KeywordFlag {
   excerpt: string;
   dateFound?: string;
   pageNumber?: number;
+  sectionFound?: string;
 }
 
 interface ScanSynopsis {
@@ -382,11 +409,13 @@ function smartPreFilter(text: string): {
     isHeader: boolean;
     sectionKey: string | null;
     pageNumber: number;
+    sectionName: string;
   }
 
   const scored: ScoredPara[] = [];
   const detectedKeywordsSet = new Set<string>();
   const detectedHeadersSet = new Set<string>();
+  let currentSection = '';
 
   for (const { text: para, page } of paragraphs) {
     const trimmed = para.trim();
@@ -397,6 +426,10 @@ function smartPreFilter(text: string): {
     let sectionKey: string | null = null;
     for (const s of GUARANTEED_SECTIONS) {
       if (lower.includes(s)) { sectionKey = s; break; }
+    }
+    if (sectionKey) {
+      currentSection = (sectionKey === 'hpi' || sectionKey === 'history of present illness')
+        ? 'HPI' : sectionKey.replace(/\b\w/g, c => c.toUpperCase());
     }
 
     const isHeader = SECTION_HEADER_REGEX.test(trimmed);
@@ -417,7 +450,7 @@ function smartPreFilter(text: string): {
     }
 
     if (matchedKeywords.length >= 1 || isHeader) {
-      scored.push({ text: trimmed, keywordCount: matchedKeywords.length, matchedKeywords, isHeader, sectionKey, pageNumber: page });
+      scored.push({ text: trimmed, keywordCount: matchedKeywords.length, matchedKeywords, isHeader, sectionKey, pageNumber: page, sectionName: currentSection });
     }
   }
 
@@ -451,7 +484,8 @@ function smartPreFilter(text: string): {
 
   for (const sp of selected) {
     if (totalChars >= FILTERED_TEXT_CAP) break;
-    const tagged = `[Page ${sp.pageNumber}] ${sp.text}`;
+    const sectionTag = sp.sectionName ? ` | ${sp.sectionName}` : '';
+    const tagged = `[Page ${sp.pageNumber}${sectionTag}] ${sp.text}`;
     const chunk = tagged.length + totalChars > FILTERED_TEXT_CAP
       ? tagged.substring(0, FILTERED_TEXT_CAP - totalChars)
       : tagged;
@@ -459,7 +493,7 @@ function smartPreFilter(text: string): {
     totalChars += chunk.length;
 
     if (sp.matchedKeywords.length >= MIN_KEYWORD_MATCHES_FLAG) {
-      const specificKeyword = sp.matchedKeywords.find(k => !GENERIC_STANDALONE_TERMS.has(k) && !isNegativeContext(sp.text, k));
+      const specificKeyword = sp.matchedKeywords.find(k => !GENERIC_STANDALONE_TERMS.has(k) && !isNegativeContext(sp.text, k) && !isScreeningFalsePositive(sp.text, k));
       if (specificKeyword) {
         const conditionKey = specificKeyword.toLowerCase().replace(/[^a-z]/g, '');
         if (!seenConditions.has(conditionKey)) {
@@ -477,6 +511,7 @@ function smartPreFilter(text: string): {
             excerpt: sp.text.substring(0, 150),
             dateFound: extractDateFromText(sp.text),
             pageNumber: sp.pageNumber,
+            sectionFound: sp.sectionName || undefined,
           });
         }
       }
@@ -532,6 +567,9 @@ function parseSynthesisOutput(rawText: string): FlaggedItem[] {
       nextAction: item.nextAction || 'Review with your VSO for assessment.',
       dateFound: item.date || undefined,
       pageNumber: item.page ? String(item.page) : undefined,
+      sectionFound: item.sectionFound || undefined,
+      doctorName: item.doctorName || undefined,
+      ratingRange: item.ratingRange || undefined,
       suggestedClaimCategory: item.category || mapToCategory(item.condition || ''),
       confidence: (['high', 'medium', 'low'].includes((item.confidence || '').toLowerCase())
         ? (item.confidence || '').toLowerCase()
@@ -626,6 +664,7 @@ function keywordFlagsToFlaggedItems(flags: KeywordFlag[]): FlaggedItem[] {
     nextAction: `Discuss ${f.condition} with your VSO to determine if a claim or increase is warranted.`,
     dateFound: f.dateFound,
     pageNumber: f.pageNumber ? String(f.pageNumber) : undefined,
+    sectionFound: f.sectionFound,
     suggestedClaimCategory: mapToCategory(f.condition),
     confidence: f.confidence,
   }));
@@ -670,13 +709,19 @@ function addPactActCrossRef(flags: FlaggedItem[]): FlaggedItem[] {
 // ─── Report Builder ──────────────────────────────────────────────────────────
 
 function buildReport(flags: FlaggedItem[], filesProcessed: number, processingTime: number, aiModel: string, synopsis?: ScanSynopsis, isInterim?: boolean, interimNote?: string): DetectiveReport {
+  const sorted = [...flags].sort((a, b) => {
+    const order: Record<string, number> = { high: 0, medium: 1, low: 2 };
+    const aScore = (order[a.confidence] ?? 1) + (a.claimType?.includes('PACT') ? -0.5 : 0);
+    const bScore = (order[b.confidence] ?? 1) + (b.claimType?.includes('PACT') ? -0.5 : 0);
+    return aScore - bScore;
+  });
   return {
     disclaimer: DISCLAIMER,
-    summary: flags.length > 0
-      ? `${flags.length} potential claim-relevant flag(s) identified across ${filesProcessed} document(s). Review with your VSO or accredited claims representative.`
+    summary: sorted.length > 0
+      ? `${sorted.length} potential claim-relevant flag(s) identified across ${filesProcessed} document(s). These represent the highest-value, most verifiable claim opportunities found in your records. Review with your VSO or accredited claims representative.`
       : `No strong claim-relevant flags were identified in the ${filesProcessed} document(s) processed. This does not mean there are no valid claims \u2014 consider uploading additional records.`,
-    totalFlagsFound: flags.length,
-    flaggedItems: flags,
+    totalFlagsFound: sorted.length,
+    flaggedItems: sorted,
     suggestedNextSteps: flags.length > 0
       ? [
           'Review this report with an accredited VSO (Veterans Service Organization) representative',
