@@ -6,13 +6,13 @@
 - **Primary Goal**: MVP Launch (Q2 2026)
 - **Current Phase**: Strategic Foundation & "Super App" Definition
 - **Dev Server**: `npm run dev` → http://localhost:3000
-- **Last Active Development**: Feb 20, 2026
+- **Last Active Development**: Feb 21, 2026
 - **Recovery Date**: Feb 14, 2026 (restored from git commit `863a42cd`)
 
 ---
 
-## 🟢 Current Status: Active Development
-**As of Feb 20, 2026:** Medical Detective v4.2 shipped. Streaming Grok-4 synthesis eliminates the 35% stall. Two-phase idle timeout (45s initial / 10s stream), auto-retry at 60% cap, interim report fallback. Phase 1 per master-strategy.md Section 2 complete.
+## 🟡 Current Status: Active Development — Medical Detective NOT YET COMPLETE
+**As of Feb 21, 2026:** Medical Detective v4.3 shipped — deep evidence synthesis with JSON-structured output, excerpts, claim type mapping, and next-action guidance. Streaming Grok-4 works (no more 35% stall). However, **significant work remains** before Medical Detective is production-ready. See "Remaining Work" below.
 
 ### ✅ Recently Completed
 * **Strategic Pivot:** Defined the "Living Master Strategy" (replacing the traditional business plan).
@@ -24,12 +24,30 @@
 * **Medical Detective v2 (Health Page — Feb 19, 2026):** Complete rewrite with: `pdf-parse` library for robust PDF text extraction, 14k-char chunked processing (~3500 tokens/chunk), streaming NDJSON response for real-time progress, exact expert VA evidence analyst system prompt (Grok 4), "No Flags Found" state with actionable suggestions, page-number + date metadata on each flag, downloadable HTML→PDF evidence report, bold disclaimer on every screen. API uses `XAI_API_KEY` env var + `grok-4` model.
 * **Model Upgrades:** Updated all AI endpoints from older Grok models to `grok-4` (text/NLP via `XAI_API_KEY`) and `grok-2-vision-1212` (image analysis).
 
-### 🚧 In Progress
-* **Living Master Strategy:** Founder is currently reviewing and manually adding specific feature sets for Life/Leisure and Education to the master doc.
+### 🚧 In Progress — Medical Detective (LOTS of work remaining)
+* **Medical Detective is NOT production-ready.** v4.3 establishes the architecture (streaming, JSON prompt, deep fields) but needs extensive testing, tuning, and polish before it delivers consistent value to veterans.
+* **Living Master Strategy:** Founder reviewing and adding Life/Leisure and Education feature sets.
 * **Legal Setup:** LLC formation in PA (Pending).
-* **Health Page:** Continued testing and refinement of AI tools.
 
-### ✅ Medical Detective v4.2 (Feb 20, 2026) — Phase 1 ★ Complete
+### ⚠️ Medical Detective — Remaining Work (Phase 1 ★)
+This is a prioritized list of what still needs to happen before Medical Detective is truly "ship it" quality:
+
+1. **Output quality validation** — Run the real 1001-page Blue Button AND 12-page mock PDF through v4.3 and verify Grok-4 actually returns the deep JSON format (excerpts, dates, context, claim types, next actions). The JSON prompt has not been validated against real VA records yet.
+2. **Parser robustness** — If Grok-4 returns malformed JSON or mixed text/JSON, the fallback text parser needs to handle it gracefully. Edge cases need testing.
+3. **Excerpt quality** — Verify Grok-4 is extracting real verbatim quotes from the records, not hallucinating text. This is critical — veterans will share these with VSOs.
+4. **Claim type accuracy** — "Primary Service-Connected" vs "Secondary" vs "PACT Act Presumptive" must be correct. Wrong guidance could mislead a veteran.
+5. **Timing targets** — Real Blue Button must finish <75s, mock PDF <20s. Neither has been confirmed on v4.3.
+6. **Frontend card rendering** — The expanded cards (excerpt box, context box, next action box) need visual QA on mobile and desktop to match the rest of the Health page design.
+7. **PDF report** — The downloadable report now includes claim type and next action fields, but needs visual QA (formatting, page breaks, readability).
+8. **Image upload path** — Image uploads (PNG/JPG of records) were removed in v4.3 to fix the build crash. If image support is needed for Phase 1, it must be re-implemented cleanly (separate from PDF path).
+9. **Error handling edge cases** — What happens if the PDF has 0 extractable text? What if Grok-4 returns empty? What if the API key expires mid-scan?
+10. **Authentication gate** — The "Loading authentication..." spinner blocks the Health page for unauthenticated users. May need a public-access path for Medical Detective demo.
+11. **Disclaimer compliance** — Verify bold disclaimers appear on: upload screen, processing screen, results screen, interim report, PDF report, and every API response. Per master-strategy.md: "Bold disclaimer on every screen and report."
+12. **Performance on Vercel** — The 70s + 30s idle timeout + retry may exceed Vercel's serverless function limits in production. Need to test deployed behavior, not just localhost.
+13. **Pre-filter tuning** — The 10K char / 80 paragraph cap may be too aggressive for some records or too loose for others. Need data from real scans to tune.
+14. **Retry UX** — The "Retry Deep Analysis" flow sends `useReducedCap: true` but the reduced text may lose important sections. Need to verify the 60% cap doesn't drop critical evidence.
+
+### ✅ Medical Detective v4.2 (Feb 20, 2026) — Streaming Architecture Stable
 * **Root cause fixed:** Switched from `response.json()` (hung forever) to streaming API (`stream: true`) with token-by-token receipt
 * **Two-phase idle timeout:** 45s before first token (model thinking), 10s after (stall detection)
 * **Auto-retry at 60% cap:** On first timeout, automatically reduces input and retries with 50s timeout
@@ -37,6 +55,19 @@
 * **Frontend UX:** Real-time token progress bar, green interim banner with "Retry Deep Analysis" button, PDF generation always enabled
 * **Test results:** Mock PDF completes in ~63s with full streaming synthesis (1437 tokens received). No stall, no dead spinner.
 * **Commit:** `Medical Detective v4.2 – reliable Grok-4 synthesis + interim UX fallback – Phase 1 ★ complete per master-strategy.md Section 2`
+
+### 🚧 Medical Detective v4.3 (Feb 21, 2026) — Deep Evidence Synthesis (IN PROGRESS)
+* **Fixed build crash:** Removed all image analysis code (`MODEL_VISION`, `screenImageWithVision`, `imageFiles`, `imagePromise`, `imageResults`) — duplicate `imageResults` declaration was causing webpack Module parse failure at line 1071. Image processing was not in Phase 1 spec.
+* **Upgraded synthesis prompt:** Changed from loose numbered-list text format to **structured JSON array** output. Each flag now requests: condition, confidence, category, claimType (Primary/Secondary/PACT Act/Aggravated/Rating Increase), excerpt (verbatim 1-2 sentences), date, page, context (why it matters), nextAction (specific step).
+* **Rewrote parser:** `parseSynthesisOutput` now tries JSON parse first (reliable structured output), falls back to numbered-list text parsing for backward compatibility.
+* **Increased max_tokens:** 1500 → 3000 to give Grok-4 room for real excerpts and context instead of clipped summaries.
+* **Added FlaggedItem fields:** `claimType` and `nextAction` added to both backend interface and frontend interface.
+* **Frontend card expansion:** Each flag card now shows 3 distinct sections: "Highlighted Excerpt" (amber), "Why This Matters for Your Claim" (blue), "Recommended Next Step" (green). Plus claim type badge.
+* **PDF report updated:** Includes claim type badge, highlighted excerpt, claim relevance, and next step per flag.
+* **API key fix:** `getApiKey()` now checks both `XAI_API_KEY` and `GROK_API_KEY` env vars.
+* **Safe controller.close():** Wrapped in try/catch to prevent `ERR_INVALID_STATE` crash on early returns.
+* **Status: NOT COMPLETE** — Architecture is in place but output quality, timing, and edge cases have not been validated against real VA records. See "Remaining Work" list above.
+* **Commits:** `d525aa99` (fix: 30s idle + API key + safe close + parser), `fdbc44ff` (v4.3: deep evidence synthesis + build fix)
 
 ### 📋 Session: Feb 20, 2026 — Medical Detective v4.x → v5.0 Planning
 
