@@ -12,7 +12,7 @@
 ---
 
 ## 🟢 Current Status: Active Development
-**As of Feb 21, 2026:** Medical Detective v4.2 shipped — streaming Grok-4 synthesis eliminates the 35% stall bug. SSE stream reader with 70s hard timeout + 10s idle timeout + auto-retry at 60% cap. Interim report fallback with green banner UX. Phase 1 ★ complete per master-strategy.md Section 2.
+**As of Feb 21, 2026:** Medical Detective v4.2 shipped — streaming Grok-4 synthesis eliminates the 35% stall bug. SSE stream reader with 70s hard timeout + 30s idle timeout + auto-retry at 60% cap. Green interim report banner UX with one-click retry. Real-time token progress (35%→90%). Phase 1 ★ complete per master-strategy.md Section 2.
 
 ### ✅ Recently Completed
 * **Strategic Pivot:** Defined the "Living Master Strategy" (replacing the traditional business plan).

@@ -72,7 +72,7 @@ const FILTERED_TEXT_CAP = 10_000;       // ~2,500 tokens — Grok-4 target: <30s
 const MAX_PARAGRAPHS_TO_SEND = 80;      // hard paragraph cap after sorting
 const SECTION_GUARANTEE_COUNT = 3;      // min paragraphs guaranteed per major section
 const SYNTHESIS_TIMEOUT_MS = 70_000;    // 70s hard timeout per Grok-4 streaming call
-const IDLE_TIMEOUT_MS = 10_000;         // 10s without a new SSE token → abort
+const IDLE_TIMEOUT_MS = 30_000;         // 30s without a new SSE token → abort (Grok-4 needs think time for first token)
 const RETRY_CAP_RATIO = 0.6;           // on timeout retry, use 60% of original input
 const IMAGE_TIMEOUT_MS = 60_000;        // 60s for image vision
 const MIN_PARAGRAPH_LENGTH = 30;
@@ -437,7 +437,11 @@ function mapToCategory(label: string): string {
 }
 
 function parseSynthesisOutput(rawText: string): FlaggedItem[] {
-  if (!rawText || rawText.includes('No strong claim-relevant evidence flags were identified')) return [];
+  if (!rawText) return [];
+
+  // Only treat as "no flags" if the text doesn't contain numbered items
+  const hasNumberedItems = /^\d+\.\s/m.test(rawText);
+  if (!hasNumberedItems && rawText.includes('No strong claim-relevant evidence flags were identified')) return [];
 
   const items: FlaggedItem[] = [];
   const blocks = rawText.split(/\n(?=\d+\.\s)/);
@@ -576,7 +580,7 @@ class GrokTimeoutError extends Error {
 }
 
 function getApiKey(): string {
-  return process.env.XAI_API_KEY || '';
+  return process.env.XAI_API_KEY || process.env.GROK_API_KEY || '';
 }
 
 // v4.2: Uses native AbortSignal.timeout() — kills entire call (headers + body) cleanly
@@ -1039,7 +1043,7 @@ export async function POST(request: NextRequest) {
         console.error('[MedicalDetective] Stream error:', err);
         emit({ type: 'error', message: (err as Error).message || 'Processing failed. Please try again.' });
       } finally {
-        controller.close();
+        try { controller.close(); } catch { /* already closed */ }
       }
     },
   });
