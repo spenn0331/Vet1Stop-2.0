@@ -12,7 +12,7 @@
 ---
 
 ## 🟢 Current Status: Active Development
-**As of Feb 21, 2026:** Medical Detective v4.2 shipped — streaming Grok-4 synthesis eliminates the 35% stall bug. SSE stream reader with 70s hard timeout + 30s idle timeout + auto-retry at 60% cap. Green interim report banner UX with one-click retry. Real-time token progress (35%→90%). Phase 1 ★ complete per master-strategy.md Section 2.
+**As of Feb 20, 2026:** Medical Detective v4.2 shipped. Streaming Grok-4 synthesis eliminates the 35% stall. Two-phase idle timeout (45s initial / 10s stream), auto-retry at 60% cap, interim report fallback. Phase 1 per master-strategy.md Section 2 complete.
 
 ### ✅ Recently Completed
 * **Strategic Pivot:** Defined the "Living Master Strategy" (replacing the traditional business plan).
@@ -25,12 +25,20 @@
 * **Model Upgrades:** Updated all AI endpoints from older Grok models to `grok-4` (text/NLP via `XAI_API_KEY`) and `grok-2-vision-1212` (image analysis).
 
 ### 🚧 In Progress
-* **Medical Detective v4.2:** ✅ SHIPPED — Streaming Grok-4 synthesis + auto-retry + interim UX fallback. Phase 1 ★ complete per master-strategy.md Section 2.
 * **Living Master Strategy:** Founder is currently reviewing and manually adding specific feature sets for Life/Leisure and Education to the master doc.
 * **Legal Setup:** LLC formation in PA (Pending).
 * **Health Page:** Continued testing and refinement of AI tools.
 
-### 📋 Session: Feb 21, 2026 — Medical Detective v4.2 "Streaming Synthesis" (SHIPPED)
+### ✅ Medical Detective v4.2 (Feb 20, 2026) — Phase 1 ★ Complete
+* **Root cause fixed:** Switched from `response.json()` (hung forever) to streaming API (`stream: true`) with token-by-token receipt
+* **Two-phase idle timeout:** 45s before first token (model thinking), 10s after (stall detection)
+* **Auto-retry at 60% cap:** On first timeout, automatically reduces input and retries with 50s timeout
+* **Interim report fallback:** On double timeout, immediately returns keyword flags + synopsis as interim report with green banner
+* **Frontend UX:** Real-time token progress bar, green interim banner with "Retry Deep Analysis" button, PDF generation always enabled
+* **Test results:** Mock PDF completes in ~63s with full streaming synthesis (1437 tokens received). No stall, no dead spinner.
+* **Commit:** `Medical Detective v4.2 – reliable Grok-4 synthesis + interim UX fallback – Phase 1 ★ complete per master-strategy.md Section 2`
+
+### 📋 Session: Feb 20, 2026 — Medical Detective v4.x → v5.0 Planning
 
 #### Root Cause (35% stall — FIXED)
 `response.json()` hung indefinitely waiting for Grok-4 to complete the response body. Neither `AbortSignal.timeout` nor `setTimeout` bail-outs could interrupt the blocked `.json()` call.
