@@ -236,6 +236,7 @@ export default function MedicalDetectivePanel() {
           retrySynopsis: cachedScan.synopsis,
           retryKeywordFlags: cachedScan.keywordFlags,
           retryFileNames: cachedScan.fileNames,
+          useReducedCap: true,
         }),
         signal: abortController.signal,
       });
@@ -676,10 +677,10 @@ body{font-family:'Segoe UI',sans-serif;padding:40px;color:#1F2937;line-height:1.
             Scanning Your Records...
           </h3>
 
-          {/* Phase indicator — v4: 2 phases only */}
+          {/* Phase indicator */}
           <div className="flex justify-center gap-2 mb-4">
             {['filter', 'synthesis'].map((phase, i) => {
-              const labels = ['Pre-Filter', 'Deep Analysis'];
+              const labels = ['Phase 1: Live Flags', 'Phase 2: Deep Synthesis'];
               const phaseOrder = ['filter', 'synthesis'];
               const currentIdx = phaseOrder.indexOf(currentPhase.replace('_done', ''));
               const isDone = i < currentIdx || currentPhase.includes('_done') && i <= currentIdx;
@@ -749,7 +750,7 @@ body{font-family:'Segoe UI',sans-serif;padding:40px;color:#1F2937;line-height:1.
           </div>
 
           <p className="text-xs text-gray-400 text-center mt-2">
-            2-phase pipeline: Smart pre-filter (85 keywords + section headers) → single Grok 4 deep analysis (~25-65s).
+            2-phase pipeline: Smart pre-filter (85+ keywords) → streaming Grok-4 deep synthesis (auto-retry on timeout).
           </p>
           <p className="text-xs text-gray-400 text-center mt-1">
             Files are processed in memory only — never stored permanently.
@@ -834,18 +835,20 @@ body{font-family:'Segoe UI',sans-serif;padding:40px;color:#1F2937;line-height:1.
       {/* ─── Results State ─── */}
       {panelState === 'results' && report && (
         <div>
-          {/* Summary banner — amber for interim, blue for full */}
+          {/* Summary banner — green for interim, blue for full */}
           {report.isInterim ? (
-            <div className="bg-amber-50 border border-amber-300 rounded-lg p-4 mb-6">
+            <div className="bg-green-50 border border-green-300 rounded-lg p-4 mb-6">
               <div className="flex items-start gap-3">
-                <ExclamationTriangleIcon className="h-6 w-6 text-amber-500 flex-shrink-0 mt-0.5" />
+                <CheckCircleIcon className="h-6 w-6 text-green-600 flex-shrink-0 mt-0.5" />
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1 flex-wrap">
-                    <h4 className="font-semibold text-amber-900">Interim Report — {report.totalFlagsFound} Pre-Filter Flag(s)</h4>
-                    <span className="text-xs bg-amber-200 text-amber-900 px-2 py-0.5 rounded-full font-medium">Interim</span>
+                    <h4 className="font-semibold text-green-900">Interim Report — {report.totalFlagsFound} Flag(s) Found</h4>
+                    <span className="text-xs bg-green-200 text-green-900 px-2 py-0.5 rounded-full font-medium">Deep Analysis Paused</span>
                   </div>
-                  <p className="text-sm text-amber-800 mb-2">{report.interimNote}</p>
-                  <p className="text-xs text-amber-700">
+                  <p className="text-sm text-green-800 mb-2">
+                    Deep scan hit timeout &mdash; here&apos;s everything we caught so far. Click to retry with reduced cap.
+                  </p>
+                  <p className="text-xs text-green-700">
                     {report.processingDetails.filesProcessed} file(s) · {(report.processingDetails.processingTime / 1000).toFixed(1)}s · {report.processingDetails.aiModel}
                   </p>
                   {cachedScan && (
@@ -951,18 +954,18 @@ body{font-family:'Segoe UI',sans-serif;padding:40px;color:#1F2937;line-height:1.
             </ol>
           </div>
 
-          {/* Action Buttons */}
+          {/* Action Buttons — Generate PDF always enabled when flags exist */}
           <div className="flex flex-col sm:flex-row gap-3">
             <button onClick={handleDownloadReport}
               className="flex-1 inline-flex items-center justify-center px-6 py-3 rounded-lg bg-[#1A2C5B] text-white font-semibold hover:bg-[#0F1D3D] transition-colors focus:outline-none focus:ring-4 focus:ring-blue-200">
               <DocumentArrowDownIcon className="mr-2 h-5 w-5" />
-              {report.isInterim ? 'Download Interim Report' : 'Download Evidence Report (PDF)'}
+              Generate PDF Report
             </button>
             {report.isInterim && cachedScan ? (
               <button onClick={handleRetry}
                 className="flex-1 inline-flex items-center justify-center px-6 py-3 rounded-lg bg-[#EAB308] text-[#1A2C5B] font-semibold hover:bg-[#FACC15] transition-colors focus:outline-none focus:ring-4 focus:ring-yellow-200">
                 <ArrowRightIcon className="mr-2 h-5 w-5" />
-                Retry Deep Analysis
+                Retry Deep Analysis (Reduced Cap)
               </button>
             ) : (
               <a href="https://www.va.gov/vso/" target="_blank" rel="noopener noreferrer"

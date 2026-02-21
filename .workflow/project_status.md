@@ -12,7 +12,7 @@
 ---
 
 ## 🟢 Current Status: Active Development
-**As of Feb 20, 2026:** Active Medical Detective debugging session. Feature produces accurate keyword flags (18 real file, 8 mock) but Grok-4 synthesis phase stalls indefinitely. v5.0 production architecture plan written — awaiting implementation.
+**As of Feb 21, 2026:** Medical Detective v4.2 shipped — streaming Grok-4 synthesis eliminates the 35% stall bug. SSE stream reader with 70s hard timeout + 10s idle timeout + auto-retry at 60% cap. Interim report fallback with green banner UX. Phase 1 ★ complete per master-strategy.md Section 2.
 
 ### ✅ Recently Completed
 * **Strategic Pivot:** Defined the "Living Master Strategy" (replacing the traditional business plan).
@@ -25,31 +25,31 @@
 * **Model Upgrades:** Updated all AI endpoints from older Grok models to `grok-4` (text/NLP via `XAI_API_KEY`) and `grok-2-vision-1212` (image analysis).
 
 ### 🚧 In Progress
-* **Medical Detective v5.0:** Production architecture redesign — streaming Grok API + two-phase UX. Plan ready, not yet implemented. See [`C:\Users\penny\.windsurf\plans\medical-detective-production-v5-6a199f.md`](file:///C:/Users/penny/.windsurf/plans/medical-detective-production-v5-6a199f.md)
+* **Medical Detective v4.2:** ✅ SHIPPED — Streaming Grok-4 synthesis + auto-retry + interim UX fallback. Phase 1 ★ complete per master-strategy.md Section 2.
 * **Living Master Strategy:** Founder is currently reviewing and manually adding specific feature sets for Life/Leisure and Education to the master doc.
 * **Legal Setup:** LLC formation in PA (Pending).
 * **Health Page:** Continued testing and refinement of AI tools.
 
-### 📋 Session: Feb 20, 2026 — Medical Detective v4.x → v5.0 Planning
+### 📋 Session: Feb 21, 2026 — Medical Detective v4.2 "Streaming Synthesis" (SHIPPED)
 
-#### Problem (Phase 2 / Grok-4 hangs indefinitely)
-- Introduced v4.1 two-phase pipeline (smart pre-filter + single Grok-4 synthesis call)
-- v4.2: Added `AbortSignal.timeout(90s)` + `GrokTimeoutError` + interim report fallback + cached retry
-- v4.3: Reduced `FILTERED_TEXT_CAP` 32K→10K, `MAX_PARAGRAPHS_TO_SEND`=80, sort by keyword density, section guarantee rule, `setTimeout(70s)` outer bail-out, `max_tokens` 6000→1500
-- **Result**: Phase 1 works perfectly (18 flags on real VA file, 8 on mock, in <30s). Phase 2 (`grok-4-0709` synthesis) still stalls at 35% for 3-4+ minutes on both large AND tiny inputs (17 paragraphs = same hang)
-- **Diagnosis**: Neither `AbortSignal.timeout` nor `setTimeout` bail-outs are interrupting the stall. Likely cause: abandoned `synthesizeWithGrok4` promise triggers unhandled rejection via AbortSignal at 90s, crashing the stream handler before interim report is sent
+#### Root Cause (35% stall — FIXED)
+`response.json()` hung indefinitely waiting for Grok-4 to complete the response body. Neither `AbortSignal.timeout` nor `setTimeout` bail-outs could interrupt the blocked `.json()` call.
 
-#### Active Plan → Medical Detective v5.0
-**Plan file**: [`C:\Users\penny\.windsurf\plans\medical-detective-production-v5-6a199f.md`](file:///C:/Users/penny/.windsurf/plans/medical-detective-production-v5-6a199f.md)
+#### Fix: Streaming SSE API (`stream: true`)
+1. **New `callGrokAPIStreaming` function** — reads Grok-4 response token-by-token via Server-Sent Events
+2. **Dual timeout protection** — 70s hard overall timeout + 10s idle timeout (no new token = bail)
+3. **Auto-retry at 60% cap** — if first streaming call times out, automatically retries with 60% of input
+4. **Interim report fallback** — if both attempts fail, returns keyword flags + green "Deep Analysis Paused" banner
+5. **Real-time progress** — frontend shows token count during synthesis (every 15 tokens)
+6. **Frontend UX** — "Phase 1: Live Flags" → "Phase 2: Deep Synthesis" labels, green interim banner, one-click retry with reduced cap
 
-**Three-layer approach (not yet implemented):**
-1. **Fix unhandled rejection bug** — add `.catch(() => {})` on abandoned `synthesizeWithGrok4` after bail
-2. **Switch to Grok streaming API** (`stream: true`) — token-by-token receipt with 8s idle timeout; eliminates `response.json()` hang
-3. **Two-phase UX redesign** — Phase 1 keyword flags shown immediately as a "Keyword Report"; Phase 2 (Grok-4) becomes user-initiated "Run Deep Analysis" button
+#### Files Changed
+- `src/app/api/health/medical-detective/route.ts` — streaming synthesis, auto-retry, constants update
+- `src/app/health/components/MedicalDetectivePanel.tsx` — phase labels, green interim banner, retry with reduced cap
 
-#### Commits (Feb 20)
-- `515ffbc3` — Medical Detective v4.2: AbortSignal.timeout + interim report + cached retry
-- `5ce1f940` — Medical Detective v4.3: sorted input + section guarantee + setTimeout bail-out
+#### Previous Commits (Feb 20)
+- `515ffbc3` — v4.2 initial: AbortSignal.timeout + interim report + cached retry
+- `5ce1f940` — v4.3: sorted input + section guarantee + setTimeout bail-out
 
 ---
 
