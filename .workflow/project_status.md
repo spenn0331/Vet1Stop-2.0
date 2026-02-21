@@ -6,13 +6,13 @@
 - **Primary Goal**: MVP Launch (Q2 2026)
 - **Current Phase**: Strategic Foundation & "Super App" Definition
 - **Dev Server**: `npm run dev` → http://localhost:3000
-- **Last Active Development**: Feb 18, 2026
+- **Last Active Development**: Feb 20, 2026
 - **Recovery Date**: Feb 14, 2026 (restored from git commit `863a42cd`)
 
 ---
 
 ## 🟢 Current Status: Active Development
-**As of Feb 18, 2026:** Resumed feature development. Health page AI tools (Symptom Finder + Medical Detective) now fully operational with live Grok API integration.
+**As of Feb 20, 2026:** Active Medical Detective debugging session. Feature produces accurate keyword flags (18 real file, 8 mock) but Grok-4 synthesis phase stalls indefinitely. v5.0 production architecture plan written — awaiting implementation.
 
 ### ✅ Recently Completed
 * **Strategic Pivot:** Defined the "Living Master Strategy" (replacing the traditional business plan).
@@ -25,9 +25,33 @@
 * **Model Upgrades:** Updated all AI endpoints from older Grok models to `grok-4` (text/NLP via `XAI_API_KEY`) and `grok-2-vision-1212` (image analysis).
 
 ### 🚧 In Progress
+* **Medical Detective v5.0:** Production architecture redesign — streaming Grok API + two-phase UX. Plan ready, not yet implemented. See [`C:\Users\penny\.windsurf\plans\medical-detective-production-v5-6a199f.md`](file:///C:/Users/penny/.windsurf/plans/medical-detective-production-v5-6a199f.md)
 * **Living Master Strategy:** Founder is currently reviewing and manually adding specific feature sets for Life/Leisure and Education to the master doc.
 * **Legal Setup:** LLC formation in PA (Pending).
 * **Health Page:** Continued testing and refinement of AI tools.
+
+### 📋 Session: Feb 20, 2026 — Medical Detective v4.x → v5.0 Planning
+
+#### Problem (Phase 2 / Grok-4 hangs indefinitely)
+- Introduced v4.1 two-phase pipeline (smart pre-filter + single Grok-4 synthesis call)
+- v4.2: Added `AbortSignal.timeout(90s)` + `GrokTimeoutError` + interim report fallback + cached retry
+- v4.3: Reduced `FILTERED_TEXT_CAP` 32K→10K, `MAX_PARAGRAPHS_TO_SEND`=80, sort by keyword density, section guarantee rule, `setTimeout(70s)` outer bail-out, `max_tokens` 6000→1500
+- **Result**: Phase 1 works perfectly (18 flags on real VA file, 8 on mock, in <30s). Phase 2 (`grok-4-0709` synthesis) still stalls at 35% for 3-4+ minutes on both large AND tiny inputs (17 paragraphs = same hang)
+- **Diagnosis**: Neither `AbortSignal.timeout` nor `setTimeout` bail-outs are interrupting the stall. Likely cause: abandoned `synthesizeWithGrok4` promise triggers unhandled rejection via AbortSignal at 90s, crashing the stream handler before interim report is sent
+
+#### Active Plan → Medical Detective v5.0
+**Plan file**: [`C:\Users\penny\.windsurf\plans\medical-detective-production-v5-6a199f.md`](file:///C:/Users/penny/.windsurf/plans/medical-detective-production-v5-6a199f.md)
+
+**Three-layer approach (not yet implemented):**
+1. **Fix unhandled rejection bug** — add `.catch(() => {})` on abandoned `synthesizeWithGrok4` after bail
+2. **Switch to Grok streaming API** (`stream: true`) — token-by-token receipt with 8s idle timeout; eliminates `response.json()` hang
+3. **Two-phase UX redesign** — Phase 1 keyword flags shown immediately as a "Keyword Report"; Phase 2 (Grok-4) becomes user-initiated "Run Deep Analysis" button
+
+#### Commits (Feb 20)
+- `515ffbc3` — Medical Detective v4.2: AbortSignal.timeout + interim report + cached retry
+- `5ce1f940` — Medical Detective v4.3: sorted input + section guarantee + setTimeout bail-out
+
+---
 
 ### 📋 Session: Feb 19, 2026 — Medical Detective v3 "Three-Phase Pipeline"
 
@@ -419,6 +443,7 @@ Key documents to reference:
 | **Feb 14, 2026** | Full recovery from git history, pushed to GitHub |
 | **Feb 15, 2026** | Strategic pivot to Bootstrapped/Solo-Founder model; paused feature dev for business foundation |
 | **Feb 18, 2026** | Fixed Grok API integration (missing server-side key), upgraded to `grok-4-latest`, Symptom Finder + Medical Detective fully operational |
+| **Feb 19-20, 2026** | Medical Detective v4.1→v4.3: two-phase pipeline, smart pre-filter, AbortSignal timeout, interim report, cached retry, sorted input, section guarantee. Phase 2 (Grok-4) still hangs — v5.0 production plan created (streaming API + two-phase UX) |
 
 ---
 
