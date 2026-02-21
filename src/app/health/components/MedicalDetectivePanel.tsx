@@ -467,7 +467,7 @@ export default function MedicalDetectivePanel() {
         </div>
         <div class="flag-meta">
           ${item.dateFound && item.dateFound !== 'Not specified' ? `<span style="background:#F1F5F9;padding:2px 8px;border-radius:4px;font-weight:600">Date: ${item.dateFound}</span>` : ''}
-          ${item.pageNumber ? `<span>📄 Page <strong>${item.pageNumber}</strong></span>` : ''}
+          ${item.pageNumber ? `<span style="background:#EDE9FE;padding:2px 8px;border-radius:4px;font-weight:600;color:#6D28D9">Page ${item.pageNumber}</span>` : ''}
         </div>
         ${item.excerpt ? `<div class="flag-quote"><strong>Highlighted Excerpt:</strong><br>&ldquo;${item.excerpt}&rdquo;</div>` : ''}
         ${item.context && item.context !== item.label && !item.context.startsWith('Keyword-detected') && item.context.length > 40 ? `<div class="flag-context" style="border-left:3px solid #3B82F6"><strong>Why This Matters:</strong> ${item.context}</div>` : ''}
@@ -934,7 +934,9 @@ body{font-family:'Segoe UI',sans-serif;padding:40px;color:#1F2937;line-height:1.
                       {item.dateFound && item.dateFound !== 'Not specified' && (
                         <span className="text-xs px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-medium">Date: {item.dateFound}</span>
                       )}
-                      {item.pageNumber && <span className="text-xs text-gray-500">Page {item.pageNumber}</span>}
+                      {item.pageNumber && (
+                        <span className="text-xs px-2 py-0.5 rounded bg-violet-100 text-violet-700 font-medium">Page {item.pageNumber}</span>
+                      )}
                     </div>
 
                     {item.excerpt && (

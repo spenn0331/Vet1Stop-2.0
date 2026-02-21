@@ -1,16 +1,18 @@
 import { NextRequest } from 'next/server';
 
 /**
- * POST /api/health/medical-detective — v4.4 "Enforced Deep JSON + No Generics"
+ * POST /api/health/medical-detective — v4.5 "Strict Diagnosis Gating + Page Extraction + Deep Nexus"
  *
  * Architecture (Phase 1 ★ per master-strategy.md Section 2):
  *   Phase 1: Smart Pre-Filter (NO AI, ~1-2s) — tiered keyword scoring,
- *            section header priority, noise exclusion, 8K/50-para cap.
- *            Generics excluded from standalone flags.
+ *            section header priority, noise exclusion, 7K/40-para cap.
+ *            Generics excluded. Negative-context gating (no false positives).
+ *            Page numbers extracted from PDF page boundaries.
  *   Phase 2: Streaming Grok-4 Synthesis (SSE, 70s + 30s idle timeout) —
- *            strict JSON array enforcement, deep context per flag: excerpts,
- *            dates (YYYY-MM-DD), nexus context, claim type, next action.
- *            Auto-retry at 5K/30-para cap. Format-error auto-retry once.
+ *            strict JSON array, deep nexus context per flag: excerpts with
+ *            page numbers, dates (YYYY-MM-DD), rating estimates, specific
+ *            multi-step next actions. Up to 3 attempts (timeout + format retry).
+ *            Retry at 4K cap.
  *
  * Upload-only. In-memory processing. Auto-delete after scan. No storage.
  * No claim filing. No HIPAA exposure. Bold disclaimers on every output.
@@ -64,12 +66,13 @@ interface DetectiveReport {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const FILTERED_TEXT_CAP = 8_000;
-const MAX_PARAGRAPHS_TO_SEND = 50;
+const FILTERED_TEXT_CAP = 7_000;
+const MAX_PARAGRAPHS_TO_SEND = 40;
 const SECTION_GUARANTEE_COUNT = 3;
 const SYNTHESIS_TIMEOUT_MS = 70_000;
 const IDLE_TIMEOUT_MS = 30_000;
-const RETRY_CHAR_CAP = 5_000;
+const RETRY_CHAR_CAP = 4_000;
+const MAX_SYNTHESIS_ATTEMPTS = 3;
 const MIN_PARAGRAPH_LENGTH = 30;
 const MIN_KEYWORD_MATCHES_FLAG = 2;
 
@@ -178,37 +181,52 @@ function extractDateFromText(text: string): string | undefined {
   return undefined;
 }
 
+const NEGATIVE_CONTEXT_REGEX = /\b(?:no |absence of |denies |denied |negative for |without |(?:not |never )present|ruled out|no evidence of |no history of |no signs? of |no symptoms? of |does not have |patient denies )/i;
+
+function isNegativeContext(text: string, keyword: string): boolean {
+  const lower = text.toLowerCase();
+  const kwLower = keyword.toLowerCase();
+  const idx = lower.indexOf(kwLower);
+  if (idx === -1) return false;
+  const prefix = lower.substring(Math.max(0, idx - 80), idx);
+  return NEGATIVE_CONTEXT_REGEX.test(prefix);
+}
+
 // ─── Synthesis Prompt — strict JSON with deep evidence fields ────────────────
 
-const SYNTHESIS_PROMPT = `You are an expert VA disability claims evidence analyst with deep knowledge of 38 CFR rating schedules, presumptive conditions, the PACT Act (2022-2026), secondary service-connection, and how clinical notes support disability claims.
+const SYNTHESIS_PROMPT = `You are an expert VA disability claims evidence analyst. Deep knowledge of 38 CFR rating schedules, PACT Act (2022-2026), presumptive conditions, secondary service-connection, and how clinical notes support disability claims.
 
-You are given pre-filtered excerpts from a veteran's VA medical records. Every paragraph was keyword-filtered or is a clinical section header. Your job: identify EVERY claim-relevant finding with deep supporting detail.
+You are given pre-filtered excerpts from a veteran's VA medical records. Each paragraph is tagged with its page number like "[Page 45] text...". Identify EVERY claim-relevant finding with deep supporting detail.
 
-CRITICAL RULES:
-- Only flag SPECIFIC diagnosable conditions (e.g., "Sinusitis", "Radiculopathy", "PTSD", "Sleep Apnea"). NEVER flag generic clinical terms ("Diagnosed", "Chronic", "Problem List", "Assessment", "Abnormal") as conditions.
-- Extract EXACT verbatim quotes — 1-2 sentences that prove the finding
-- Identify claim type: "Primary Service-Connected", "Secondary", "PACT Act Presumptive", "Aggravated", or "Rating Increase"
+ACCURACY RULES — CRITICAL:
+- ONLY flag SPECIFIC diagnosable conditions with POSITIVE clinical evidence (e.g., "Sinusitis", "Radiculopathy", "PTSD", "Sleep Apnea")
+- NEVER flag conditions in NEGATIVE context: "absence of", "denies", "no evidence of", "ruled out", "negative for" — these are EXCLUSIONS, not diagnoses
+- NEVER flag generic terms ("Diagnosed", "Chronic", "Problem List", "Assessment") as conditions
+- Extract EXACT verbatim quotes — 1-2 sentences proving the finding
+- Include the page number from the [Page N] tag for each finding
+
+CLAIM ANALYSIS:
+- claimType: "Primary Service-Connected", "Secondary", "PACT Act Presumptive", "Aggravated", or "Rating Increase"
 - For secondary conditions, name the primary condition it connects to
-- For PACT Act presumptives, cite the specific provision or exposure link
-- Confidence: High = direct diagnosis + nexus/rating language. Medium = clinical evidence suggesting condition. Low = indirect reference worth noting
-- Extract dates: look for "Note date:", "Date:", timestamps, or any date near the finding. Format as YYYY-MM-DD. Use "Not specified" if no date visible
-- Context MUST explain WHY this matters for a VA claim: cite rating schedule, nexus evidence, HPI links, service-connection pathway, estimated rating range
-- Next action MUST be specific and actionable (e.g., "File presumptive claim at va.gov/pact" or "Request DBQ from provider for secondary connection to lumbar DDD")
+- For PACT Act presumptives, cite the exposure link (burn pit, Agent Orange, Gulf War illness)
+- Confidence: High = direct diagnosis + nexus/rating language. Medium = clinical evidence. Low = indirect reference
+- date: Extract from "Note date:", "Date:", or nearby timestamps. Format YYYY-MM-DD. Use "Not specified" if none
+- context MUST explain the claim pathway: cite rating schedule diagnostic code, nexus evidence, estimated rating range, and why this evidence matters
+- nextAction MUST be specific multi-step: "1. File [type] claim at va.gov/[path]. 2. Request [document] from [provider]. 3. Gather [evidence]."
 - Deduplicate: merge flags for the same condition
-- Err on the side of INCLUSION — veterans need to see everything
 
-Output ONLY valid JSON — no intro text, no markdown fences, no explanation. Just the raw JSON array:
+Output ONLY valid JSON — no intro text, no markdown fences, no explanation. ONLY the raw JSON array:
 [
   {
     "condition": "Sinusitis",
     "confidence": "Medium",
     "category": "Respiratory",
     "claimType": "PACT Act Presumptive",
-    "excerpt": "Discharge diagnosis: SINUSITIS, BPPV",
+    "excerpt": "Discharge diagnosis: SINUSITIS, BPPV — chronic symptoms noted since deployment.",
     "date": "2024-06-12",
-    "page": null,
-    "context": "Qualifies under PACT Act for Gulf War/post-9/11 veterans as presumptive toxic-exposure condition. HPI shows chronic symptoms — strong nexus for 10-30% rating under DC 6510.",
-    "nextAction": "File presumptive claim at va.gov/pact using this excerpt; request nexus letter from provider if needed."
+    "page": "45",
+    "context": "Sinusitis qualifies under PACT Act as presumptive for burn pit/toxic exposure in post-9/11 veterans. HPI documents chronic post-deployment symptoms supporting nexus. Rated under DC 6510, typically 10-30% based on frequency of episodes.",
+    "nextAction": "1. File presumptive claim at va.gov/pact citing this diagnosis. 2. Request nexus letter from treating provider linking sinusitis to deployment exposure. 3. Submit buddy statement confirming burn pit exposure at duty station."
   },
   {
     "condition": "Lumbar Radiculopathy",
@@ -217,15 +235,26 @@ Output ONLY valid JSON — no intro text, no markdown fences, no explanation. Ju
     "claimType": "Secondary",
     "excerpt": "Assessment: lumbar radiculopathy, at least as likely as not secondary to service-connected DDD.",
     "date": "2025-01-15",
-    "page": null,
-    "context": "Nexus language present ('at least as likely as not'). Secondary to service-connected lumbar DDD — rated under DC 5243, typically 10-40%. Strong evidence for secondary claim.",
-    "nextAction": "File secondary service-connection claim linking radiculopathy to lumbar DDD; include this excerpt and request DBQ."
+    "page": "72",
+    "context": "Direct nexus language present ('at least as likely as not'). Diagnosed secondary to service-connected lumbar DDD. Rated under DC 5243, typically 10-40% per affected extremity. Nexus opinion already documented — strong evidence.",
+    "nextAction": "1. File secondary service-connection claim linking radiculopathy to lumbar DDD at va.gov/disability. 2. Request DBQ from provider. 3. Include this clinical note as primary nexus evidence."
+  },
+  {
+    "condition": "PTSD",
+    "confidence": "High",
+    "category": "Mental Health",
+    "claimType": "Primary Service-Connected",
+    "excerpt": "Axis I: PTSD, chronic, related to combat trauma per DSM-5 criteria.",
+    "date": "2024-03-20",
+    "page": "15",
+    "context": "Formal PTSD diagnosis meeting DSM-5 criteria with combat stressor. Rated under DC 9411, typically 30-70% based on occupational/social impairment. Combat veteran presumption (38 CFR 3.304(f)(2)) simplifies stressor verification.",
+    "nextAction": "1. File primary service-connection for PTSD at va.gov/disability. 2. Request C&P exam emphasizing occupational impairment. 3. Prepare personal statement describing stressor events and current symptoms."
   }
 ]
 
-Category must be one of: Mental Health, Musculoskeletal, Hearing, Neurological, Sleep Disorders, Respiratory, Cardiovascular, Gastrointestinal, Oncological, PACT Act Presumptive, Claim Language, Dermatological, Endocrine, Other.
+Category: Mental Health, Musculoskeletal, Hearing, Neurological, Sleep Disorders, Respiratory, Cardiovascular, Gastrointestinal, Oncological, PACT Act Presumptive, Claim Language, Dermatological, Endocrine, Other.
 
-claimType must be one of: Primary Service-Connected, Secondary, PACT Act Presumptive, Aggravated, Rating Increase.
+claimType: Primary Service-Connected, Secondary, PACT Act Presumptive, Aggravated, Rating Increase.
 
 If no claim-relevant evidence found, output exactly: []`;
 
@@ -237,10 +266,30 @@ async function extractPDFData(base64Data: string): Promise<{ text: string; numPa
     const pdfParse = require('pdf-parse');
     const buffer = Buffer.from(base64Data, 'base64');
     const data = await pdfParse(buffer);
-    return { text: data.text || '', numPages: data.numpages || 1 };
+    const rawText = data.text || '';
+    const numPages = data.numpages || 1;
+
+    let text: string;
+    if (rawText.includes('\f')) {
+      const pages = rawText.split('\f');
+      text = pages.map((p: string, i: number) => `<<<PAGE ${i + 1}>>>\n${p}`).join('\n');
+    } else if (numPages > 1) {
+      const charsPerPage = Math.ceil(rawText.length / numPages);
+      const parts: string[] = [];
+      for (let i = 0; i < numPages; i++) {
+        const start = i * charsPerPage;
+        const end = Math.min((i + 1) * charsPerPage, rawText.length);
+        parts.push(`<<<PAGE ${i + 1}>>>\n${rawText.substring(start, end)}`);
+      }
+      text = parts.join('\n');
+    } else {
+      text = `<<<PAGE 1>>>\n${rawText}`;
+    }
+
+    return { text, numPages };
   } catch (err) {
     console.warn('[MedicalDetective] pdf-parse failed, using regex fallback:', err);
-    return { text: extractTextWithRegex(base64Data), numPages: 1 };
+    return { text: `<<<PAGE 1>>>\n${extractTextWithRegex(base64Data)}`, numPages: 1 };
   }
 }
 
@@ -275,6 +324,7 @@ interface KeywordFlag {
   confidence: 'high' | 'medium' | 'low';
   excerpt: string;
   dateFound?: string;
+  pageNumber?: number;
 }
 
 interface ScanSynopsis {
@@ -295,24 +345,35 @@ function smartPreFilter(text: string): {
   detectedHeaders: string[];
 } {
   const rawLines = text.split(/\n/);
-  const paragraphs: string[] = [];
+  const paragraphs: { text: string; page: number }[] = [];
   let currentGroup = '';
+  let currentPage = 1;
+  let groupPage = 1;
   for (const line of rawLines) {
     const trimmed = line.trim();
-    if (trimmed.length === 0) {
-      if (currentGroup.length > 0) { paragraphs.push(currentGroup.trim()); currentGroup = ''; }
+    const pageMarker = trimmed.match(/^<<<PAGE (\d+)>>>$/);
+    if (pageMarker) {
+      if (currentGroup.length > 0) { paragraphs.push({ text: currentGroup.trim(), page: groupPage }); currentGroup = ''; }
+      currentPage = parseInt(pageMarker[1]);
+      groupPage = currentPage;
       continue;
     }
+    if (trimmed.length === 0) {
+      if (currentGroup.length > 0) { paragraphs.push({ text: currentGroup.trim(), page: groupPage }); currentGroup = ''; groupPage = currentPage; }
+      continue;
+    }
+    if (currentGroup.length === 0) groupPage = currentPage;
     if (currentGroup.length > 0 && trimmed.length < MIN_PARAGRAPH_LENGTH && currentGroup.length < MIN_PARAGRAPH_LENGTH) {
       currentGroup += ' ' + trimmed;
     } else if (currentGroup.length > 0 && currentGroup.length >= MIN_PARAGRAPH_LENGTH) {
-      paragraphs.push(currentGroup.trim());
+      paragraphs.push({ text: currentGroup.trim(), page: groupPage });
       currentGroup = trimmed;
+      groupPage = currentPage;
     } else {
       currentGroup += (currentGroup ? ' ' : '') + trimmed;
     }
   }
-  if (currentGroup.trim().length > 0) paragraphs.push(currentGroup.trim());
+  if (currentGroup.trim().length > 0) paragraphs.push({ text: currentGroup.trim(), page: groupPage });
 
   interface ScoredPara {
     text: string;
@@ -320,13 +381,14 @@ function smartPreFilter(text: string): {
     matchedKeywords: string[];
     isHeader: boolean;
     sectionKey: string | null;
+    pageNumber: number;
   }
 
   const scored: ScoredPara[] = [];
   const detectedKeywordsSet = new Set<string>();
   const detectedHeadersSet = new Set<string>();
 
-  for (const para of paragraphs) {
+  for (const { text: para, page } of paragraphs) {
     const trimmed = para.trim();
     if (trimmed.length < MIN_PARAGRAPH_LENGTH) continue;
     if (NOISE_REGEX.test(trimmed)) continue;
@@ -355,7 +417,7 @@ function smartPreFilter(text: string): {
     }
 
     if (matchedKeywords.length >= 1 || isHeader) {
-      scored.push({ text: trimmed, keywordCount: matchedKeywords.length, matchedKeywords, isHeader, sectionKey });
+      scored.push({ text: trimmed, keywordCount: matchedKeywords.length, matchedKeywords, isHeader, sectionKey, pageNumber: page });
     }
   }
 
@@ -389,14 +451,15 @@ function smartPreFilter(text: string): {
 
   for (const sp of selected) {
     if (totalChars >= FILTERED_TEXT_CAP) break;
-    const chunk = sp.text.length + totalChars > FILTERED_TEXT_CAP
-      ? sp.text.substring(0, FILTERED_TEXT_CAP - totalChars)
-      : sp.text;
+    const tagged = `[Page ${sp.pageNumber}] ${sp.text}`;
+    const chunk = tagged.length + totalChars > FILTERED_TEXT_CAP
+      ? tagged.substring(0, FILTERED_TEXT_CAP - totalChars)
+      : tagged;
     kept.push(chunk);
     totalChars += chunk.length;
 
     if (sp.matchedKeywords.length >= MIN_KEYWORD_MATCHES_FLAG) {
-      const specificKeyword = sp.matchedKeywords.find(k => !GENERIC_STANDALONE_TERMS.has(k));
+      const specificKeyword = sp.matchedKeywords.find(k => !GENERIC_STANDALONE_TERMS.has(k) && !isNegativeContext(sp.text, k));
       if (specificKeyword) {
         const conditionKey = specificKeyword.toLowerCase().replace(/[^a-z]/g, '');
         if (!seenConditions.has(conditionKey)) {
@@ -413,6 +476,7 @@ function smartPreFilter(text: string): {
             confidence,
             excerpt: sp.text.substring(0, 150),
             dateFound: extractDateFromText(sp.text),
+            pageNumber: sp.pageNumber,
           });
         }
       }
@@ -467,7 +531,7 @@ function parseSynthesisOutput(rawText: string): FlaggedItem[] {
       claimType: item.claimType || 'Primary Service-Connected',
       nextAction: item.nextAction || 'Review with your VSO for assessment.',
       dateFound: item.date || undefined,
-      pageNumber: item.page || undefined,
+      pageNumber: item.page ? String(item.page) : undefined,
       suggestedClaimCategory: item.category || mapToCategory(item.condition || ''),
       confidence: (['high', 'medium', 'low'].includes((item.confidence || '').toLowerCase())
         ? (item.confidence || '').toLowerCase()
@@ -561,6 +625,7 @@ function keywordFlagsToFlaggedItems(flags: KeywordFlag[]): FlaggedItem[] {
     claimType: 'Primary Service-Connected',
     nextAction: `Discuss ${f.condition} with your VSO to determine if a claim or increase is warranted.`,
     dateFound: f.dateFound,
+    pageNumber: f.pageNumber ? String(f.pageNumber) : undefined,
     suggestedClaimCategory: mapToCategory(f.condition),
     confidence: f.confidence,
   }));
@@ -893,73 +958,73 @@ export async function POST(request: NextRequest) {
           fileNames: files.map(f => f.name).join(', '),
         });
 
-        // ═══ PHASE 2: Streaming Grok-4 Deep Synthesis ═══
+        // ═══ PHASE 2: Streaming Grok-4 Deep Synthesis — up to 3 attempts ═══
         let finalFlags: FlaggedItem[] = [];
         const fileNames = files.map(f => f.name).join(', ');
-        let synthesisTimedOut = false;
-        let synthesisOutput = '';
+        let synthesisSucceeded = false;
 
         if (allFilteredText.length > 50) {
-          emit({ type: 'progress', message: `Phase 2: ${MODEL_SYNTHESIS} analyzing ${allKeptParagraphs} paragraphs (~${filteredTokenEstimate} tokens)...`, percent: 35, phase: 'synthesis' });
+          for (let attempt = 1; attempt <= MAX_SYNTHESIS_ATTEMPTS; attempt++) {
+            const isRetry = attempt > 1;
+            const textForAttempt = isRetry
+              ? allFilteredText.substring(0, RETRY_CHAR_CAP)
+              : allFilteredText;
+            const pctBase = isRetry ? 45 + (attempt - 2) * 15 : 35;
 
-          try {
-            synthesisOutput = await synthesizeWithGrok4(allFilteredText, fileNames, (tc, mt) => {
-              const pct = 35 + Math.round((tc / mt) * 50);
-              emit({ type: 'progress', message: `Phase 2: Deep Synthesis — ${tc} tokens received...`, percent: Math.min(pct, 88), phase: 'synthesis' });
+            emit({
+              type: 'progress',
+              message: isRetry
+                ? `Phase 2: Attempt ${attempt}/${MAX_SYNTHESIS_ATTEMPTS} — focused scope...`
+                : `Phase 2: ${MODEL_SYNTHESIS} analyzing ${allKeptParagraphs} paragraphs (~${filteredTokenEstimate} tokens)...`,
+              percent: pctBase,
+              phase: 'synthesis',
             });
-          } catch (err1) {
-            if ((err1 as Error).name !== 'GrokTimeoutError') throw err1;
-
-            console.warn('[MedicalDetective] Attempt 1 timed out — retrying at reduced cap');
-            emit({ type: 'progress', message: 'Phase 2: Retrying with focused scope...', percent: 50, phase: 'synthesis' });
-            const reducedText = allFilteredText.substring(0, RETRY_CHAR_CAP);
 
             try {
-              synthesisOutput = await synthesizeWithGrok4(reducedText, fileNames, (tc, mt) => {
-                const pct = 55 + Math.round((tc / mt) * 35);
-                emit({ type: 'progress', message: `Phase 2: Retry — ${tc} tokens...`, percent: Math.min(pct, 88), phase: 'synthesis' });
+              const output = await synthesizeWithGrok4(textForAttempt, fileNames, (tc, mt) => {
+                const pct = pctBase + Math.round((tc / mt) * (isRetry ? 30 : 50));
+                emit({ type: 'progress', message: `Phase 2: Deep Synthesis — ${tc} tokens received...`, percent: Math.min(pct, 90), phase: 'synthesis' });
               });
-            } catch (err2) {
-              if ((err2 as Error).name === 'GrokTimeoutError') {
-                synthesisTimedOut = true;
-              } else { throw err2; }
-            }
-          }
-        }
 
-        if (synthesisTimedOut) {
-          const interim = addPactActCrossRef(deduplicateFlags(keywordFlagsToFlaggedItems(allKeywordFlags)));
-          emit({ type: 'complete', report: buildReport(interim, files.length, Date.now() - startTime, 'keyword pre-filter (Deep Analysis Paused)', synopsis, true, `Deep scan timed out — here's everything we caught so far. Click "Retry Deep Analysis" for full AI synthesis with excerpts and claim mapping.`), percent: 100 });
-          try { controller.close(); } catch { /* already closed */ }
-          return;
-        }
-
-        if (synthesisOutput) {
-          emit({ type: 'progress', message: 'Phase 2: Processing results...', percent: 90, phase: 'synthesis' });
-          finalFlags = parseSynthesisOutput(synthesisOutput);
-
-          if (finalFlags.length === 0 && synthesisOutput.length > 100) {
-            console.warn('[MedicalDetective] Format error — retrying synthesis once');
-            emit({ type: 'progress', message: 'Phase 2: Format error — retrying...', percent: 85, phase: 'synthesis' });
-            try {
-              const retryText = allFilteredText.substring(0, RETRY_CHAR_CAP);
-              const retryOutput = await synthesizeWithGrok4(retryText, fileNames, (tc, mt) => {
-                const pct = 85 + Math.round((tc / mt) * 10);
-                emit({ type: 'progress', message: `Phase 2: Retry — ${tc} tokens...`, percent: Math.min(pct, 95), phase: 'synthesis' });
-              });
-              if (retryOutput) {
-                const retryFlags = parseSynthesisOutput(retryOutput);
-                if (retryFlags.length > 0) finalFlags = retryFlags;
+              if (output) {
+                const flags = parseSynthesisOutput(output);
+                if (flags.length > 0) {
+                  finalFlags = flags;
+                  synthesisSucceeded = true;
+                  break;
+                }
+                if (output.trim() === '[]' || output.length < 100) {
+                  synthesisSucceeded = true;
+                  break;
+                }
+                console.warn(`[MedicalDetective] Attempt ${attempt}/${MAX_SYNTHESIS_ATTEMPTS}: format error — ${output.length} chars → 0 flags`);
               }
-            } catch (retryErr) {
-              console.warn('[MedicalDetective] Format retry also failed:', (retryErr as Error).message);
+            } catch (err) {
+              if ((err as Error).name === 'GrokTimeoutError') {
+                console.warn(`[MedicalDetective] Attempt ${attempt}/${MAX_SYNTHESIS_ATTEMPTS} timed out`);
+              } else {
+                throw err;
+              }
             }
           }
+        }
 
-          if (finalFlags.length === 0 && allKeywordFlags.length > 0) {
-            console.warn('[MedicalDetective] Synthesis produced no valid flags — falling back to keyword interim');
+        if (!synthesisSucceeded && finalFlags.length === 0) {
+          if (allKeywordFlags.length > 0) {
             finalFlags = keywordFlagsToFlaggedItems(allKeywordFlags);
           }
+          const interim = addPactActCrossRef(deduplicateFlags(finalFlags));
+          emit({
+            type: 'complete',
+            report: buildReport(
+              interim, files.length, Date.now() - startTime,
+              'keyword pre-filter (Deep Analysis Paused)', synopsis, true,
+              `Deep scan completed ${MAX_SYNTHESIS_ATTEMPTS} attempts — showing keyword flags. Click "Retry" for another attempt.`
+            ),
+            percent: 100,
+          });
+          try { controller.close(); } catch { /* already closed */ }
+          return;
         }
 
         emit({ type: 'progress', message: `Phase 2 complete — ${finalFlags.length} verified flag(s)`, percent: 95, phase: 'synthesis_done' });
