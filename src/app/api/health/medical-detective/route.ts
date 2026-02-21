@@ -1,25 +1,22 @@
 import { NextRequest } from 'next/server';
 
 /**
- * POST /api/health/medical-detective — v4.2 "Streaming Synthesis"
+ * POST /api/health/medical-detective — v4.2 "Reliable Synthesis + Interim Fallback"
  *
- * Architecture (v4.2 — reliable <90s, streaming Grok-4):
+ * Architecture (v4.1 — optimized for <65s scans):
  *   Phase 1: Smart Pre-Filter (NO AI, ~1-2s) — tiered keyword scoring
  *            (1+ keyword = kept for analysis, 2+ = live flag pill),
- *            section header priority, noise exclusion, 10K char cap.
- *   Phase 2: Streaming Grok-4 Synthesis (SSE stream, ~20-50s) — takes
+ *            section header priority, noise exclusion, 32K char cap.
+ *   Phase 2: Single Grok-4 Synthesis (one API call, ~20-45s) — takes
  *            pre-filtered text and produces structured flags with
  *            confidence, category, nexus reasoning, PACT Act refs.
- *            70s hard timeout + 10s idle timeout + 1 automatic retry at 60% cap.
  *
- * On timeout: interim report from keyword flags + retry button.
- * On success: full structured Personal Evidence Report.
+ * On Grok-4 failure: shows clear error with retry (no fake keyword reports).
  *
  * Streaming NDJSON response. Emits JSON events line-by-line:
  *   {type:'progress', message, percent, phase}
  *   {type:'file_ready', fileName, numPages, filteredChunks, reductionPct}
  *   {type:'keyword_flag', flag}  — live flag from keyword pre-filter
- *   {type:'scan_cache', filteredText, keywordFlags, synopsis, fileNames}
  *   {type:'complete', report}
  *   {type:'error', message}
  *
@@ -67,14 +64,15 @@ interface DetectiveReport {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-// v4.2: Streaming synthesis + auto-retry at 60% cap
-const FILTERED_TEXT_CAP = 10_000;       // ~2,500 tokens — Grok-4 target: <30s
+// v4.2: Explicit AbortController + auto-retry at 60% cap + progress ticker
+const FILTERED_TEXT_CAP = 10_000;       // ~2,500 tokens — hard char cap (whichever hits first with paragraph cap)
 const MAX_PARAGRAPHS_TO_SEND = 80;      // hard paragraph cap after sorting
 const SECTION_GUARANTEE_COUNT = 3;      // min paragraphs guaranteed per major section
-const SYNTHESIS_TIMEOUT_MS = 70_000;    // 70s hard timeout per Grok-4 streaming call
-const IDLE_TIMEOUT_MS = 30_000;         // 30s without a new SSE token → abort (Grok-4 needs think time for first token)
-const RETRY_CAP_RATIO = 0.6;           // on timeout retry, use 60% of original input
+const SYNTHESIS_TIMEOUT_MS = 70_000;    // 70s hard AbortController timeout (first attempt)
+const RETRY_TIMEOUT_MS = 45_000;        // 45s timeout on automatic retry (attempt 2)
+const RETRY_CAP_RATIO = 0.6;           // retry uses 60% of original filtered text
 const IMAGE_TIMEOUT_MS = 60_000;        // 60s for image vision
+const MAX_RETRIES = 1;                  // 1 automatic retry at reduced cap before interim
 const MIN_PARAGRAPH_LENGTH = 30;
 const MIN_KEYWORD_MATCHES_FLAG = 2;     // 2+ keywords → live flag pill
 // Note: 1+ keyword → kept for Grok-4 (tiered filtering)
@@ -437,11 +435,7 @@ function mapToCategory(label: string): string {
 }
 
 function parseSynthesisOutput(rawText: string): FlaggedItem[] {
-  if (!rawText) return [];
-
-  // Only treat as "no flags" if the text doesn't contain numbered items
-  const hasNumberedItems = /^\d+\.\s/m.test(rawText);
-  if (!hasNumberedItems && rawText.includes('No strong claim-relevant evidence flags were identified')) return [];
+  if (!rawText || rawText.includes('No strong claim-relevant evidence flags were identified')) return [];
 
   const items: FlaggedItem[] = [];
   const blocks = rawText.split(/\n(?=\d+\.\s)/);
@@ -620,127 +614,48 @@ async function callGrokAPI(
   }
 }
 
-// ─── Streaming Grok API Call (SSE) ────────────────────────────────────────────
-// Reads response token-by-token via Server-Sent Events.
-// Hard overall timeout + idle timeout (no new token) → GrokTimeoutError.
-// Eliminates the response.json() hang that caused the 35% stall.
-
-async function callGrokAPIStreaming(
-  model: string,
-  messages: Array<{ role: string; content: string }>,
-  overallTimeoutMs: number,
-  idleTimeoutMs: number,
-  label: string,
-  maxTokens: number = 1500,
-  onToken?: (tokenCount: number, maxTokens: number) => void,
-): Promise<string> {
+// Phase 2: Grok-4 synthesis with explicit AbortController
+// Uses controller.abort() + setTimeout instead of AbortSignal.timeout() to ensure
+// fetch body reads (response.json()) are properly cancelled — prevents orphaned promise rejection
+async function synthesizeWithGrok4(filteredText: string, fileNames: string, timeoutMs: number = SYNTHESIS_TIMEOUT_MS): Promise<string> {
   const apiKey = getApiKey();
   if (!apiKey) throw new Error('XAI_API_KEY is not configured in environment variables.');
 
   const controller = new AbortController();
-  let overallTimer: ReturnType<typeof setTimeout> | null = setTimeout(() => controller.abort(), overallTimeoutMs);
-  let idleTimer: ReturnType<typeof setTimeout> | null = null;
-
-  const clearTimers = () => {
-    if (overallTimer) { clearTimeout(overallTimer); overallTimer = null; }
-    if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
-  };
-
-  const resetIdle = () => {
-    if (idleTimer) clearTimeout(idleTimer);
-    idleTimer = setTimeout(() => controller.abort(), idleTimeoutMs);
-  };
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const response = await fetch('https://api.x.ai/v1/chat/completions', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model, messages, temperature: 0.1, max_tokens: maxTokens, stream: true }),
+      body: JSON.stringify({
+        model: MODEL_SYNTHESIS,
+        messages: [
+          { role: 'system', content: SYNTHESIS_PROMPT },
+          { role: 'user', content: `Veteran's documents: "${fileNames}"\n\nPre-filtered medical record excerpts (high-signal paragraphs only):\n\n${filteredText}` },
+        ],
+        temperature: 0.1,
+        max_tokens: 1_500,
+      }),
       signal: controller.signal,
     });
 
     if (!response.ok) {
-      const errText = await response.text().catch(() => 'unknown error');
-      throw new Error(`${label} API error ${response.status}: ${errText.substring(0, 200)}`);
+      const errText = await response.text().catch(() => 'Unknown error');
+      throw new Error(`Synthesis API error ${response.status}: ${errText.substring(0, 200)}`);
     }
 
-    if (!response.body) throw new Error(`${label}: no response body received`);
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let accumulated = '';
-    let buffer = '';
-    let tokenCount = 0;
-
-    resetIdle();
-
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        resetIdle();
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed || trimmed === 'data: [DONE]') continue;
-          if (trimmed.startsWith('data: ')) {
-            try {
-              const json = JSON.parse(trimmed.slice(6));
-              const delta = json.choices?.[0]?.delta?.content;
-              if (delta) {
-                accumulated += delta;
-                tokenCount++;
-                if (onToken && tokenCount % 15 === 0) {
-                  onToken(tokenCount, maxTokens);
-                }
-              }
-            } catch { /* malformed SSE line — skip */ }
-          }
-        }
-      }
-    } catch (readErr) {
-      if (controller.signal.aborted) {
-        throw new GrokTimeoutError(label, overallTimeoutMs);
-      }
-      throw readErr;
-    }
-
-    clearTimers();
-    return accumulated;
+    const data = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
+    return data.choices?.[0]?.message?.content || '';
   } catch (err) {
-    clearTimers();
     const error = err as Error;
-    if (error.name === 'GrokTimeoutError') throw error;
-    if (error.name === 'AbortError' || error.name === 'TimeoutError' || controller.signal.aborted) {
-      throw new GrokTimeoutError(label, overallTimeoutMs);
+    if (error.name === 'AbortError' || error.name === 'TimeoutError') {
+      throw new GrokTimeoutError('Grok 4 synthesis', timeoutMs);
     }
-    console.warn(`[MedicalDetective] ${label} streaming failed: ${error.message}`);
     throw error;
+  } finally {
+    clearTimeout(timer);
   }
-}
-
-// Phase 2: Streaming Grok-4 synthesis with progress callback
-async function synthesizeWithGrok4Streaming(
-  filteredText: string,
-  fileNames: string,
-  onProgress?: (tokenCount: number, maxTokens: number) => void,
-): Promise<string> {
-  return callGrokAPIStreaming(
-    MODEL_SYNTHESIS,
-    [
-      { role: 'system', content: SYNTHESIS_PROMPT },
-      { role: 'user', content: `Veteran's documents: "${fileNames}"\n\nPre-filtered medical record excerpts (high-signal paragraphs only):\n\n${filteredText}` },
-    ],
-    SYNTHESIS_TIMEOUT_MS,
-    IDLE_TIMEOUT_MS,
-    'Grok-4 synthesis',
-    1_500,
-    onProgress,
-  );
 }
 
 // Image analysis with grok-3-mini (fast on single images)
@@ -774,7 +689,7 @@ If nothing relevant found, state: 'No strong claim-relevant evidence flags were 
   );
 }
 
-// ─── Streaming POST Handler — v4.2 Streaming Synthesis + Auto-Retry ─────────
+// ─── Streaming POST Handler — v4.2 Two-Phase Pipeline ───────────────────────
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
@@ -800,19 +715,13 @@ export async function POST(request: NextRequest) {
         const retryFileNames: string = body.retryFileNames || 'cached documents';
 
         if (retryFilteredText) {
-          const useReducedCap = body.useReducedCap === true;
-          const textForSynthesis = useReducedCap
-            ? retryFilteredText.substring(0, Math.floor(retryFilteredText.length * RETRY_CAP_RATIO))
-            : retryFilteredText;
-          const scopeLabel = useReducedCap ? ' (reduced scope)' : '';
-
-          emit({ type: 'progress', message: `Retrying deep AI analysis${scopeLabel}...`, percent: 30, phase: 'synthesis' });
+          // Auto-reduce to 60% cap for faster Grok-4 response on retry
+          const reducedRetryText = retryFilteredText.substring(0, Math.floor(retryFilteredText.length * RETRY_CAP_RATIO));
+          emit({ type: 'progress', message: `Retrying deep AI analysis (${Math.round(RETRY_CAP_RATIO * 100)}% cap, cached scan data)...`, percent: 30, phase: 'synthesis' });
+          emit({ type: 'progress', message: `Sending ~${Math.round(reducedRetryText.length / 4)} tokens to ${MODEL_SYNTHESIS}...`, percent: 35, phase: 'synthesis' });
 
           try {
-            const synthesisOutput = await synthesizeWithGrok4Streaming(textForSynthesis, retryFileNames, (tc, mt) => {
-              const pct = 35 + Math.round((tc / mt) * 55);
-              emit({ type: 'progress', message: `Generating evidence report (${tc} tokens)...`, percent: Math.min(pct, 92), phase: 'synthesis' });
-            });
+            const synthesisOutput = await synthesizeWithGrok4(reducedRetryText, retryFileNames, SYNTHESIS_TIMEOUT_MS);
             const retryFlags = synthesisOutput ? parseSynthesisOutput(synthesisOutput) : [];
             const deduped = deduplicateFlags(retryFlags);
             const withPactRefs = addPactActCrossRef(deduped);
@@ -821,9 +730,9 @@ export async function POST(request: NextRequest) {
             emit({ type: 'complete', report, percent: 100 });
           } catch (retryErr) {
             if ((retryErr as Error).name === 'GrokTimeoutError') {
-              emit({ type: 'progress', message: 'Deep analysis timed out. Showing keyword flags.', percent: 100, phase: 'synthesis_done' });
+              emit({ type: 'progress', message: 'Deep analysis timed out again. Showing keyword flags.', percent: 100, phase: 'synthesis_done' });
               const interimFlags = addPactActCrossRef(deduplicateFlags(keywordFlagsToFlaggedItems(retryKeywordFlags)));
-              const report = buildReport(interimFlags, 1, Date.now() - startTime, 'keyword pre-filter (Grok-4 unavailable)', retrySynopsis, true, 'Deep scan hit timeout \u2014 here\'s everything we caught so far. Click to retry with reduced scope.');
+              const report = buildReport(interimFlags, 1, Date.now() - startTime, 'keyword pre-filter (Grok-4 unavailable)', retrySynopsis, true, `Deep scan hit timeout — here's everything we caught so far. ${interimFlags.length} flag(s) from keyword pre-filter.${retrySynopsis ? ` Prioritized ${retrySynopsis.keptParagraphs} highest-signal paragraphs across all ${retrySynopsis.totalPages} pages.` : ''} Click Retry for another attempt.`);
               emit({ type: 'complete', report, percent: 100 });
             } else {
               throw retryErr;
@@ -923,16 +832,15 @@ export async function POST(request: NextRequest) {
         });
 
         // ═══════════════════════════════════════════════════════════════════
-        // PHASE 2: Streaming Grok-4 Synthesis (SSE, 70s timeout + 10s idle)
-        // + auto-retry at 60% cap on first timeout
-        // + image vision analysis (if any images uploaded)
+        // PHASE 2: Grok-4 Synthesis + Auto-Retry + Interim Fallback
+        // v4.2: Explicit AbortController — no orphaned promises, clean cancel
         // ═══════════════════════════════════════════════════════════════════
 
         let finalFlags: FlaggedItem[] = [];
         const usedModel = MODEL_SYNTHESIS;
         const fileNames = files.map(f => f.name).join(', ');
 
-        // Start image processing in background (runs parallel with text synthesis)
+        // Start image analysis concurrently (uses callGrokAPI — no stall issue)
         const imagePromise = imageFiles.length > 0
           ? Promise.all(imageFiles.map(async (img) => {
               emit({ type: 'progress', message: `Phase 2: Analyzing image "${img.name}" with ${MODEL_VISION}...`, percent: 30, phase: 'synthesis' });
@@ -940,59 +848,72 @@ export async function POST(request: NextRequest) {
               img.data = '';
               return { name: img.name, output };
             }))
-          : Promise.resolve([]);
+          : Promise.resolve([] as Array<{ name: string; output: string }>);
 
-        // Text synthesis — streaming with auto-retry
+        // Text synthesis: sequential try/catch with 1 automatic retry at 60% cap
         let synthesisTimedOut = false;
         let synthesisOutput = '';
+        const synthStart = Date.now();
+
+        emit({
+          type: 'progress',
+          message: `Phase 2: ${MODEL_SYNTHESIS} analyzing ${allKeptParagraphs} highest-signal paragraphs (~${filteredTokenEstimate} tokens)...`,
+          percent: 35,
+          phase: 'synthesis',
+        });
+
+        // Progress ticker: real-time % updates every 8s during synthesis
+        const ticker = setInterval(() => {
+          const elapsed = Math.floor((Date.now() - synthStart) / 1000);
+          const pct = Math.min(35 + Math.floor(elapsed * 0.65), 82);
+          emit({ type: 'progress', message: `Phase 2: Deep synthesis in progress (${elapsed}s elapsed)...`, percent: pct, phase: 'synthesis' });
+        }, 8_000);
 
         if (allFilteredText.length > 50) {
-          emit({
-            type: 'progress',
-            message: `Phase 2: ${MODEL_SYNTHESIS} analyzing ${allKeptParagraphs} paragraphs (~${filteredTokenEstimate} tokens)...`,
-            percent: 35,
-            phase: 'synthesis',
-          });
-
-          // Attempt 1: Full input
           try {
-            synthesisOutput = await synthesizeWithGrok4Streaming(allFilteredText, fileNames, (tc, mt) => {
-              const pct = 35 + Math.round((tc / mt) * 50);
-              emit({ type: 'progress', message: `Phase 2: Generating evidence report (${tc} tokens)...`, percent: Math.min(pct, 88), phase: 'synthesis' });
-            });
+            // Attempt 1: full filtered text, hard 70s timeout
+            synthesisOutput = await synthesizeWithGrok4(allFilteredText, fileNames, SYNTHESIS_TIMEOUT_MS);
           } catch (err1) {
-            if ((err1 as Error).name !== 'GrokTimeoutError') throw err1;
-
-            // Attempt 2: Retry at 60% reduced input
-            console.warn('[MedicalDetective] Grok-4 attempt 1 timed out — retrying at 60% cap');
-            emit({ type: 'progress', message: 'Phase 2: First pass slow — retrying with reduced scope...', percent: 50, phase: 'synthesis' });
-            const reducedText = allFilteredText.substring(0, Math.floor(allFilteredText.length * RETRY_CAP_RATIO));
-
-            try {
-              synthesisOutput = await synthesizeWithGrok4Streaming(reducedText, fileNames, (tc, mt) => {
-                const pct = 55 + Math.round((tc / mt) * 35);
-                emit({ type: 'progress', message: `Phase 2: Retrying analysis (${tc} tokens)...`, percent: Math.min(pct, 88), phase: 'synthesis' });
+            if ((err1 as Error).name === 'GrokTimeoutError' && MAX_RETRIES > 0) {
+              // Automatic retry at 60% cap — smaller input = faster Grok response
+              const reducedText = allFilteredText.substring(0, Math.floor(allFilteredText.length * RETRY_CAP_RATIO));
+              emit({
+                type: 'progress',
+                message: `Phase 2: Retrying with reduced input (${Math.round(RETRY_CAP_RATIO * 100)}% cap, ~${Math.round(reducedText.length / 4)} tokens)...`,
+                percent: 55,
+                phase: 'synthesis',
               });
-            } catch (err2) {
-              if ((err2 as Error).name === 'GrokTimeoutError') {
+              console.warn(`[MedicalDetective] Attempt 1 timed out at ${SYNTHESIS_TIMEOUT_MS / 1000}s — retrying at ${Math.round(RETRY_CAP_RATIO * 100)}% cap (${reducedText.length} chars)`);
+              try {
+                synthesisOutput = await synthesizeWithGrok4(reducedText, fileNames, RETRY_TIMEOUT_MS);
+              } catch (err2) {
                 synthesisTimedOut = true;
-                console.warn('[MedicalDetective] Grok-4 attempt 2 timed out — building interim report');
-              } else {
-                throw err2;
+                console.warn('[MedicalDetective] Retry also failed — building interim report:', (err2 as Error).message);
               }
+            } else {
+              synthesisTimedOut = true;
+              console.warn('[MedicalDetective] Synthesis failed:', (err1 as Error).message);
             }
           }
         }
 
-        // Wait for images to finish
-        const imageResults = await imagePromise;
+        clearInterval(ticker);
 
         // ═══════════════════════════════════════════════════════════════════
-        // TIMEOUT PATH: Build Interim Report from keyword flags
+        // TIMEOUT PATH: Immediate interim report from keyword flags
         // ═══════════════════════════════════════════════════════════════════
         if (synthesisTimedOut) {
-          emit({ type: 'progress', message: 'Deep analysis paused — generating report from pre-filter flags...', percent: 100, phase: 'synthesis_done' });
+          emit({ type: 'progress', message: 'Deep Analysis Paused — generating Interim Report from pre-filter flags...', percent: 95, phase: 'synthesis_done' });
           const interimFlags = addPactActCrossRef(deduplicateFlags(keywordFlagsToFlaggedItems(allKeywordFlags)));
+
+          // Collect any image results that completed
+          const imgResults = await imagePromise.catch(() => [] as Array<{ name: string; output: string }>);
+          for (const imgResult of imgResults) {
+            if (imgResult.output) {
+              interimFlags.push(...addPactActCrossRef(parseSynthesisOutput(imgResult.output)));
+            }
+          }
+
           const report = buildReport(
             interimFlags,
             files.length,
@@ -1000,16 +921,18 @@ export async function POST(request: NextRequest) {
             'keyword pre-filter (Deep Analysis Paused)',
             synopsis,
             true,
-            `Deep scan hit timeout \u2014 here's everything we caught so far. Click to retry with reduced scope. Prioritized ${synopsis.keptParagraphs} highest-signal paragraphs across all ${synopsis.totalPages} pages.`,
+            `Deep scan hit timeout \u2014 here\u2019s everything we caught so far. ${interimFlags.length} flag(s) from keyword pre-filter across ${synopsis.totalPages} pages (${synopsis.keptParagraphs} high-signal paragraphs). Click Retry for AI-powered deep analysis with reduced input.`,
           );
           emit({ type: 'complete', report, percent: 100 });
-          controller.close();
-          return;
+          return; // finally block closes stream
         }
+
+        // Wait for image analysis to finish
+        const imageResults = await imagePromise.catch(() => [] as Array<{ name: string; output: string }>);
 
         // Parse text synthesis output
         if (synthesisOutput) {
-          emit({ type: 'progress', message: 'Phase 2: Processing analysis results...', percent: 90, phase: 'synthesis' });
+          emit({ type: 'progress', message: 'Phase 2: Processing analysis results...', percent: 85, phase: 'synthesis' });
           finalFlags = parseSynthesisOutput(synthesisOutput);
         }
 
@@ -1043,7 +966,7 @@ export async function POST(request: NextRequest) {
         console.error('[MedicalDetective] Stream error:', err);
         emit({ type: 'error', message: (err as Error).message || 'Processing failed. Please try again.' });
       } finally {
-        try { controller.close(); } catch { /* already closed */ }
+        try { controller.close(); } catch { /* stream already closed */ }
       }
     },
   });
