@@ -50,7 +50,6 @@ interface FlaggedItem {
   pageNumber?: string;
   sectionFound?: string;
   doctorName?: string;
-  ratingRange?: string;
   suggestedClaimCategory: string;
   confidence: 'high' | 'medium' | 'low';
 }
@@ -79,8 +78,9 @@ const MAX_SYNTHESIS_ATTEMPTS = 3;
 const MIN_PARAGRAPH_LENGTH = 30;
 const MIN_KEYWORD_MATCHES_FLAG = 2;
 
-const MODEL_FAST = 'grok-4-1-fast-non-reasoning';
-const MODEL_DEEP = 'grok-4-0709';
+const MODEL_EXTRACT = 'grok-4-1-fast-non-reasoning';
+const MODEL_REASON = 'grok-4-1-fast-reasoning';
+const MODEL_FALLBACK = 'grok-4-0709';
 
 const GUARANTEED_SECTIONS = [
   'assessment', 'problem list', 'active problems', 'active diagnoses',
@@ -208,82 +208,67 @@ function isScreeningFalsePositive(text: string, keyword: string): boolean {
   return false;
 }
 
-// ─── Synthesis Prompt — strict JSON with deep evidence fields ────────────────
+// ─── Phase 2a: Extraction Prompt (non-reasoning, mechanical) ─────────────────
 
-const SYNTHESIS_PROMPT = `You are an expert VA disability claims evidence analyst building a Personal Evidence Report for VSO handoff. Deep knowledge of 38 CFR rating schedules, PACT Act (2022-2026), presumptive conditions, secondary service-connection, and clinical note interpretation.
+const EXTRACTION_PROMPT = `You are a medical record extraction system. Extract all diagnosable conditions from VA medical records. Follow rules EXACTLY.
 
-Each paragraph is tagged like "[Page 45 | Assessment] text..." showing page number and clinical section. Identify EVERY claim-relevant finding, ordered by claim value (highest first).
+Each paragraph is tagged like "[Page 45 | Assessment] text..." showing page and clinical section.
 
-ACCURACY RULES — CRITICAL:
-- ONLY flag SPECIFIC diagnosable conditions with POSITIVE clinical evidence
-- NEVER flag NEGATIVE context: "absence of", "denies", "no evidence of", "ruled out", "negative for"
-- NEVER flag screening tool scores where veteran scored 0/negative/none (PHQ-9: 0, C-SSRS: negative, GAD-7: 0, AUDIT-C: 0, "suicidal ideation: denied")
-- NEVER flag generic terms ("Diagnosed", "Chronic", "Problem List") as conditions
-- Extract EXACT verbatim quotes — 1-2 sentences proving the finding
+EXTRACTION LAYERS (use all three):
 
-PER-FLAG FIELDS (all required):
-- condition: Specific diagnosable condition name
-- confidence: "High" (diagnosis + nexus), "Medium" (clinical evidence), "Low" (indirect)
-- category: Mental Health | Musculoskeletal | Hearing | Neurological | Sleep Disorders | Respiratory | Cardiovascular | Gastrointestinal | Oncological | PACT Act Presumptive | Claim Language | Dermatological | Endocrine | Other
-- claimType: "Primary Service-Connected" | "Secondary" | "PACT Act Presumptive" | "Aggravated" | "Rating Increase"
-- excerpt: Verbatim 1-2 sentence quote from records
-- date: YYYY-MM-DD or "Not specified"
-- page: Page number from [Page N] tag
-- sectionFound: Clinical section from tag ("Assessment", "HPI", "Problem List", etc.) or null
-- doctorName: Provider name from "Attending:", "Provider:", "Cosigned by:", "Signed by:" or null
-- ratingRange: Estimated VA rating range (e.g., "10-30%") based on 38 CFR diagnostic codes, or null
-- context: Deep claim pathway — cite DC code, nexus evidence, why this matters, service-connection logic
-- nextAction: Multi-step: "1. File [type] claim at va.gov/[path]. 2. Request [document]. 3. Gather [evidence]."
+LAYER 1 — SECTION-ANCHORED (always extract):
+Extract ANY condition listed after: Assessment, Assessment/Plan, Problem List, Active Problems, Active Diagnoses, Diagnosis/Diagnoses/DX, Discharge Diagnosis, Admitting Diagnosis, Past Medical History/PMHx, Impression, DBQ finding, C&P exam conclusion, Chief Complaint (when clinical).
 
-ORDER results by claim value: PACT Act presumptives and strong nexus first, then secondaries, then lower confidence.
+LAYER 2 — CONDITION CATEGORIES (extract when in clinical context):
+MUSCULOSKELETAL: radiculopathy, DDD, degenerative disc, herniated disc, spinal stenosis, spondylosis, lumbar/cervical/thoracic strain, knee pain, patellofemoral, meniscus, ACL/MCL, shoulder impingement, rotator cuff, carpal tunnel, plantar fasciitis, flat feet/pes planus, arthritis, osteoarthritis, gout, bursitis, tendonitis, sciatica, sacroiliac, ankylosis, limited ROM, bone spurs, scoliosis
+MENTAL HEALTH: PTSD, post-traumatic stress, anxiety disorder, GAD, panic disorder, MDD/major depressive, dysthymia, bipolar, adjustment disorder, mood disorder, OCD, TBI, post-concussive, MST/military sexual trauma, substance use disorder, alcohol use disorder
+HEARING: tinnitus, sensorineural hearing loss, bilateral hearing loss, mixed hearing loss, Meniere's, BPPV, vertigo, vestibular dysfunction, perforated TM
+RESPIRATORY: sinusitis, allergic/vasomotor rhinitis, deviated septum, asthma, COPD, chronic bronchitis, constrictive bronchiolitis, pulmonary fibrosis, sarcoidosis
+SLEEP: obstructive sleep apnea/OSA, central sleep apnea, insomnia disorder, restless leg/RLS, CPAP prescribed
+CARDIOVASCULAR: hypertension, ischemic heart disease, CAD, atrial fibrillation, cardiomyopathy, CHF, PAD, DVT, varicose veins, POTS
+NEUROLOGICAL: migraine, peripheral neuropathy, diabetic neuropathy, epilepsy, seizure disorder, Parkinson's, essential tremor, MS, CRPS, fibromyalgia, chronic fatigue, small fiber neuropathy
+GI: GERD, hiatal hernia, Barrett's, peptic ulcer, IBS, Crohn's, ulcerative colitis, diverticulitis, gastroparesis, hepatitis, cirrhosis, pancreatitis
+ENDOCRINE: diabetes mellitus, hypothyroidism, hyperthyroidism, Hashimoto's, thyroid nodule, adrenal insufficiency
+GENITOURINARY: erectile dysfunction, kidney stones, chronic kidney disease, urinary incontinence, BPH, interstitial cystitis
+DERMATOLOGICAL: eczema, psoriasis, dermatitis, chloracne, hidradenitis, skin cancer, burn/surgical scars, keloid
+OPHTHALMOLOGICAL: glaucoma, cataracts, macular degeneration, diabetic retinopathy, dry eye
+ONCOLOGICAL: any cancer/tumor/malignancy, lymphoma, leukemia, prostate/bladder/kidney/lung/colon/pancreatic cancer, MGUS
+PACT ACT (flag when burn pit/Agent Orange/Gulf War/Iraq/Afghanistan/toxic exposure context present): sinusitis, rhinitis, any respiratory condition, any PACT Act cancer, constrictive bronchiolitis, MGUS, head/neck/respiratory/reproductive cancer, melanoma, hypertension, kidney/liver disease
+CLAIM LANGUAGE: "service connected", "nexus", "at least as likely as not", "more likely than not", "secondary to", "aggravated by", "in-service", "compensable", "rated at", "TDIU", "C&P exam", "DBQ", "buddy statement"
 
-Output ONLY valid JSON — no intro text, no markdown fences, no explanation:
-[
-  {
-    "condition": "Sinusitis",
-    "confidence": "Medium",
-    "category": "Respiratory",
-    "claimType": "PACT Act Presumptive",
-    "excerpt": "Discharge diagnosis: SINUSITIS, BPPV — chronic symptoms noted since deployment.",
-    "date": "2024-06-12",
-    "page": "45",
-    "sectionFound": "Assessment",
-    "doctorName": "Dr. Martinez",
-    "ratingRange": "10-30%",
-    "context": "Sinusitis qualifies under PACT Act as presumptive for burn pit/toxic exposure in post-9/11 veterans. HPI documents chronic post-deployment symptoms. Rated under DC 6510, 10-30% based on episode frequency.",
-    "nextAction": "1. File presumptive claim at va.gov/pact. 2. Request nexus letter from Dr. Martinez. 3. Submit buddy statement confirming burn pit exposure."
-  },
-  {
-    "condition": "Lumbar Radiculopathy",
-    "confidence": "High",
-    "category": "Musculoskeletal",
-    "claimType": "Secondary",
-    "excerpt": "Assessment: lumbar radiculopathy, at least as likely as not secondary to service-connected DDD.",
-    "date": "2025-01-15",
-    "page": "72",
-    "sectionFound": "Assessment",
-    "doctorName": null,
-    "ratingRange": "10-40%",
-    "context": "Nexus language present ('at least as likely as not'). Secondary to service-connected lumbar DDD. Rated under DC 5243, 10-40% per extremity.",
-    "nextAction": "1. File secondary claim at va.gov/disability. 2. Request DBQ from provider. 3. Include this note as nexus evidence."
-  },
-  {
-    "condition": "PTSD",
-    "confidence": "High",
-    "category": "Mental Health",
-    "claimType": "Primary Service-Connected",
-    "excerpt": "Axis I: PTSD, chronic, related to combat trauma per DSM-5 criteria.",
-    "date": "2024-03-20",
-    "page": "15",
-    "sectionFound": "HPI",
-    "doctorName": "Dr. Thompson",
-    "ratingRange": "30-70%",
-    "context": "Formal PTSD diagnosis meeting DSM-5 criteria. Combat presumption (38 CFR 3.304(f)(2)) simplifies stressor verification. Rated under DC 9411, 30-70%.",
-    "nextAction": "1. File primary claim at va.gov/disability. 2. Request C&P exam. 3. Prepare personal stressor statement."
-  }
-]
+LAYER 3 — PATTERN CATCH-ALL:
+Also extract: ICD-10 codes (letter+digits+decimal pattern), terms with "(chronic)"/"(bilateral)"/"(recurrent)", terms after "s/p" (status post), terms ending in "disorder"/"disease"/"syndrome"/"dysfunction"/"impairment", items in numbered problem lists.
 
-If no claim-relevant evidence found, output exactly: []`;
+NEVER EXTRACT:
+NEGATIVE: Skip if preceded within 100 chars by: no, absence of, denies, denied, negative for, ruled out, not present, without, does not have, patient denies, no evidence of, no history of, no signs of, no symptoms of, no complaints of, resolved, in remission
+SCREENING TOOLS (skip when score 0/negative/none/denied): PHQ-2, PHQ-9, PHQ-15, GAD-7, GAD-2, PC-PTSD-5, AUDIT-C, C-SSRS, DAST-10, CAGE, MDQ, PCL-5, SLUMS, MoCA, MMSE
+ADMINISTRATIVE: scheduling, check-in, travel reimbursement, copay, insurance, demographics, "no show", "cancelled"
+ROUTINE/NORMAL: "vital signs within normal", "WNL", "unremarkable", "normal exam", "NAD", routine labs, immunizations, flu shot, COVID vaccine
+EDUCATIONAL: definitions of conditions, patient education handouts, discharge instruction warnings
+MEDICATIONS: Do NOT extract medication names as conditions unless context reveals diagnosis (e.g., "sertraline for MDD" → extract MDD)
+
+OUTPUT — JSON array only. Every element MUST have ALL fields (null for missing):
+{"condition":"name","excerpt":"VERBATIM quote","page":"N","sectionFound":"Section or null","date":"YYYY-MM-DD or Not specified","doctorName":"Dr. Name or null","claimType":"Primary Service-Connected|Secondary|PACT Act Presumptive|Aggravated|Rating Increase","confidence":"High|Medium|Low"}
+
+claimType: "secondary to [X]"→Secondary. Burn pit/Agent Orange/Gulf War/PACT→PACT Act Presumptive. "aggravated"+service→Aggravated. "rated at"/"increase"→Rating Increase. Otherwise→Primary Service-Connected.
+Confidence: High=Assessment/Problem List/Diagnosis section. Medium=HPI/clinical notes. Low=indirect mention.
+
+Output ONLY the JSON array. No text before or after. If nothing found: []`;
+
+// ─── Phase 2b: Analysis Prompt (reasoning, per-flag enrichment) ──────────────
+
+const ANALYSIS_PROMPT = `You are a VA disability claims analyst. You receive a JSON array of conditions extracted from a veteran's medical records. For EACH condition, provide deep claim analysis.
+
+For each flag, output:
+1. context: Explain WHY this excerpt supports a VA disability claim. Reference nexus evidence ("at least as likely as not" language, deployment links, chronicity, aggravation), service-connection pathway, and cite the relevant 38 CFR diagnostic code (e.g., "DC 6510" for sinusitis, "DC 9411" for PTSD). Do NOT provide percentage rating estimates. Say "Rated under DC [code] — discuss expected rating with your VSO."
+2. nextAction: 3-4 specific numbered steps referencing the exact page number. Example: "1. File [claim type] at va.gov/disability citing excerpt from page [N]. 2. Request nexus letter from [doctor or treating provider]. 3. Submit buddy statement for [evidence]. 4. Request [DBQ or C&P exam]."
+3. claimType: Verify or correct. If evidence shows secondary connection, set "Secondary". If PACT Act exposure linked, set "PACT Act Presumptive".
+4. shouldExclude: true ONLY if the finding is actually a false positive — negative finding, screening score, definition, medication without diagnosis, or out-of-context mention. Otherwise false.
+
+Output ONLY a JSON array:
+[{"condition":"must match input","context":"deep analysis","nextAction":"1. Step. 2. Step.","claimType":"verified type","shouldExclude":false}]
+
+CRITICAL: Output ONLY valid JSON. No explanation text. Process EVERY flag from input.`;
 
 // ─── PDF Text Extraction ──────────────────────────────────────────────────────
 
@@ -570,7 +555,6 @@ function parseSynthesisOutput(rawText: string): FlaggedItem[] {
       pageNumber: item.page ? String(item.page) : undefined,
       sectionFound: item.sectionFound || undefined,
       doctorName: item.doctorName || undefined,
-      ratingRange: item.ratingRange || undefined,
       suggestedClaimCategory: item.category || mapToCategory(item.condition || ''),
       confidence: (['high', 'medium', 'low'].includes((item.confidence || '').toLowerCase())
         ? (item.confidence || '').toLowerCase()
@@ -654,7 +638,7 @@ function parseSynthesisOutput(rawText: string): FlaggedItem[] {
 
 // ─── Keyword Flags → FlaggedItems (interim fallback) ─────────────────────────
 
-function generateInterimContext(condition: string, category: string, section?: string, excerpt?: string): { context: string; claimType: string; nextAction: string; ratingRange?: string } {
+function generateInterimContext(condition: string, category: string, section?: string, excerpt?: string): { context: string; claimType: string; nextAction: string } {
   const cond = condition.toLowerCase();
   const pactRegex = new RegExp(PACT_ACT_CONDITIONS.join('|'), 'i');
   const isPact = pactRegex.test(cond) || pactRegex.test(excerpt || '');
@@ -667,53 +651,46 @@ function generateInterimContext(condition: string, category: string, section?: s
 
   if (isPact) {
     return {
-      context: `${condition} may qualify as a PACT Act presumptive condition for veterans with burn pit, Agent Orange, or Gulf War toxic exposure. ${sectionNote} Review with your VSO to determine if a presumptive claim is appropriate.`,
+      context: `${condition} may qualify as a PACT Act presumptive condition for veterans with burn pit, Agent Orange, or Gulf War toxic exposure. ${sectionNote} Discuss presumptive claim eligibility with your VSO.`,
       claimType: 'PACT Act Presumptive',
-      nextAction: `1. Review this finding with your accredited VSO. 2. If applicable, file a PACT Act presumptive claim at va.gov/pact. 3. Request a nexus letter from your treating provider linking ${condition} to deployment exposure. 4. Gather any buddy statements confirming toxic exposure at duty stations.`,
-      ratingRange: cond.includes('sinus') || cond.includes('rhinitis') ? '10-30%'
-        : cond.includes('asthma') || cond.includes('copd') ? '10-60%'
-        : cond.includes('hypertension') ? '10-20%' : undefined,
+      nextAction: `1. Review this finding with your accredited VSO. 2. If applicable, file a PACT Act presumptive claim at va.gov/pact. 3. Request a nexus letter from your treating provider linking ${condition} to deployment exposure. 4. Gather buddy statements confirming toxic exposure at duty stations.`,
     };
   }
 
   if (category === 'Mental Health') {
     return {
-      context: `${condition} documented in your VA medical records. ${sectionNote} Mental health conditions are commonly service-connected, especially when linked to combat, MST, or deployment stressors.`,
+      context: `${condition} documented in your VA medical records. ${sectionNote} Mental health conditions are commonly service-connected, especially when linked to combat, MST, or deployment stressors. Rated under 38 CFR diagnostic codes for mental disorders — discuss expected rating with your VSO.`,
       claimType: 'Primary Service-Connected',
-      nextAction: `1. Review this finding with your accredited VSO. 2. File a service-connection claim for ${condition} at va.gov/disability. 3. Request a C&P exam emphasizing occupational and social impairment. 4. Prepare a personal statement describing the stressor events and current symptoms.`,
-      ratingRange: cond.includes('ptsd') ? '30-70%' : cond.includes('anxiety') || cond.includes('depression') ? '10-50%' : '10-70%',
+      nextAction: `1. Review this finding with your accredited VSO. 2. File a service-connection claim for ${condition} at va.gov/disability. 3. Request a C&P exam emphasizing occupational and social impairment. 4. Prepare a personal statement describing stressor events and current symptoms.`,
     };
   }
 
   if (category === 'Hearing') {
     return {
-      context: `${condition} documented in your VA records. ${sectionNote} Hearing conditions are among the most commonly service-connected disabilities, especially for veterans with combat or heavy equipment exposure.`,
+      context: `${condition} documented in your VA records. ${sectionNote} Hearing conditions are among the most commonly service-connected disabilities, especially for veterans with combat or heavy equipment noise exposure. Discuss DC code and expected rating with your VSO.`,
       claimType: 'Primary Service-Connected',
       nextAction: `1. Review this finding with your accredited VSO. 2. File a service-connection claim for ${condition} at va.gov/disability. 3. Request an audiology C&P exam. 4. Submit a buddy statement describing noise exposure during service.`,
-      ratingRange: cond.includes('tinnitus') ? '10%' : '0-50%',
     };
   }
 
   if (category === 'Musculoskeletal') {
     return {
-      context: `${condition} documented in your VA records. ${sectionNote} Musculoskeletal conditions can be claimed as primary service-connected (if originating in service) or secondary to other service-connected conditions.`,
+      context: `${condition} documented in your VA records. ${sectionNote} Musculoskeletal conditions can be claimed as primary service-connected (if originating in service) or secondary to other service-connected conditions. Discuss DC code and expected rating with your VSO.`,
       claimType: 'Primary Service-Connected',
       nextAction: `1. Review this finding with your accredited VSO. 2. File a service-connection claim for ${condition} at va.gov/disability. 3. Request a musculoskeletal DBQ from your treating provider. 4. Document any in-service injury or aggravation with service records or buddy statements.`,
-      ratingRange: cond.includes('radiculop') ? '10-40%' : '10-20%',
     };
   }
 
   if (category === 'Sleep Disorders') {
     return {
-      context: `${condition} documented in your VA records. ${sectionNote} Sleep disorders are frequently rated as secondary to PTSD, TBI, or other service-connected conditions.`,
+      context: `${condition} documented in your VA records. ${sectionNote} Sleep disorders are frequently claimed as secondary to PTSD, TBI, or other service-connected conditions. Discuss DC code and expected rating with your VSO.`,
       claimType: 'Secondary',
       nextAction: `1. Review this finding with your accredited VSO. 2. If already service-connected for PTSD or TBI, file ${condition} as a secondary claim. 3. Request a sleep study DBQ from your provider. 4. Obtain a nexus letter linking sleep issues to your service-connected condition.`,
-      ratingRange: '0-50%',
     };
   }
 
   return {
-    context: `${condition} documented in your VA medical records. ${sectionNote} This finding may support a new or existing VA disability claim. Discuss with your accredited VSO for a full assessment of claim potential.`,
+    context: `${condition} documented in your VA medical records. ${sectionNote} This finding may support a new or existing VA disability claim. Discuss with your accredited VSO for full assessment of claim potential and applicable DC code.`,
     claimType: 'Primary Service-Connected',
     nextAction: `1. Review this finding with your accredited VSO. 2. Determine if ${condition} is eligible for service-connection (primary, secondary, or presumptive). 3. Request appropriate medical documentation from your treating provider. 4. File at va.gov/disability with supporting evidence.`,
   };
@@ -734,11 +711,53 @@ function keywordFlagsToFlaggedItems(flags: KeywordFlag[]): FlaggedItem[] {
       dateFound: f.dateFound,
       pageNumber: f.pageNumber ? String(f.pageNumber) : undefined,
       sectionFound: f.sectionFound,
-      ratingRange: interim.ratingRange,
       suggestedClaimCategory: category,
       confidence: f.confidence,
     };
   });
+}
+
+// ─── Phase 2b Analysis Merge ─────────────────────────────────────────────────
+
+function mergeAnalysis(rawFlags: FlaggedItem[], analysisOutput: string): FlaggedItem[] {
+  try {
+    const cleaned = analysisOutput
+      .replace(/^```(?:json)?\s*/gm, '')
+      .replace(/```\s*$/gm, '')
+      .trim();
+    const jsonMatch = cleaned.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) return [];
+
+    const analysis: Array<{
+      condition: string;
+      context?: string;
+      nextAction?: string;
+      claimType?: string;
+      shouldExclude?: boolean;
+    }> = JSON.parse(jsonMatch[0]);
+
+    const analysisMap = new Map<string, (typeof analysis)[0]>();
+    for (const a of analysis) {
+      if (a.condition) analysisMap.set(a.condition.toLowerCase().trim(), a);
+    }
+
+    return rawFlags
+      .map(flag => {
+        const enrichment = analysisMap.get(flag.label.toLowerCase().trim());
+        if (!enrichment) return flag;
+        if (enrichment.shouldExclude) return null;
+        return {
+          ...flag,
+          context: enrichment.context || flag.context,
+          nextAction: enrichment.nextAction || flag.nextAction,
+          claimType: enrichment.claimType || flag.claimType,
+        };
+      })
+      .filter((f): f is FlaggedItem => f !== null);
+  } catch (err) {
+    console.warn('[MedicalDetective] Analysis merge failed:', (err as Error).message);
+    return [];
+  }
 }
 
 // ─── Deduplication + PACT Act Cross-Ref ──────────────────────────────────────
@@ -925,23 +944,50 @@ async function callGrokAPIStreaming(
   }
 }
 
-async function synthesizeWithModel(
-  model: string,
+async function synthesizeExtraction(
   filteredText: string,
   fileNames: string,
   onProgress?: (tokenCount: number, maxTokens: number) => void,
 ): Promise<string> {
-  const label = model.includes('fast') ? 'Grok-4.1-fast synthesis' : 'Grok-4 synthesis';
   return callGrokAPIStreaming(
-    model,
+    MODEL_EXTRACT,
     [
-      { role: 'system', content: SYNTHESIS_PROMPT },
+      { role: 'system', content: EXTRACTION_PROMPT },
       { role: 'user', content: `Veteran's documents: "${fileNames}"\n\nPre-filtered medical record excerpts (high-signal paragraphs only):\n\n${filteredText}` },
     ],
     SYNTHESIS_TIMEOUT_MS,
     IDLE_TIMEOUT_MS,
-    label,
-    4_000,
+    'Extraction (fast)',
+    3_000,
+    onProgress,
+  );
+}
+
+async function synthesizeAnalysis(
+  rawFlags: FlaggedItem[],
+  onProgress?: (tokenCount: number, maxTokens: number) => void,
+  model: string = MODEL_REASON,
+): Promise<string> {
+  const flagsSummary = rawFlags.map(f => ({
+    condition: f.label,
+    excerpt: f.excerpt,
+    page: f.pageNumber,
+    sectionFound: f.sectionFound,
+    date: f.dateFound,
+    doctorName: f.doctorName,
+    claimType: f.claimType,
+  }));
+
+  return callGrokAPIStreaming(
+    model,
+    [
+      { role: 'system', content: ANALYSIS_PROMPT },
+      { role: 'user', content: JSON.stringify(flagsSummary) },
+    ],
+    SYNTHESIS_TIMEOUT_MS,
+    IDLE_TIMEOUT_MS,
+    model.includes('reasoning') ? 'Analysis (reasoning)' : 'Analysis (fallback)',
+    3_000,
     onProgress,
   );
 }
@@ -974,20 +1020,36 @@ export async function POST(request: NextRequest) {
             ? retryFilteredText.substring(0, RETRY_CHAR_CAP)
             : retryFilteredText;
 
-          emit({ type: 'progress', message: 'Retrying with focused scope...', percent: 30, phase: 'synthesis' });
+          emit({ type: 'progress', message: 'Retrying — Phase 2a: Extracting conditions...', percent: 30, phase: 'extraction' });
 
           try {
-            const output = await synthesizeWithModel(MODEL_FAST, textForSynthesis, retryFileNames, (tc, mt) => {
-              const pct = 35 + Math.round((tc / mt) * 55);
-              emit({ type: 'progress', message: `Deep Synthesis — ${tc} tokens received...`, percent: Math.min(pct, 92), phase: 'synthesis' });
+            const extractOutput = await synthesizeExtraction(textForSynthesis, retryFileNames, (tc, mt) => {
+              const pct = 30 + Math.round((tc / mt) * 30);
+              emit({ type: 'progress', message: `Phase 2a: Extracting — ${tc} tokens...`, percent: Math.min(pct, 60), phase: 'extraction' });
             });
-            const flags = addPactActCrossRef(deduplicateFlags(output ? parseSynthesisOutput(output) : []));
-            emit({ type: 'progress', message: `Complete — ${flags.length} flag(s)`, percent: 95, phase: 'synthesis_done' });
-            emit({ type: 'complete', report: buildReport(flags, 1, Date.now() - startTime, MODEL_FAST, retrySynopsis), percent: 100 });
+            let flags = extractOutput ? parseSynthesisOutput(extractOutput) : [];
+
+            if (flags.length > 0) {
+              emit({ type: 'progress', message: `Phase 2b: Analyzing ${flags.length} findings...`, percent: 65, phase: 'analysis' });
+              try {
+                const analysisOutput = await synthesizeAnalysis(flags, (tc, mt) => {
+                  const pct = 65 + Math.round((tc / mt) * 25);
+                  emit({ type: 'progress', message: `Phase 2b: Reasoning — ${tc} tokens...`, percent: Math.min(pct, 90), phase: 'analysis' });
+                });
+                if (analysisOutput) {
+                  const merged = mergeAnalysis(flags, analysisOutput);
+                  if (merged.length > 0) flags = merged;
+                }
+              } catch { /* analysis failed — use raw extraction flags */ }
+            }
+
+            const finalFlags = addPactActCrossRef(deduplicateFlags(flags));
+            emit({ type: 'progress', message: `Complete — ${finalFlags.length} flag(s)`, percent: 95, phase: 'synthesis_done' });
+            emit({ type: 'complete', report: buildReport(finalFlags, 1, Date.now() - startTime, `${MODEL_EXTRACT} + ${MODEL_REASON}`, retrySynopsis), percent: 100 });
           } catch (retryErr) {
             if ((retryErr as Error).name === 'GrokTimeoutError') {
               const interim = addPactActCrossRef(deduplicateFlags(keywordFlagsToFlaggedItems(retryKeywordFlags)));
-              emit({ type: 'complete', report: buildReport(interim, 1, Date.now() - startTime, 'keyword pre-filter', retrySynopsis, true, 'Deep scan timed out — showing keyword flags. Click Retry to try again.'), percent: 100 });
+              emit({ type: 'complete', report: buildReport(interim, 1, Date.now() - startTime, 'keyword pre-filter', retrySynopsis, true, 'Extraction timed out — showing keyword flags. Click Retry to try again.'), percent: 100 });
             } else { throw retryErr; }
           }
           try { controller.close(); } catch { /* already closed */ }
@@ -1076,61 +1138,88 @@ export async function POST(request: NextRequest) {
           fileNames: files.map(f => f.name).join(', '),
         });
 
-        // ═══ PHASE 2: Streaming Grok-4 Deep Synthesis — up to 3 attempts ═══
-        let finalFlags: FlaggedItem[] = [];
+        // ═══ PHASE 2a: Extraction (grok-4-1-fast-non-reasoning) ═══
+        let rawFlags: FlaggedItem[] = [];
+        let extractionSucceeded = false;
         const fileNames = files.map(f => f.name).join(', ');
-        let synthesisSucceeded = false;
 
         if (allFilteredText.length > 50) {
-          for (let attempt = 1; attempt <= MAX_SYNTHESIS_ATTEMPTS; attempt++) {
-            const isRetry = attempt > 1;
-            const useDeepModel = attempt === MAX_SYNTHESIS_ATTEMPTS;
-            const model = useDeepModel ? MODEL_DEEP : MODEL_FAST;
-            const modelLabel = useDeepModel ? 'Grok-4 (deep)' : 'Grok-4.1 Fast';
-            const textForAttempt = isRetry
+          for (let attempt = 1; attempt <= 2; attempt++) {
+            const textForAttempt = attempt > 1
               ? allFilteredText.substring(0, RETRY_CHAR_CAP)
               : allFilteredText;
-            const pctBase = isRetry ? 45 + (attempt - 2) * 15 : 35;
 
             emit({
               type: 'progress',
-              message: isRetry
-                ? `Phase 2: Attempt ${attempt}/${MAX_SYNTHESIS_ATTEMPTS} — ${modelLabel}...`
-                : `Phase 2: ${modelLabel} analyzing ${allKeptParagraphs} paragraphs (~${filteredTokenEstimate} tokens)...`,
-              percent: pctBase,
-              phase: 'synthesis',
+              message: attempt === 1
+                ? `Phase 2a: Extracting conditions (~${filteredTokenEstimate} tokens)...`
+                : 'Phase 2a: Retry extraction with focused scope...',
+              percent: attempt === 1 ? 30 : 42,
+              phase: 'extraction',
             });
 
             try {
-              const output = await synthesizeWithModel(model, textForAttempt, fileNames, (tc, mt) => {
-                const pct = pctBase + Math.round((tc / mt) * (isRetry ? 30 : 50));
-                emit({ type: 'progress', message: `Phase 2: ${modelLabel} — ${tc} tokens received...`, percent: Math.min(pct, 90), phase: 'synthesis' });
+              const output = await synthesizeExtraction(textForAttempt, fileNames, (tc, mt) => {
+                const pct = 30 + Math.round((tc / mt) * 25);
+                emit({ type: 'progress', message: `Phase 2a: Extracting — ${tc} tokens...`, percent: Math.min(pct, 55), phase: 'extraction' });
               });
 
               if (output) {
                 const flags = parseSynthesisOutput(output);
                 if (flags.length > 0) {
-                  finalFlags = flags;
-                  synthesisSucceeded = true;
+                  rawFlags = flags;
+                  extractionSucceeded = true;
                   break;
                 }
-                if (output.trim() === '[]' || output.length < 100) {
-                  synthesisSucceeded = true;
+                if (output.trim() === '[]' || output.length < 50) {
+                  extractionSucceeded = true;
                   break;
                 }
-                console.warn(`[MedicalDetective] Attempt ${attempt}/${MAX_SYNTHESIS_ATTEMPTS}: format error — ${output.length} chars → 0 flags`);
+                console.warn(`[MedicalDetective] Extraction attempt ${attempt}: format error — ${output.length} chars → 0 flags`);
               }
             } catch (err) {
               if ((err as Error).name === 'GrokTimeoutError') {
-                console.warn(`[MedicalDetective] Attempt ${attempt}/${MAX_SYNTHESIS_ATTEMPTS} timed out`);
-              } else {
-                throw err;
-              }
+                console.warn(`[MedicalDetective] Extraction attempt ${attempt} timed out`);
+              } else { throw err; }
             }
           }
         }
 
-        if (!synthesisSucceeded && finalFlags.length === 0) {
+        // ═══ PHASE 2b: Analysis (grok-4-1-fast-reasoning) ═══
+        let finalFlags: FlaggedItem[] = [];
+
+        if (extractionSucceeded && rawFlags.length > 0) {
+          emit({ type: 'progress', message: `Phase 2b: Analyzing ${rawFlags.length} findings for claim pathways...`, percent: 60, phase: 'analysis' });
+
+          const analysisModels = [MODEL_REASON, MODEL_FALLBACK];
+          for (let attempt = 0; attempt < analysisModels.length; attempt++) {
+            try {
+              const analysisOutput = await synthesizeAnalysis(rawFlags, (tc, mt) => {
+                const pct = 60 + Math.round((tc / mt) * 30);
+                emit({ type: 'progress', message: `Phase 2b: Reasoning — ${tc} tokens...`, percent: Math.min(pct, 90), phase: 'analysis' });
+              }, analysisModels[attempt]);
+
+              if (analysisOutput) {
+                const merged = mergeAnalysis(rawFlags, analysisOutput);
+                if (merged.length > 0) {
+                  finalFlags = merged;
+                  break;
+                }
+              }
+            } catch (err) {
+              if ((err as Error).name === 'GrokTimeoutError') {
+                console.warn(`[MedicalDetective] Analysis attempt ${attempt + 1} timed out (${analysisModels[attempt]})`);
+              } else { throw err; }
+            }
+          }
+
+          if (finalFlags.length === 0) {
+            finalFlags = rawFlags.map(f => {
+              const interim = generateInterimContext(f.label, f.category, f.sectionFound, f.excerpt);
+              return { ...f, context: interim.context, nextAction: interim.nextAction, claimType: interim.claimType };
+            });
+          }
+        } else if (!extractionSucceeded) {
           if (allKeywordFlags.length > 0) {
             finalFlags = keywordFlagsToFlaggedItems(allKeywordFlags);
           }
@@ -1139,8 +1228,8 @@ export async function POST(request: NextRequest) {
             type: 'complete',
             report: buildReport(
               interim, files.length, Date.now() - startTime,
-              'keyword pre-filter (Deep Analysis Paused)', synopsis, true,
-              `Deep scan completed ${MAX_SYNTHESIS_ATTEMPTS} attempts — showing keyword flags. Click "Retry" for another attempt.`
+              'keyword pre-filter (Extraction Paused)', synopsis, true,
+              'Extraction timed out — showing keyword flags. Click "Retry" for another attempt.'
             ),
             percent: 100,
           });
@@ -1148,13 +1237,13 @@ export async function POST(request: NextRequest) {
           return;
         }
 
-        emit({ type: 'progress', message: `Phase 2 complete — ${finalFlags.length} verified flag(s)`, percent: 95, phase: 'synthesis_done' });
+        emit({ type: 'progress', message: `Complete — ${finalFlags.length} verified flag(s)`, percent: 95, phase: 'synthesis_done' });
 
         const report = buildReport(
           addPactActCrossRef(deduplicateFlags(finalFlags)),
           files.length,
           Date.now() - startTime,
-          MODEL_FAST,
+          `${MODEL_EXTRACT} + ${MODEL_REASON}`,
           synopsis,
         );
         emit({ type: 'complete', report, percent: 100 });

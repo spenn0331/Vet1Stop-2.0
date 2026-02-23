@@ -36,7 +36,6 @@ interface FlaggedItem {
   pageNumber?: string;
   sectionFound?: string;
   doctorName?: string;
-  ratingRange?: string;
   suggestedClaimCategory: string;
   confidence: 'high' | 'medium' | 'low';
 }
@@ -476,13 +475,11 @@ export default function MedicalDetectivePanel() {
             <span class="b c-${item.confidence}">${item.confidence.toUpperCase()}</span>
             <span class="b cat">${item.category}</span>
             ${item.claimType ? `<span class="b ct">${item.claimType}</span>` : ''}
-            ${item.ratingRange ? `<span class="b rt">Est. ${item.ratingRange}</span>` : ''}
           </div>
         </div>
         ${meta ? `<div class="fm">${meta}</div>` : ''}
         ${item.excerpt ? `<div class="ex"><div class="el">HIGHLIGHTED EXCERPT</div><blockquote>&ldquo;${item.excerpt}&rdquo;</blockquote></div>` : ''}
         ${isDeep(item.context) ? `<div class="cx"><div class="cl">WHY THIS MATTERS FOR YOUR CLAIM</div><p>${item.context}</p></div>` : ''}
-        ${item.ratingRange ? `<div class="rn"><strong>Estimated Rating Range:</strong> ${item.ratingRange} <em>(Final ratings determined solely by the VA)</em></div>` : ''}
         ${item.nextAction ? `<div class="ax"><div class="al">RECOMMENDED NEXT STEPS</div><p>${item.nextAction}</p></div>` : ''}
       </div>`;
     }).join('');
@@ -511,7 +508,6 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;color:#1F2937;line-height:1.55;fon
 .b{padding:1px 7px;border-radius:3px;font-size:8.5px;font-weight:700;white-space:nowrap}
 .c-high{background:#DBEAFE;color:#1E40AF}.c-medium{background:#FEF3C7;color:#92400E}.c-low{background:#F3F4F6;color:#6B7280}
 .b.cat{background:#F3F4F6;color:#4B5563;font-weight:500}.b.ct{background:#DBEAFE;color:#1E40AF;font-weight:600}
-.b.rt{background:#D1FAE5;color:#065F46;font-weight:600}
 .fm{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
 .mp{padding:1px 6px;border-radius:3px;font-size:9px;font-weight:500}
 .mp.sec{background:#F3F4F6;color:#374151}.mp.pg{background:#EDE9FE;color:#6D28D9}
@@ -522,8 +518,6 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;color:#1F2937;line-height:1.55;fon
 .cx{background:#EFF6FF;border-left:3px solid #3B82F6;border-radius:0 4px 4px 0;padding:8px 12px;margin-bottom:8px}
 .cl{font-size:8.5px;font-weight:700;color:#1E40AF;margin-bottom:3px;letter-spacing:.5px}
 .cx p{font-size:10px;color:#1E3A5F;line-height:1.5}
-.rn{font-size:9px;color:#065F46;background:#ECFDF5;padding:5px 10px;border-radius:4px;margin-bottom:8px}
-.rn em{color:#6B7280;font-size:8.5px}
 .ax{background:#F0FDF4;border-left:3px solid #16A34A;border-radius:0 4px 4px 0;padding:8px 12px}
 .al{font-size:8.5px;font-weight:700;color:#166534;margin-bottom:3px;letter-spacing:.5px}
 .ax p{font-size:10px;color:#14532D;line-height:1.5}
@@ -705,9 +699,9 @@ ${flagRows || '<p style="color:#6B7280;font-size:11px">No flags identified.</p>'
 
           {/* Phase indicator — v4.2: 2 phases */}
           <div className="flex justify-center gap-2 mb-4">
-            {['filter', 'synthesis'].map((phase, i) => {
-              const labels = ['Phase 1: Live Flags', 'Phase 2: Deep Synthesis'];
-              const phaseOrder = ['filter', 'synthesis'];
+            {['filter', 'extraction', 'analysis'].map((phase, i) => {
+              const labels = ['Phase 1: Pre-Filter', 'Phase 2a: Extraction', 'Phase 2b: Analysis'];
+              const phaseOrder = ['filter', 'extraction', 'analysis'];
               const currentIdx = phaseOrder.indexOf(currentPhase.replace('_done', ''));
               const isDone = i < currentIdx || currentPhase.includes('_done') && i <= currentIdx;
               const isActive = currentPhase.startsWith(phase);
@@ -797,7 +791,7 @@ ${flagRows || '<p style="color:#6B7280;font-size:11px">No flags identified.</p>'
           )}
 
           <p className="text-xs text-gray-400 text-center mt-2">
-            2-phase pipeline: Live Flags (85 keywords + section headers) → Streaming Deep Synthesis (70s + auto-retry).
+            3-phase pipeline: Pre-Filter (keywords + sections) → Extraction (fast model) → Analysis (reasoning model).
           </p>
           <p className="text-xs text-gray-400 text-center mt-1">
             Files are processed in memory only — never stored permanently.
@@ -953,9 +947,6 @@ ${flagRows || '<p style="color:#6B7280;font-size:11px">No flags identified.</p>'
                       }`}>{item.confidence.toUpperCase()}</span>
                       {item.claimType && (
                         <span className="text-xs px-2 py-0.5 rounded bg-[#1A2C5B]/10 text-[#1A2C5B] font-medium">{item.claimType}</span>
-                      )}
-                      {item.ratingRange && (
-                        <span className="text-xs px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-medium">Est. {item.ratingRange}</span>
                       )}
                     </div>
                     <div className="flex flex-wrap items-center gap-1.5 text-xs text-gray-500 mb-3">
