@@ -79,7 +79,7 @@ const MAX_SYNTHESIS_ATTEMPTS = 3;
 const MIN_PARAGRAPH_LENGTH = 30;
 const MIN_KEYWORD_MATCHES_FLAG = 2;
 
-const MODEL_FAST = 'grok-3-mini-beta';
+const MODEL_FAST = 'grok-4-1-fast-non-reasoning';
 const MODEL_DEEP = 'grok-4-0709';
 
 const GUARANTEED_SECTIONS = [
@@ -931,7 +931,7 @@ async function synthesizeWithModel(
   fileNames: string,
   onProgress?: (tokenCount: number, maxTokens: number) => void,
 ): Promise<string> {
-  const label = model.includes('mini') ? 'Grok-3-mini synthesis' : 'Grok-4 synthesis';
+  const label = model.includes('fast') ? 'Grok-4.1-fast synthesis' : 'Grok-4 synthesis';
   return callGrokAPIStreaming(
     model,
     [
@@ -1086,7 +1086,7 @@ export async function POST(request: NextRequest) {
             const isRetry = attempt > 1;
             const useDeepModel = attempt === MAX_SYNTHESIS_ATTEMPTS;
             const model = useDeepModel ? MODEL_DEEP : MODEL_FAST;
-            const modelLabel = useDeepModel ? 'Grok-4 (deep)' : 'Grok-3-mini (fast)';
+            const modelLabel = useDeepModel ? 'Grok-4 (deep)' : 'Grok-4.1 Fast';
             const textForAttempt = isRetry
               ? allFilteredText.substring(0, RETRY_CHAR_CAP)
               : allFilteredText;
