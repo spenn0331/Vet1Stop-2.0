@@ -69,12 +69,12 @@ interface DetectiveReport {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const FILTERED_TEXT_CAP = 7_000;
-const MAX_PARAGRAPHS_TO_SEND = 40;
+const FILTERED_TEXT_CAP = 5_000;
+const MAX_PARAGRAPHS_TO_SEND = 25;
 const SECTION_GUARANTEE_COUNT = 3;
-const SYNTHESIS_TIMEOUT_MS = 70_000;
-const IDLE_TIMEOUT_MS = 30_000;
-const RETRY_CHAR_CAP = 4_000;
+const SYNTHESIS_TIMEOUT_MS = 90_000;
+const IDLE_TIMEOUT_MS = 45_000;
+const RETRY_CHAR_CAP = 2_500;
 const MAX_SYNTHESIS_ATTEMPTS = 3;
 const MIN_PARAGRAPH_LENGTH = 30;
 const MIN_KEYWORD_MATCHES_FLAG = 2;
@@ -653,21 +653,91 @@ function parseSynthesisOutput(rawText: string): FlaggedItem[] {
 
 // ─── Keyword Flags → FlaggedItems (interim fallback) ─────────────────────────
 
-function keywordFlagsToFlaggedItems(flags: KeywordFlag[]): FlaggedItem[] {
-  return flags.map((f, i) => ({
-    flagId: `kw_${f.condition.toLowerCase().replace(/[^a-z0-9]/g, '_').substring(0, 25)}_${i}`,
-    label: f.condition,
-    category: mapToCategory(f.condition),
-    excerpt: f.excerpt,
-    context: `Keyword-detected in your records. Review with your VSO for full assessment.`,
+function generateInterimContext(condition: string, category: string, section?: string, excerpt?: string): { context: string; claimType: string; nextAction: string; ratingRange?: string } {
+  const cond = condition.toLowerCase();
+  const pactRegex = new RegExp(PACT_ACT_CONDITIONS.join('|'), 'i');
+  const isPact = pactRegex.test(cond) || pactRegex.test(excerpt || '');
+  const inAssessment = section?.toLowerCase().includes('assessment') || section?.toLowerCase().includes('problem');
+  const inHPI = section?.toLowerCase().includes('hpi');
+
+  const sectionNote = inAssessment ? 'Found in Assessment/Problem List — this is a formal clinical finding.'
+    : inHPI ? 'Found in History of Present Illness — documents ongoing symptoms.'
+    : section ? `Found in ${section} section of clinical notes.` : '';
+
+  if (isPact) {
+    return {
+      context: `${condition} may qualify as a PACT Act presumptive condition for veterans with burn pit, Agent Orange, or Gulf War toxic exposure. ${sectionNote} Review with your VSO to determine if a presumptive claim is appropriate.`,
+      claimType: 'PACT Act Presumptive',
+      nextAction: `1. Review this finding with your accredited VSO. 2. If applicable, file a PACT Act presumptive claim at va.gov/pact. 3. Request a nexus letter from your treating provider linking ${condition} to deployment exposure. 4. Gather any buddy statements confirming toxic exposure at duty stations.`,
+      ratingRange: cond.includes('sinus') || cond.includes('rhinitis') ? '10-30%'
+        : cond.includes('asthma') || cond.includes('copd') ? '10-60%'
+        : cond.includes('hypertension') ? '10-20%' : undefined,
+    };
+  }
+
+  if (category === 'Mental Health') {
+    return {
+      context: `${condition} documented in your VA medical records. ${sectionNote} Mental health conditions are commonly service-connected, especially when linked to combat, MST, or deployment stressors.`,
+      claimType: 'Primary Service-Connected',
+      nextAction: `1. Review this finding with your accredited VSO. 2. File a service-connection claim for ${condition} at va.gov/disability. 3. Request a C&P exam emphasizing occupational and social impairment. 4. Prepare a personal statement describing the stressor events and current symptoms.`,
+      ratingRange: cond.includes('ptsd') ? '30-70%' : cond.includes('anxiety') || cond.includes('depression') ? '10-50%' : '10-70%',
+    };
+  }
+
+  if (category === 'Hearing') {
+    return {
+      context: `${condition} documented in your VA records. ${sectionNote} Hearing conditions are among the most commonly service-connected disabilities, especially for veterans with combat or heavy equipment exposure.`,
+      claimType: 'Primary Service-Connected',
+      nextAction: `1. Review this finding with your accredited VSO. 2. File a service-connection claim for ${condition} at va.gov/disability. 3. Request an audiology C&P exam. 4. Submit a buddy statement describing noise exposure during service.`,
+      ratingRange: cond.includes('tinnitus') ? '10%' : '0-50%',
+    };
+  }
+
+  if (category === 'Musculoskeletal') {
+    return {
+      context: `${condition} documented in your VA records. ${sectionNote} Musculoskeletal conditions can be claimed as primary service-connected (if originating in service) or secondary to other service-connected conditions.`,
+      claimType: 'Primary Service-Connected',
+      nextAction: `1. Review this finding with your accredited VSO. 2. File a service-connection claim for ${condition} at va.gov/disability. 3. Request a musculoskeletal DBQ from your treating provider. 4. Document any in-service injury or aggravation with service records or buddy statements.`,
+      ratingRange: cond.includes('radiculop') ? '10-40%' : '10-20%',
+    };
+  }
+
+  if (category === 'Sleep Disorders') {
+    return {
+      context: `${condition} documented in your VA records. ${sectionNote} Sleep disorders are frequently rated as secondary to PTSD, TBI, or other service-connected conditions.`,
+      claimType: 'Secondary',
+      nextAction: `1. Review this finding with your accredited VSO. 2. If already service-connected for PTSD or TBI, file ${condition} as a secondary claim. 3. Request a sleep study DBQ from your provider. 4. Obtain a nexus letter linking sleep issues to your service-connected condition.`,
+      ratingRange: '0-50%',
+    };
+  }
+
+  return {
+    context: `${condition} documented in your VA medical records. ${sectionNote} This finding may support a new or existing VA disability claim. Discuss with your accredited VSO for a full assessment of claim potential.`,
     claimType: 'Primary Service-Connected',
-    nextAction: `Discuss ${f.condition} with your VSO to determine if a claim or increase is warranted.`,
-    dateFound: f.dateFound,
-    pageNumber: f.pageNumber ? String(f.pageNumber) : undefined,
-    sectionFound: f.sectionFound,
-    suggestedClaimCategory: mapToCategory(f.condition),
-    confidence: f.confidence,
-  }));
+    nextAction: `1. Review this finding with your accredited VSO. 2. Determine if ${condition} is eligible for service-connection (primary, secondary, or presumptive). 3. Request appropriate medical documentation from your treating provider. 4. File at va.gov/disability with supporting evidence.`,
+  };
+}
+
+function keywordFlagsToFlaggedItems(flags: KeywordFlag[]): FlaggedItem[] {
+  return flags.map((f, i) => {
+    const category = mapToCategory(f.condition);
+    const interim = generateInterimContext(f.condition, category, f.sectionFound, f.excerpt);
+    return {
+      flagId: `kw_${f.condition.toLowerCase().replace(/[^a-z0-9]/g, '_').substring(0, 25)}_${i}`,
+      label: f.condition,
+      category,
+      excerpt: f.excerpt,
+      context: interim.context,
+      claimType: interim.claimType,
+      nextAction: interim.nextAction,
+      dateFound: f.dateFound,
+      pageNumber: f.pageNumber ? String(f.pageNumber) : undefined,
+      sectionFound: f.sectionFound,
+      ratingRange: interim.ratingRange,
+      suggestedClaimCategory: category,
+      confidence: f.confidence,
+    };
+  });
 }
 
 // ─── Deduplication + PACT Act Cross-Ref ──────────────────────────────────────
@@ -868,7 +938,7 @@ async function synthesizeWithGrok4(
     SYNTHESIS_TIMEOUT_MS,
     IDLE_TIMEOUT_MS,
     'Grok-4 synthesis',
-    3_000,
+    4_000,
     onProgress,
   );
 }
