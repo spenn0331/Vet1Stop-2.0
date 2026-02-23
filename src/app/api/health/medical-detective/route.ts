@@ -79,7 +79,8 @@ const MAX_SYNTHESIS_ATTEMPTS = 3;
 const MIN_PARAGRAPH_LENGTH = 30;
 const MIN_KEYWORD_MATCHES_FLAG = 2;
 
-const MODEL_SYNTHESIS = 'grok-4-0709';
+const MODEL_FAST = 'grok-3-mini-beta';
+const MODEL_DEEP = 'grok-4-0709';
 
 const GUARANTEED_SECTIONS = [
   'assessment', 'problem list', 'active problems', 'active diagnoses',
@@ -924,20 +925,22 @@ async function callGrokAPIStreaming(
   }
 }
 
-async function synthesizeWithGrok4(
+async function synthesizeWithModel(
+  model: string,
   filteredText: string,
   fileNames: string,
   onProgress?: (tokenCount: number, maxTokens: number) => void,
 ): Promise<string> {
+  const label = model.includes('mini') ? 'Grok-3-mini synthesis' : 'Grok-4 synthesis';
   return callGrokAPIStreaming(
-    MODEL_SYNTHESIS,
+    model,
     [
       { role: 'system', content: SYNTHESIS_PROMPT },
       { role: 'user', content: `Veteran's documents: "${fileNames}"\n\nPre-filtered medical record excerpts (high-signal paragraphs only):\n\n${filteredText}` },
     ],
     SYNTHESIS_TIMEOUT_MS,
     IDLE_TIMEOUT_MS,
-    'Grok-4 synthesis',
+    label,
     4_000,
     onProgress,
   );
@@ -974,13 +977,13 @@ export async function POST(request: NextRequest) {
           emit({ type: 'progress', message: 'Retrying with focused scope...', percent: 30, phase: 'synthesis' });
 
           try {
-            const output = await synthesizeWithGrok4(textForSynthesis, retryFileNames, (tc, mt) => {
+            const output = await synthesizeWithModel(MODEL_FAST, textForSynthesis, retryFileNames, (tc, mt) => {
               const pct = 35 + Math.round((tc / mt) * 55);
               emit({ type: 'progress', message: `Deep Synthesis — ${tc} tokens received...`, percent: Math.min(pct, 92), phase: 'synthesis' });
             });
             const flags = addPactActCrossRef(deduplicateFlags(output ? parseSynthesisOutput(output) : []));
             emit({ type: 'progress', message: `Complete — ${flags.length} flag(s)`, percent: 95, phase: 'synthesis_done' });
-            emit({ type: 'complete', report: buildReport(flags, 1, Date.now() - startTime, MODEL_SYNTHESIS, retrySynopsis), percent: 100 });
+            emit({ type: 'complete', report: buildReport(flags, 1, Date.now() - startTime, MODEL_FAST, retrySynopsis), percent: 100 });
           } catch (retryErr) {
             if ((retryErr as Error).name === 'GrokTimeoutError') {
               const interim = addPactActCrossRef(deduplicateFlags(keywordFlagsToFlaggedItems(retryKeywordFlags)));
@@ -1081,6 +1084,9 @@ export async function POST(request: NextRequest) {
         if (allFilteredText.length > 50) {
           for (let attempt = 1; attempt <= MAX_SYNTHESIS_ATTEMPTS; attempt++) {
             const isRetry = attempt > 1;
+            const useDeepModel = attempt === MAX_SYNTHESIS_ATTEMPTS;
+            const model = useDeepModel ? MODEL_DEEP : MODEL_FAST;
+            const modelLabel = useDeepModel ? 'Grok-4 (deep)' : 'Grok-3-mini (fast)';
             const textForAttempt = isRetry
               ? allFilteredText.substring(0, RETRY_CHAR_CAP)
               : allFilteredText;
@@ -1089,16 +1095,16 @@ export async function POST(request: NextRequest) {
             emit({
               type: 'progress',
               message: isRetry
-                ? `Phase 2: Attempt ${attempt}/${MAX_SYNTHESIS_ATTEMPTS} — focused scope...`
-                : `Phase 2: ${MODEL_SYNTHESIS} analyzing ${allKeptParagraphs} paragraphs (~${filteredTokenEstimate} tokens)...`,
+                ? `Phase 2: Attempt ${attempt}/${MAX_SYNTHESIS_ATTEMPTS} — ${modelLabel}...`
+                : `Phase 2: ${modelLabel} analyzing ${allKeptParagraphs} paragraphs (~${filteredTokenEstimate} tokens)...`,
               percent: pctBase,
               phase: 'synthesis',
             });
 
             try {
-              const output = await synthesizeWithGrok4(textForAttempt, fileNames, (tc, mt) => {
+              const output = await synthesizeWithModel(model, textForAttempt, fileNames, (tc, mt) => {
                 const pct = pctBase + Math.round((tc / mt) * (isRetry ? 30 : 50));
-                emit({ type: 'progress', message: `Phase 2: Deep Synthesis — ${tc} tokens received...`, percent: Math.min(pct, 90), phase: 'synthesis' });
+                emit({ type: 'progress', message: `Phase 2: ${modelLabel} — ${tc} tokens received...`, percent: Math.min(pct, 90), phase: 'synthesis' });
               });
 
               if (output) {
@@ -1148,7 +1154,7 @@ export async function POST(request: NextRequest) {
           addPactActCrossRef(deduplicateFlags(finalFlags)),
           files.length,
           Date.now() - startTime,
-          MODEL_SYNTHESIS,
+          MODEL_FAST,
           synopsis,
         );
         emit({ type: 'complete', report, percent: 100 });
