@@ -263,6 +263,26 @@ function extractDateFromText(text: string): string | undefined {
   return undefined;
 }
 
+function extractProviderFromText(text: string): string | undefined {
+  // VA Blue Button formats: SIGNED BY: SMITH,JOHN M DO  or  AUTHOR: JONES,MARY PA-C  or  ATTENDING: DOE,JANE MD
+  // Also: Ordered by: SMITH,JOHN A or Provider: Dr. Smith
+  const bbProvider = text.match(/(?:SIGNED\s*BY|AUTHOR|ATTENDING|COSIGNED\s*BY|EXPECTED\s*COSIGNER|Ordered\s*by|Clinician)[:\s]+([A-Z][A-Z',.\-\s]{2,40}?)(?:\s+(?:MD|DO|PA|PA-C|NP|ARNP|RN|BSN|MSN|LCSW|PhD|PsyD|PharmD|DPM|OD|DDS|DMD)\b|\s*$)/im);
+  if (bbProvider) {
+    const raw = bbProvider[1].trim().replace(/,+$/, '');
+    // Convert "SMITH,JOHN M" to "Smith, John M"
+    if (raw.includes(',') && raw === raw.toUpperCase()) {
+      const parts = raw.split(',').map(p => p.trim());
+      const formatted = parts.map(p => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join(', ');
+      return formatted;
+    }
+    return raw;
+  }
+  // Standard format: Dr. John Smith, Dr. Smith
+  const drMatch = text.match(/(?:Dr\.?\s+)([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})/);
+  if (drMatch) return `Dr. ${drMatch[1]}`;
+  return undefined;
+}
+
 const NEGATIVE_CONTEXT_REGEX = /\b(?:no |absence of |denies |denied |negative for |without |(?:not |never )present|ruled out|no evidence of |no history of |no signs? of |no symptoms? of |does not have |patient denies )/i;
 
 function isNegativeContext(text: string, keyword: string): boolean {
@@ -290,7 +310,7 @@ function isScreeningFalsePositive(text: string, keyword: string): boolean {
 
 const EXTRACTION_PROMPT = `You are a medical record document extraction system. Extract all diagnosable conditions from medical records. Follow rules EXACTLY.
 
-Each paragraph is tagged like "[Page 45 | Assessment | Date: 2024-02-06] text..." showing page, clinical section, and the date of the note/entry. Use the Date from the tag when the text itself does not contain an explicit date. If no Date tag is present, output null for the date field.
+Each paragraph is tagged like "[Page 45 | Assessment | Date: 2024-02-06 | Provider: Smith, John] text..." showing page, clinical section, date of the note/entry, and the signing/authoring provider. Use the Date and Provider from the tag when the text itself does not contain them explicitly. If no Date or Provider tag is present, output null for those fields.
 
 EXTRACTION LAYERS (use all three):
 
@@ -438,47 +458,53 @@ function smartPreFilter(text: string): {
   detectedHeaders: string[];
 } {
   const rawLines = text.split(/\n/);
-  const paragraphs: { text: string; page: number; nearestDate: string | undefined }[] = [];
+  const paragraphs: { text: string; page: number; nearestDate: string | undefined; nearestProvider: string | undefined }[] = [];
   let currentGroup = '';
   let currentPage = 1;
   let groupPage = 1;
-  // Track the most recent date seen across ALL lines (even short/filtered ones)
-  // so date headers like "DATE OF NOTE: FEB 06, 2024@14:48" propagate to nearby conditions
+  // Track the most recent date and provider seen across ALL lines (even short/filtered ones)
+  // so headers like "DATE OF NOTE: FEB 06, 2024@14:48" and "SIGNED BY: SMITH,JOHN MD" propagate to nearby conditions
   let rollingDate: string | undefined = undefined;
   let groupDate: string | undefined = undefined;
+  let rollingProvider: string | undefined = undefined;
+  let groupProvider: string | undefined = undefined;
 
   for (const line of rawLines) {
     const trimmed = line.trim();
     const pageMarker = trimmed.match(/^<<<PAGE (\d+)>>>$/);
     if (pageMarker) {
-      if (currentGroup.length > 0) { paragraphs.push({ text: currentGroup.trim(), page: groupPage, nearestDate: groupDate }); currentGroup = ''; }
+      if (currentGroup.length > 0) { paragraphs.push({ text: currentGroup.trim(), page: groupPage, nearestDate: groupDate, nearestProvider: groupProvider }); currentGroup = ''; }
       currentPage = parseInt(pageMarker[1]);
       groupPage = currentPage;
       groupDate = rollingDate;
+      groupProvider = rollingProvider;
       continue;
     }
-    // Check every line for dates (even short ones that might get filtered as paragraphs)
+    // Check every line for dates and providers (even short ones that might get filtered as paragraphs)
     if (trimmed.length > 0) {
       const lineDate = extractDateFromText(trimmed);
       if (lineDate) rollingDate = lineDate;
+      const lineProvider = extractProviderFromText(trimmed);
+      if (lineProvider) rollingProvider = lineProvider;
     }
     if (trimmed.length === 0) {
-      if (currentGroup.length > 0) { paragraphs.push({ text: currentGroup.trim(), page: groupPage, nearestDate: groupDate }); currentGroup = ''; groupPage = currentPage; groupDate = rollingDate; }
+      if (currentGroup.length > 0) { paragraphs.push({ text: currentGroup.trim(), page: groupPage, nearestDate: groupDate, nearestProvider: groupProvider }); currentGroup = ''; groupPage = currentPage; groupDate = rollingDate; groupProvider = rollingProvider; }
       continue;
     }
-    if (currentGroup.length === 0) { groupPage = currentPage; groupDate = rollingDate; }
+    if (currentGroup.length === 0) { groupPage = currentPage; groupDate = rollingDate; groupProvider = rollingProvider; }
     if (currentGroup.length > 0 && trimmed.length < MIN_PARAGRAPH_LENGTH && currentGroup.length < MIN_PARAGRAPH_LENGTH) {
       currentGroup += ' ' + trimmed;
     } else if (currentGroup.length > 0 && currentGroup.length >= MIN_PARAGRAPH_LENGTH) {
-      paragraphs.push({ text: currentGroup.trim(), page: groupPage, nearestDate: groupDate });
+      paragraphs.push({ text: currentGroup.trim(), page: groupPage, nearestDate: groupDate, nearestProvider: groupProvider });
       currentGroup = trimmed;
       groupPage = currentPage;
       groupDate = rollingDate;
+      groupProvider = rollingProvider;
     } else {
       currentGroup += (currentGroup ? ' ' : '') + trimmed;
     }
   }
-  if (currentGroup.trim().length > 0) paragraphs.push({ text: currentGroup.trim(), page: groupPage, nearestDate: groupDate });
+  if (currentGroup.trim().length > 0) paragraphs.push({ text: currentGroup.trim(), page: groupPage, nearestDate: groupDate, nearestProvider: groupProvider });
 
   interface ScoredPara {
     text: string;
@@ -489,6 +515,7 @@ function smartPreFilter(text: string): {
     pageNumber: number;
     sectionName: string;
     nearestDate: string | undefined;
+    nearestProvider: string | undefined;
   }
 
   const scored: ScoredPara[] = [];
@@ -496,7 +523,7 @@ function smartPreFilter(text: string): {
   const detectedHeadersSet = new Set<string>();
   let currentSection = '';
 
-  for (const { text: para, page, nearestDate } of paragraphs) {
+  for (const { text: para, page, nearestDate, nearestProvider } of paragraphs) {
     const trimmed = para.trim();
     if (trimmed.length < MIN_PARAGRAPH_LENGTH) continue;
     if (NOISE_REGEX.test(trimmed)) continue;
@@ -529,9 +556,10 @@ function smartPreFilter(text: string): {
     }
 
     if (matchedKeywords.length >= 1 || isHeader) {
-      // Use date found directly in the paragraph text, or fall back to the nearest date from prior lines
+      // Use date/provider found directly in the paragraph text, or fall back to nearest from prior lines
       const inlineDate = extractDateFromText(trimmed);
-      scored.push({ text: trimmed, keywordCount: matchedKeywords.length, matchedKeywords, isHeader, sectionKey, pageNumber: page, sectionName: currentSection, nearestDate: inlineDate || nearestDate });
+      const inlineProvider = extractProviderFromText(trimmed);
+      scored.push({ text: trimmed, keywordCount: matchedKeywords.length, matchedKeywords, isHeader, sectionKey, pageNumber: page, sectionName: currentSection, nearestDate: inlineDate || nearestDate, nearestProvider: inlineProvider || nearestProvider });
     }
   }
 
@@ -567,7 +595,8 @@ function smartPreFilter(text: string): {
     if (totalChars >= FILTERED_TEXT_CAP) break;
     const sectionTag = sp.sectionName ? ` | ${sp.sectionName}` : '';
     const dateTag = sp.nearestDate ? ` | Date: ${sp.nearestDate}` : '';
-    const tagged = `[Page ${sp.pageNumber}${sectionTag}${dateTag}] ${sp.text}`;
+    const providerTag = sp.nearestProvider ? ` | Provider: ${sp.nearestProvider}` : '';
+    const tagged = `[Page ${sp.pageNumber}${sectionTag}${dateTag}${providerTag}] ${sp.text}`;
     const chunk = tagged.length + totalChars > FILTERED_TEXT_CAP
       ? tagged.substring(0, FILTERED_TEXT_CAP - totalChars)
       : tagged;
@@ -1135,11 +1164,15 @@ export async function POST(request: NextRequest) {
               emit({ type: 'progress', message: `Phase 2a: Extracting — ${tc} tokens...`, percent: Math.min(pct, 60), phase: 'extraction' });
             });
             let items = extractOutput ? parseExtractionOutput(extractOutput) : [];
-            // Post-extraction date fallback for retry path
+            // Post-extraction date/provider fallback for retry path
             for (const item of items) {
               if (!item.dateFound && item.excerpt) {
                 const fallbackDate = extractDateFromText(item.excerpt);
                 if (fallbackDate) item.dateFound = fallbackDate;
+              }
+              if (!item.provider && item.excerpt) {
+                const fallbackProvider = extractProviderFromText(item.excerpt);
+                if (fallbackProvider) item.provider = fallbackProvider;
               }
             }
             items = deduplicateItems(items);
@@ -1285,11 +1318,15 @@ export async function POST(request: NextRequest) {
 
               if (output) {
                 const items = parseExtractionOutput(output);
-                // Post-extraction date fallback: for items with null dates, try regex on excerpt
+                // Post-extraction fallback: for items with null dates/providers, try regex on excerpt
                 for (const item of items) {
                   if (!item.dateFound && item.excerpt) {
                     const fallbackDate = extractDateFromText(item.excerpt);
                     if (fallbackDate) item.dateFound = fallbackDate;
+                  }
+                  if (!item.provider && item.excerpt) {
+                    const fallbackProvider = extractProviderFromText(item.excerpt);
+                    if (fallbackProvider) item.provider = fallbackProvider;
                   }
                 }
                 if (items.length > 0) {

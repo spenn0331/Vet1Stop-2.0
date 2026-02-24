@@ -118,10 +118,10 @@ export default function RecordsReconPanel() {
   const [activeTab, setActiveTab] = useState<TabId>('dashboard');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [pdfKey, setPdfKey] = useState(0);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
-  const iframeRef = useRef<HTMLIFrameElement>(null);
 
   // Clean up PDF URL on unmount
   useEffect(() => {
@@ -177,12 +177,9 @@ export default function RecordsReconPanel() {
     if (!pdfUrl) return;
     // Use #page=N fragment — supported by Chrome/Edge/Firefox built-in PDF viewers
     const baseUrl = pdfUrl.split('#')[0];
-    const newUrl = `${baseUrl}#page=${pageNumber}`;
-    // Direct DOM manipulation forces the browser to navigate even for hash-only changes
-    if (iframeRef.current) {
-      iframeRef.current.src = newUrl;
-    }
-    setPdfUrl(newUrl);
+    setPdfUrl(`${baseUrl}#page=${pageNumber}`);
+    // Force iframe re-mount so the browser loads the PDF at the new page
+    setPdfKey(prev => prev + 1);
   }, [pdfUrl]);
 
   // ─── Clipboard ────────────────────────────────────────────────────────────
@@ -668,7 +665,7 @@ export default function RecordsReconPanel() {
               <span className="text-gray-500 text-xs">Click any page number to jump</span>
             </div>
             <iframe
-              ref={iframeRef}
+              key={pdfKey}
               src={pdfUrl}
               className="flex-1 w-full min-h-[400px] lg:min-h-0"
               title="PDF Viewer"
