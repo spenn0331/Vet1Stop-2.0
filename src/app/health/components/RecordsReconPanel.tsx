@@ -312,24 +312,24 @@ export default function RecordsReconPanel() {
 
   if (panelState === 'upload') {
     return (
-      <div className="bg-[#0A0F1A] rounded-xl border border-[#1E293B] p-6 space-y-4">
+      <div className="bg-white rounded-xl border border-blue-100 shadow-md p-6 space-y-4">
         <ReconDisclaimer />
 
         {/* Upload Zone */}
         <div
           className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-            isDragging ? 'border-green-400 bg-green-900/20' : 'border-[#1E293B] hover:border-[#38BDF8]/50'
+            isDragging ? 'border-[#EAB308] bg-yellow-50' : 'border-blue-200 hover:border-[#2563EB]/50'
           }`}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
         >
-          <DocumentArrowUpIcon className="h-12 w-12 mx-auto mb-3 text-[#4ADE80]" />
-          <p className="text-[#F1F5F9] font-semibold mb-1">Upload VA Medical Records</p>
-          <p className="text-[#94A3B8] text-sm mb-4">PDF files up to 50MB. Your files are processed in memory only — never stored.</p>
+          <DocumentArrowUpIcon className="h-12 w-12 mx-auto mb-3 text-[#1A2C5B]" />
+          <p className="text-gray-900 font-semibold mb-1">Upload VA Medical Records</p>
+          <p className="text-gray-500 text-sm mb-4">PDF files up to 50MB. Your files are processed in memory only — never stored.</p>
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="px-5 py-2.5 bg-[#4ADE80] text-[#0A0F1A] font-bold rounded-lg hover:bg-[#22C55E] transition-colors"
+            className="px-5 py-2.5 bg-[#1A2C5B] text-white font-bold rounded-lg hover:bg-[#2563EB] transition-colors"
           >
             Select Files
           </button>
@@ -347,11 +347,11 @@ export default function RecordsReconPanel() {
         {files.length > 0 && (
           <div className="space-y-2">
             {files.map((f, i) => (
-              <div key={i} className="flex items-center justify-between bg-[#111827] rounded-lg px-4 py-2 border border-[#1E293B]">
-                <span className="text-[#F1F5F9] text-sm font-mono truncate">{f.name}</span>
+              <div key={i} className="flex items-center justify-between bg-blue-50 rounded-lg px-4 py-2 border border-blue-100">
+                <span className="text-gray-900 text-sm font-mono truncate">{f.name}</span>
                 <div className="flex items-center gap-2">
-                  <span className="text-[#94A3B8] text-xs">{(f.size / 1024 / 1024).toFixed(1)}MB</span>
-                  <button onClick={() => removeFile(i)} className="text-[#94A3B8] hover:text-red-400">
+                  <span className="text-gray-500 text-xs">{(f.size / 1024 / 1024).toFixed(1)}MB</span>
+                  <button onClick={() => removeFile(i)} className="text-gray-400 hover:text-red-500">
                     <XMarkIcon className="h-4 w-4" />
                   </button>
                 </div>
@@ -368,9 +368,9 @@ export default function RecordsReconPanel() {
                 type="checkbox"
                 checked={consentChecked}
                 onChange={(e) => setConsentChecked(e.target.checked)}
-                className="mt-1 h-4 w-4 rounded border-[#1E293B] bg-[#111827] text-[#4ADE80] focus:ring-[#4ADE80]"
+                className="mt-1 h-4 w-4 rounded border-blue-300 bg-white text-[#1A2C5B] focus:ring-[#2563EB]"
               />
-              <span className="text-[#94A3B8] text-sm leading-relaxed">
+              <span className="text-gray-600 text-sm leading-relaxed">
                 I understand that Records Recon organizes my records for my personal use.
                 It does not provide medical advice, legal advice, or claims assistance.
                 I will consult an accredited VSO for professional guidance.
@@ -381,8 +381,8 @@ export default function RecordsReconPanel() {
               disabled={!consentChecked}
               className={`w-full py-3 rounded-lg font-bold text-lg transition-all ${
                 consentChecked
-                  ? 'bg-[#4ADE80] text-[#0A0F1A] hover:bg-[#22C55E] shadow-lg shadow-green-500/20'
-                  : 'bg-[#1E293B] text-[#94A3B8] cursor-not-allowed opacity-50'
+                  ? 'bg-[#EAB308] text-[#1A2C5B] hover:bg-[#FACC15] shadow-lg shadow-yellow-500/20'
+                  : 'bg-gray-200 text-gray-400 cursor-not-allowed opacity-50'
               }`}
             >
               🎯 Run Recon
@@ -391,8 +391,8 @@ export default function RecordsReconPanel() {
         )}
 
         {error && (
-          <div className="bg-red-900/30 border border-red-500/50 rounded-lg px-4 py-3">
-            <p className="text-red-300 text-sm">{error}</p>
+          <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+            <p className="text-red-700 text-sm">{error}</p>
           </div>
         )}
       </div>
@@ -403,36 +403,36 @@ export default function RecordsReconPanel() {
 
   if (panelState === 'processing') {
     return (
-      <div className="bg-[#0A0F1A] rounded-xl border border-[#1E293B] p-6 space-y-4">
+      <div className="bg-white rounded-xl border border-blue-100 shadow-md p-6 space-y-4">
         <ReconDisclaimer />
 
-        <div className="bg-[#111827] rounded-lg p-6 border border-[#1E293B]">
+        <div className="bg-blue-50 rounded-lg p-6 border border-blue-100">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-[#F1F5F9] font-bold text-lg">Records Recon in Progress</h3>
-            <button onClick={cancelScan} className="text-[#94A3B8] hover:text-red-400 text-sm font-medium">
+            <h3 className="text-[#1A2C5B] font-bold text-lg">Records Recon in Progress</h3>
+            <button onClick={cancelScan} className="text-gray-500 hover:text-red-500 text-sm font-medium">
               Cancel
             </button>
           </div>
 
           {/* Progress Bar */}
-          <div className="w-full bg-[#1E293B] rounded-full h-3 mb-3">
+          <div className="w-full bg-blue-100 rounded-full h-3 mb-3">
             <div
-              className="bg-gradient-to-r from-[#4ADE80] to-[#38BDF8] h-3 rounded-full transition-all duration-500"
+              className="bg-gradient-to-r from-[#1A2C5B] to-[#2563EB] h-3 rounded-full transition-all duration-500"
               style={{ width: `${progress.percent}%` }}
             />
           </div>
-          <p className="text-[#94A3B8] text-sm font-mono">{progress.message}</p>
+          <p className="text-gray-600 text-sm font-mono">{progress.message}</p>
 
           {/* Phase Indicators */}
           <div className="flex gap-4 mt-4">
             {['filter', 'extraction', 'structuring'].map((phase) => (
               <div key={phase} className="flex items-center gap-2">
                 <div className={`h-2.5 w-2.5 rounded-full ${
-                  progress.phase === phase ? 'bg-[#4ADE80] animate-pulse'
-                  : progress.phase && ['filter_done', 'extraction', 'structuring', 'structuring_done'].indexOf(progress.phase) > ['filter', 'extraction', 'structuring'].indexOf(phase) ? 'bg-[#4ADE80]'
-                  : 'bg-[#1E293B]'
+                  progress.phase === phase ? 'bg-[#EAB308] animate-pulse'
+                  : progress.phase && ['filter_done', 'extraction', 'structuring', 'structuring_done'].indexOf(progress.phase) > ['filter', 'extraction', 'structuring'].indexOf(phase) ? 'bg-[#1A2C5B]'
+                  : 'bg-blue-200'
                 }`} />
-                <span className="text-[#94A3B8] text-xs capitalize">{phase === 'filter' ? 'Pre-Filter' : phase === 'extraction' ? 'Extract' : 'Organize'}</span>
+                <span className="text-gray-600 text-xs capitalize">{phase === 'filter' ? 'Pre-Filter' : phase === 'extraction' ? 'Extract' : 'Organize'}</span>
               </div>
             ))}
           </div>
@@ -440,10 +440,10 @@ export default function RecordsReconPanel() {
           {/* Live Keyword Flags */}
           {liveFlags.length > 0 && (
             <div className="mt-4 space-y-1">
-              <p className="text-[#94A3B8] text-xs font-semibold uppercase tracking-wider">Live Detections</p>
+              <p className="text-gray-600 text-xs font-semibold uppercase tracking-wider">Live Detections</p>
               <div className="flex flex-wrap gap-2">
                 {liveFlags.map((flag, i) => (
-                  <span key={i} className="bg-[#1E293B] text-[#4ADE80] text-xs px-2 py-1 rounded font-mono">
+                  <span key={i} className="bg-[#1A2C5B] text-[#EAB308] text-xs px-2 py-1 rounded font-mono">
                     {flag.condition}
                   </span>
                 ))}
@@ -459,19 +459,19 @@ export default function RecordsReconPanel() {
 
   if (panelState === 'error') {
     return (
-      <div className="bg-[#0A0F1A] rounded-xl border border-[#1E293B] p-6 space-y-4">
+      <div className="bg-white rounded-xl border border-blue-100 shadow-md p-6 space-y-4">
         <ReconDisclaimer />
-        <div className="bg-red-900/20 border border-red-500/50 rounded-lg p-6 text-center">
-          <ShieldExclamationIcon className="h-10 w-10 mx-auto mb-3 text-red-400" />
-          <p className="text-red-300 font-semibold mb-2">Recon Failed</p>
-          <p className="text-red-200/70 text-sm mb-4">{error}</p>
+        <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+          <ShieldExclamationIcon className="h-10 w-10 mx-auto mb-3 text-red-500" />
+          <p className="text-red-700 font-semibold mb-2">Recon Failed</p>
+          <p className="text-red-600 text-sm mb-4">{error}</p>
           <div className="flex gap-3 justify-center">
             {scanCache && (
-              <button onClick={() => retryWithCache()} className="px-4 py-2 bg-[#4ADE80] text-[#0A0F1A] font-bold rounded-lg hover:bg-[#22C55E]">
+              <button onClick={() => retryWithCache()} className="px-4 py-2 bg-[#1A2C5B] text-white font-bold rounded-lg hover:bg-[#2563EB]">
                 Retry
               </button>
             )}
-            <button onClick={resetPanel} className="px-4 py-2 bg-[#1E293B] text-[#F1F5F9] rounded-lg hover:bg-[#2D3B4F]">
+            <button onClick={resetPanel} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 border border-gray-200">
               Start Over
             </button>
           </div>
@@ -484,16 +484,16 @@ export default function RecordsReconPanel() {
 
   if (panelState === 'no_items') {
     return (
-      <div className="bg-[#0A0F1A] rounded-xl border border-[#1E293B] p-6 space-y-4">
+      <div className="bg-white rounded-xl border border-blue-100 shadow-md p-6 space-y-4">
         <ReconDisclaimer />
-        <div className="bg-[#111827] border border-[#1E293B] rounded-lg p-6 text-center">
-          <MagnifyingGlassIcon className="h-10 w-10 mx-auto mb-3 text-[#94A3B8]" />
-          <p className="text-[#F1F5F9] font-semibold mb-2">No Conditions Extracted</p>
-          <p className="text-[#94A3B8] text-sm mb-4">
+        <div className="bg-blue-50 border border-blue-100 rounded-lg p-6 text-center">
+          <MagnifyingGlassIcon className="h-10 w-10 mx-auto mb-3 text-gray-400" />
+          <p className="text-gray-900 font-semibold mb-2">No Conditions Extracted</p>
+          <p className="text-gray-500 text-sm mb-4">
             No diagnosable conditions were found in the uploaded records.
             Try uploading additional VA medical records, progress notes, or Blue Button exports.
           </p>
-          <button onClick={resetPanel} className="px-4 py-2 bg-[#4ADE80] text-[#0A0F1A] font-bold rounded-lg hover:bg-[#22C55E]">
+          <button onClick={resetPanel} className="px-4 py-2 bg-[#1A2C5B] text-white font-bold rounded-lg hover:bg-[#2563EB]">
             Upload Different Records
           </button>
         </div>
@@ -504,14 +504,14 @@ export default function RecordsReconPanel() {
   // ─── Render: Results State (Split-Pane Command Center) ────────────────────
 
   return (
-    <div className="bg-[#0A0F1A] rounded-xl border border-[#1E293B] overflow-hidden">
+    <div className="bg-white rounded-xl border border-blue-100 shadow-md overflow-hidden">
       <ReconDisclaimer />
 
       {/* Interim Banner */}
       {report?.isInterim && (
-        <div className="bg-amber-900/30 border-b border-amber-500/50 px-4 py-3 flex items-center justify-between">
-          <p className="text-amber-200 text-sm">{report.interimNote}</p>
-          <button onClick={() => retryWithCache()} className="px-3 py-1 bg-amber-500 text-[#0A0F1A] font-bold text-sm rounded hover:bg-amber-400">
+        <div className="bg-yellow-50 border-b border-yellow-200 px-4 py-3 flex items-center justify-between">
+          <p className="text-yellow-800 text-sm">{report.interimNote}</p>
+          <button onClick={() => retryWithCache()} className="px-3 py-1 bg-[#EAB308] text-[#1A2C5B] font-bold text-sm rounded hover:bg-[#FACC15]">
             Retry
           </button>
         </div>
@@ -524,22 +524,22 @@ export default function RecordsReconPanel() {
         <div className={`flex-1 flex flex-col ${pdfUrl ? 'lg:w-[60%]' : 'w-full'}`}>
 
           {/* Tab Navigation */}
-          <div className="flex border-b border-[#1E293B] bg-[#0D1321]">
+          <div className="flex border-b border-blue-100 bg-blue-50">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={`px-4 py-3 text-sm font-semibold transition-colors ${
                   activeTab === tab.id
-                    ? 'text-[#4ADE80] border-b-2 border-[#4ADE80] bg-[#111827]'
-                    : 'text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-[#111827]/50'
+                    ? 'text-[#1A2C5B] border-b-2 border-[#EAB308] bg-white'
+                    : 'text-gray-500 hover:text-[#1A2C5B] hover:bg-white/50'
                 }`}
               >
                 {tab.label}
               </button>
             ))}
             <div className="flex-1" />
-            <button onClick={resetPanel} className="px-3 py-2 text-[#94A3B8] hover:text-[#F1F5F9] text-xs font-medium">
+            <button onClick={resetPanel} className="px-3 py-2 text-gray-500 hover:text-[#1A2C5B] text-xs font-medium">
               New Scan
             </button>
           </div>
@@ -551,7 +551,7 @@ export default function RecordsReconPanel() {
             {activeTab === 'dashboard' && report && (
               <div className="space-y-4">
                 {/* Summary */}
-                <p className="text-[#94A3B8] text-sm">{report.summary}</p>
+                <p className="text-gray-600 text-sm">{report.summary}</p>
 
                 {/* Stats Cards */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -567,8 +567,8 @@ export default function RecordsReconPanel() {
 
                 {/* Processing Details */}
                 {report.scanSynopsis && (
-                  <div className="bg-[#111827] rounded-lg p-3 border border-[#1E293B]">
-                    <p className="text-[#94A3B8] text-xs font-mono">
+                  <div className="bg-blue-50 rounded-lg p-3 border border-blue-100">
+                    <p className="text-gray-500 text-xs font-mono">
                       {report.scanSynopsis.keptParagraphs} paragraphs kept ({report.scanSynopsis.reductionPct}% noise removed) •{' '}
                       {report.scanSynopsis.keywordsDetected.length} keywords detected •{' '}
                       {(report.processingDetails.processingTime / 1000).toFixed(1)}s • {report.processingDetails.aiModel}
@@ -578,8 +578,8 @@ export default function RecordsReconPanel() {
 
                 {/* Keyword Frequency Chart */}
                 {report.keywordFrequency.length > 0 && (
-                  <div className="bg-[#111827] rounded-lg p-4 border border-[#1E293B]">
-                    <h4 className="text-[#F1F5F9] font-semibold text-sm mb-3">Condition Frequency</h4>
+                  <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm">
+                    <h4 className="text-[#1A2C5B] font-semibold text-sm mb-3">Condition Frequency</h4>
                     <ConditionFrequencyChart data={report.keywordFrequency} onBarClick={(_term: string) => {
                       setActiveTab('conditions');
                     }} />
@@ -587,32 +587,32 @@ export default function RecordsReconPanel() {
                 )}
 
                 {/* Quick Extracted Items List */}
-                <div className="bg-[#111827] rounded-lg p-4 border border-[#1E293B]">
-                  <h4 className="text-[#F1F5F9] font-semibold text-sm mb-3">Extracted Conditions ({report.extractedItems.length})</h4>
+                <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm">
+                  <h4 className="text-[#1A2C5B] font-semibold text-sm mb-3">Extracted Conditions ({report.extractedItems.length})</h4>
                   <div className="space-y-2 max-h-80 overflow-y-auto">
                     {report.extractedItems.map((item, i) => (
-                      <div key={item.itemId} className="flex items-start gap-3 bg-[#0A0F1A] rounded p-3 border border-[#1E293B]">
-                        <span className="text-[#4ADE80] font-mono text-xs mt-0.5">{String(i + 1).padStart(2, '0')}</span>
+                      <div key={item.itemId} className="flex items-start gap-3 bg-blue-50 rounded p-3 border border-blue-100">
+                        <span className="text-[#1A2C5B] font-mono text-xs mt-0.5">{String(i + 1).padStart(2, '0')}</span>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-[#F1F5F9] font-semibold text-sm">{item.condition}</span>
+                            <span className="text-gray-900 font-semibold text-sm">{item.condition}</span>
                             <CategoryBadge category={item.category} />
                             <ConfidenceBadge confidence={item.confidence} />
                           </div>
                           {item.excerpt && (
-                            <p className="text-[#94A3B8] text-xs mt-1 line-clamp-2 font-mono">&ldquo;{item.excerpt}&rdquo;</p>
+                            <p className="text-gray-500 text-xs mt-1 line-clamp-2 font-mono">&ldquo;{item.excerpt}&rdquo;</p>
                           )}
                           <div className="flex items-center gap-3 mt-1">
                             {item.pageNumber && (
                               <button
                                 onClick={() => scrollToPage(item.pageNumber!)}
-                                className="text-[#38BDF8] text-xs hover:underline font-mono"
+                                className="text-[#2563EB] text-xs hover:underline font-mono"
                               >
                                 Page {item.pageNumber}
                               </button>
                             )}
-                            {item.dateFound && <span className="text-[#94A3B8] text-xs font-mono">{item.dateFound}</span>}
-                            {item.sectionFound && <span className="text-[#94A3B8] text-xs">{item.sectionFound}</span>}
+                            {item.dateFound && <span className="text-gray-500 text-xs font-mono">{item.dateFound}</span>}
+                            {item.sectionFound && <span className="text-gray-500 text-xs">{item.sectionFound}</span>}
                           </div>
                         </div>
                         <button
@@ -620,10 +620,10 @@ export default function RecordsReconPanel() {
                             `${item.condition}${item.dateFound ? ` (${item.dateFound})` : ''}${item.pageNumber ? ` — Page ${item.pageNumber}` : ''}\n"${item.excerpt}"`,
                             item.itemId
                           )}
-                          className="text-[#94A3B8] hover:text-[#4ADE80] flex-shrink-0"
+                          className="text-gray-400 hover:text-[#1A2C5B] flex-shrink-0"
                           title="Copy to clipboard"
                         >
-                          {copiedId === item.itemId ? <CheckIcon className="h-4 w-4 text-[#4ADE80]" /> : <ClipboardDocumentIcon className="h-4 w-4" />}
+                          {copiedId === item.itemId ? <CheckIcon className="h-4 w-4 text-[#1A2C5B]" /> : <ClipboardDocumentIcon className="h-4 w-4" />}
                         </button>
                       </div>
                     ))}
@@ -656,10 +656,10 @@ export default function RecordsReconPanel() {
 
         {/* RIGHT PANE — PDF Viewer */}
         {pdfUrl && (
-          <div className="lg:w-[40%] border-t lg:border-t-0 lg:border-l border-[#1E293B] flex flex-col bg-[#111827]">
-            <div className="bg-[#0D1321] border-b border-[#1E293B] px-4 py-2 flex items-center justify-between">
-              <span className="text-[#94A3B8] text-xs font-mono truncate">{files[0]?.name || 'Document'}</span>
-              <span className="text-[#94A3B8] text-xs">Click any page number to jump</span>
+          <div className="lg:w-[40%] border-t lg:border-t-0 lg:border-l border-blue-100 flex flex-col bg-gray-50">
+            <div className="bg-blue-50 border-b border-blue-100 px-4 py-2 flex items-center justify-between">
+              <span className="text-gray-600 text-xs font-mono truncate">{files[0]?.name || 'Document'}</span>
+              <span className="text-gray-500 text-xs">Click any page number to jump</span>
             </div>
             <iframe
               src={pdfUrl}
@@ -678,31 +678,31 @@ export default function RecordsReconPanel() {
 
 function StatCard({ label, value, small }: { label: string; value: string | number; small?: boolean }) {
   return (
-    <div className="bg-[#111827] rounded-lg p-3 border border-[#1E293B]">
-      <p className="text-[#94A3B8] text-xs uppercase tracking-wider mb-1">{label}</p>
-      <p className={`text-[#F1F5F9] font-bold ${small ? 'text-sm' : 'text-xl'} font-mono`}>{value}</p>
+    <div className="bg-blue-50 rounded-lg p-3 border border-blue-100">
+      <p className="text-gray-500 text-xs uppercase tracking-wider mb-1">{label}</p>
+      <p className={`text-[#1A2C5B] font-bold ${small ? 'text-sm' : 'text-xl'} font-mono`}>{value}</p>
     </div>
   );
 }
 
 function CategoryBadge({ category }: { category: string }) {
   const colors: Record<string, string> = {
-    'Musculoskeletal': 'bg-orange-900/40 text-orange-300',
-    'Mental Health': 'bg-purple-900/40 text-purple-300',
-    'Hearing': 'bg-yellow-900/40 text-yellow-300',
-    'Respiratory': 'bg-cyan-900/40 text-cyan-300',
-    'Sleep': 'bg-indigo-900/40 text-indigo-300',
-    'Cardiovascular': 'bg-red-900/40 text-red-300',
-    'Neurological': 'bg-pink-900/40 text-pink-300',
-    'GI': 'bg-lime-900/40 text-lime-300',
-    'Endocrine': 'bg-teal-900/40 text-teal-300',
-    'Genitourinary': 'bg-blue-900/40 text-blue-300',
-    'Dermatological': 'bg-amber-900/40 text-amber-300',
-    'Ophthalmological': 'bg-emerald-900/40 text-emerald-300',
-    'Oncological': 'bg-rose-900/40 text-rose-300',
+    'Musculoskeletal': 'bg-orange-100 text-orange-800',
+    'Mental Health': 'bg-purple-100 text-purple-800',
+    'Hearing': 'bg-yellow-100 text-yellow-800',
+    'Respiratory': 'bg-cyan-100 text-cyan-800',
+    'Sleep': 'bg-indigo-100 text-indigo-800',
+    'Cardiovascular': 'bg-red-100 text-red-800',
+    'Neurological': 'bg-pink-100 text-pink-800',
+    'GI': 'bg-lime-100 text-lime-800',
+    'Endocrine': 'bg-teal-100 text-teal-800',
+    'Genitourinary': 'bg-blue-100 text-blue-800',
+    'Dermatological': 'bg-amber-100 text-amber-800',
+    'Ophthalmological': 'bg-emerald-100 text-emerald-800',
+    'Oncological': 'bg-rose-100 text-rose-800',
   };
   return (
-    <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${colors[category] || 'bg-gray-900/40 text-gray-300'}`}>
+    <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${colors[category] || 'bg-gray-100 text-gray-700'}`}>
       {category}
     </span>
   );
@@ -710,9 +710,9 @@ function CategoryBadge({ category }: { category: string }) {
 
 function ConfidenceBadge({ confidence }: { confidence: 'high' | 'medium' | 'low' }) {
   const styles = {
-    high: 'bg-green-900/40 text-green-300',
-    medium: 'bg-yellow-900/40 text-yellow-300',
-    low: 'bg-gray-900/40 text-gray-400',
+    high: 'bg-green-100 text-green-800',
+    medium: 'bg-yellow-100 text-yellow-800',
+    low: 'bg-gray-100 text-gray-600',
   };
   return (
     <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${styles[confidence]}`}>

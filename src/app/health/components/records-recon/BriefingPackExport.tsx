@@ -91,15 +91,33 @@ export default function BriefingPackExport({ report }: BriefingPackExportProps) 
     setGenerating(true);
     try {
       const html = buildBriefingPackHTML(report, generateDate);
-      const blob = new Blob([html], { type: 'text/html' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `VSO-Briefing-Pack-${new Date().toISOString().split('T')[0]}.html`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      // Open in new window and trigger print dialog for Save as PDF
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.write(html);
+        printWindow.document.close();
+        // Wait for content to render before triggering print
+        printWindow.onload = () => {
+          setTimeout(() => {
+            printWindow.print();
+          }, 500);
+        };
+        // Fallback if onload already fired
+        setTimeout(() => {
+          printWindow.print();
+        }, 1000);
+      } else {
+        // Popup blocked — fall back to download
+        const blob = new Blob([html], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `VSO-Briefing-Pack-${new Date().toISOString().split('T')[0]}.html`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
     } catch (err) {
       console.error('Failed to generate briefing pack:', err);
     } finally {
@@ -127,8 +145,8 @@ export default function BriefingPackExport({ report }: BriefingPackExportProps) 
   return (
     <div className="space-y-6">
       <div className="text-center">
-        <h3 className="text-[#F1F5F9] font-bold text-lg mb-2">VSO Briefing Pack</h3>
-        <p className="text-[#94A3B8] text-sm">
+        <h3 className="text-[#1A2C5B] font-bold text-lg mb-2">VSO Briefing Pack</h3>
+        <p className="text-gray-500 text-sm">
           Generate a comprehensive document to bring to your VSO appointment.
           Includes disclaimer cover page, timeline, conditions index, and blank notes section.
         </p>
@@ -139,23 +157,23 @@ export default function BriefingPackExport({ report }: BriefingPackExportProps) 
         <button
           onClick={generateBriefingPack}
           disabled={generating}
-          className="flex-1 flex items-center justify-center gap-2 px-5 py-3 bg-[#4ADE80] text-[#0A0F1A] font-bold rounded-lg hover:bg-[#22C55E] transition-colors disabled:opacity-50"
+          className="flex-1 flex items-center justify-center gap-2 px-5 py-3 bg-[#EAB308] text-[#1A2C5B] font-bold rounded-lg hover:bg-[#FACC15] transition-colors disabled:opacity-50"
         >
           <ArrowDownTrayIcon className="h-5 w-5" />
-          {generating ? 'Generating...' : 'Download VSO Briefing Pack'}
+          {generating ? 'Generating...' : 'Generate VSO Briefing Pack (PDF)'}
         </button>
         <button
           onClick={copyAllExcerpts}
-          className="flex items-center justify-center gap-2 px-5 py-3 bg-[#1E293B] text-[#F1F5F9] font-semibold rounded-lg hover:bg-[#2D3B4F] transition-colors"
+          className="flex items-center justify-center gap-2 px-5 py-3 bg-[#1A2C5B] text-white font-semibold rounded-lg hover:bg-[#2563EB] transition-colors"
         >
-          {allCopied ? <CheckIcon className="h-5 w-5 text-[#4ADE80]" /> : <ClipboardDocumentIcon className="h-5 w-5" />}
+          {allCopied ? <CheckIcon className="h-5 w-5 text-[#EAB308]" /> : <ClipboardDocumentIcon className="h-5 w-5" />}
           {allCopied ? 'Copied!' : 'Copy All Excerpts'}
         </button>
       </div>
 
       {/* Preview */}
-      <div className="bg-[#111827] rounded-lg border border-[#1E293B] p-4 space-y-3">
-        <h4 className="text-[#F1F5F9] font-semibold text-sm">Pack Contents Preview</h4>
+      <div className="bg-blue-50 rounded-lg border border-blue-100 p-4 space-y-3">
+        <h4 className="text-[#1A2C5B] font-semibold text-sm">Pack Contents Preview</h4>
         <div className="space-y-2 text-sm">
           <PreviewItem label="Cover Page" desc="Full-page legal disclaimer and terms of use" />
           <PreviewItem label="Recon Summary" desc={`${report.extractedItems.length} conditions, ${report.scanSynopsis?.totalPages || 0} pages scanned`} />
@@ -166,9 +184,8 @@ export default function BriefingPackExport({ report }: BriefingPackExportProps) 
       </div>
 
       {/* Format Note */}
-      <p className="text-[#94A3B8] text-xs text-center">
-        Downloads as an HTML file. Open in any browser and print to PDF for a professional document.
-        A native PDF generator (pdf-lib) is planned for a future update.
+      <p className="text-gray-500 text-xs text-center">
+        Opens a print-ready preview. Use your browser&apos;s &ldquo;Save as PDF&rdquo; option in the print dialog for a professional document.
       </p>
     </div>
   );
@@ -177,10 +194,10 @@ export default function BriefingPackExport({ report }: BriefingPackExportProps) 
 function PreviewItem({ label, desc }: { label: string; desc: string }) {
   return (
     <div className="flex items-start gap-2">
-      <span className="text-[#4ADE80] text-xs mt-0.5">✓</span>
+      <span className="text-[#1A2C5B] text-xs mt-0.5">✓</span>
       <div>
-        <span className="text-[#F1F5F9] font-medium">{label}</span>
-        <span className="text-[#94A3B8] ml-2">{desc}</span>
+        <span className="text-gray-900 font-medium">{label}</span>
+        <span className="text-gray-500 ml-2">{desc}</span>
       </div>
     </div>
   );

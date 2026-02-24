@@ -11,11 +11,15 @@
 
 ---
 
-## 🟡 Current Status: Active Development — Records Recon v4.7 REFACTORED
-**As of Feb 23, 2026:** "Medical Detective" has been **retired and replaced** by **Records Recon v4.7** — a legally safe document organizer. All claims advice language, next-step suggestions, rating estimates, DC codes, and filing instructions have been removed. The feature now provides pure extraction + organization + user-controlled export. See "Records Recon v4.7" section below.
+## 🟡 Current Status: Active Development — Records Recon v4.8
+**As of Feb 23, 2026:** "Medical Detective" has been **retired and replaced** by **Records Recon v4.8** — a legally safe document organizer. All claims advice language, next-step suggestions, rating estimates, DC codes, and filing instructions have been removed. The feature now provides pure extraction + organization + user-controlled export. See "Records Recon v4.8" section below.
 
 ### ✅ Recently Completed
-* **Records Recon v4.7 (Feb 23, 2026):** Complete legal-safe refactor of "Medical Detective". Retired all claims advice language. New two-phase architecture: Phase 2a (Extraction) + Phase 2b (Structuring). Tactical command-center UI with dark theme, tabbed dashboard (Dashboard | Timeline | Conditions Index | Export), MVP PDF viewer split-pane with jump-to-page, VSO Briefing Pack export, and permanent legal disclaimer. See detailed section below.
+* **Records Recon v4.8 (Feb 23, 2026):** Three key improvements over v4.7:
+  1. **VSO Briefing Pack PDF fix:** Download button now opens a print-ready preview in a new browser window and auto-triggers the print dialog. Users can "Save as PDF" natively from the browser print dialog instead of getting raw HTML code in VS Code.
+  2. **Blue Button date extraction overhaul:** Fixed missing `may` month mapping (was completely absent). Added VA Blue Button-specific date formats: `DATE OF NOTE: FEB 06, 2024@14:48`, `ENTRY DATE`, `DATE ENTERED`, `DATE SIGNED`, `ADMISSION DATE`, `DISCHARGE DATE`, `Date entered`, `Date signed` — all with `@timestamp` support. Added standalone abbreviated month+timestamp pattern (`FEB 06, 2024@14:48`). Both `records-recon/route.ts` and `medical-detective/route.ts` updated.
+  3. **UI/UX retheme to match site palette:** Replaced dark hacker theme (`#0A0F1A` bg, `#4ADE80` green accents) with the site's patriotic blue/gold/white palette (`#1A2C5B` primary, `#EAB308` gold accent, white backgrounds, `bg-blue-50` cards). All 6 sub-components updated: RecordsReconPanel, ReconDisclaimer, ReconTimeline, ConditionsIndex, ConditionFrequencyChart, BriefingPackExport.
+* **Records Recon v4.7 (Feb 23, 2026):** Complete legal-safe refactor of "Medical Detective". Retired all claims advice language. New two-phase architecture: Phase 2a (Extraction) + Phase 2b (Structuring). Tabbed dashboard (Dashboard | Timeline | Conditions Index | Export), MVP PDF viewer split-pane with jump-to-page, VSO Briefing Pack export, and permanent legal disclaimer. See detailed section below.
 * **Strategic Pivot:** Defined the "Living Master Strategy" (replacing the traditional business plan).
 * **Revenue Model:** Finalized the "Hybrid Engine" (SaaS + B2B Spotlights + Gov Contracting).
 * **Documentation:** Completed the **AI Command Center Cheat Sheet** for operational efficiency.
@@ -41,14 +45,14 @@
   - Phase 2a (Extraction): Rewritten prompt — extracts conditions with page, date, section, provider, excerpt, category. **ZERO claim language.**
   - Phase 2b (Structuring): **Replaces** the old "claims analyst" call. Organizes raw extractions into `timeline[]`, `conditions_index[]`, `keyword_frequency[]`, `document_summary`. Pure reorganization — no advice.
 * **Banned-words policy (softened):** Only claim/strategy words banned. Neutral document words allowed (excerpt, mention, found, referenced, page, section, etc.)
-* **New UI:** Tactical command-center dashboard with dark theme (`#0A0F1A` background)
+* **New UI:** Patriotic blue/gold/white theme matching site palette (`#1A2C5B` primary, `#EAB308` gold accent, white backgrounds)
   - Tabbed layout: Dashboard | Timeline | Conditions Index | Export
   - MVP PDF viewer: `<iframe>` split-pane with `#page=N` jump-to-page
   - Clickable page badges throughout — timeline entries, condition excerpts, all jump to PDF page
-  - Permanent amber disclaimer banner (non-dismissible)
+  - Permanent yellow disclaimer banner (non-dismissible)
   - Pre-scan consent checkbox required before "Run Recon" activates
   - Copy-to-clipboard on every excerpt
-  - VSO Briefing Pack HTML export with full-page disclaimer cover, timeline, conditions index, and blank "My Notes" pages
+  - VSO Briefing Pack: opens print-ready preview → browser "Save as PDF" for professional document
 * **Deleted (legal kills):**
   - `ANALYSIS_PROMPT` (the "VA disability claims analyst")
   - `generateInterimContext()` (contained claim filing instructions)
@@ -73,13 +77,14 @@
 - `src/app/health/components/MedicalDetectivePanel.tsx` — kept for reference/rollback
 
 ### ⚠️ Records Recon — Remaining Work
-1. **Real-world testing** — Run the 1001-page Blue Button and mock PDFs through v4.7 to validate extraction quality and structuring accuracy.
+1. **Real-world testing** — Run the 1001-page Blue Button and mock PDFs through v4.8 to validate extraction quality, structuring accuracy, and **date extraction** from Blue Button entries.
 2. **Excerpt quality** — Verify Grok-4 extracts real verbatim quotes, not hallucinated text.
 3. **Timing targets** — Blue Button <75s, mock PDF <20s.
 4. **PDF viewer edge cases** — Test iframe `#page=N` jump across Chrome, Edge, Firefox.
 5. **Mobile responsiveness** — Test split-pane collapse on mobile (should stack vertically).
 6. **Vercel deployment** — Verify serverless function timeouts work in production.
-7. **VSO Briefing Pack polish** — Consider migrating from HTML to native PDF via `pdf-lib`.
+7. ~~**VSO Briefing Pack polish**~~ — ✅ Fixed in v4.8: now opens print-ready preview with auto-print dialog. Future: consider native PDF via `pdf-lib`.
+8. ~~**Date extraction from Blue Button**~~ — ✅ Fixed in v4.8: added VA-specific date formats, fixed missing `may` month.
 
 ### 🔮 Records Recon — Future Sprint Roadmap
 

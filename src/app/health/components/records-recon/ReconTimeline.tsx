@@ -37,44 +37,44 @@ export default function ReconTimeline({ entries, onPageClick }: ReconTimelinePro
   if (entries.length === 0) {
     return (
       <div className="text-center py-12">
-        <p className="text-[#94A3B8] text-sm">No dated entries found. Upload records with date stamps for timeline view.</p>
+        <p className="text-gray-500 text-sm">No dated entries found. Upload records with date stamps for timeline view.</p>
       </div>
     );
   }
 
   return (
     <div className="relative">
-      <h3 className="text-[#F1F5F9] font-bold text-sm mb-4 uppercase tracking-wider">Chronological Timeline</h3>
+      <h3 className="text-[#1A2C5B] font-bold text-sm mb-4 uppercase tracking-wider">Chronological Timeline</h3>
 
       {/* Vertical line */}
-      <div className="absolute left-4 top-12 bottom-4 w-0.5 bg-gradient-to-b from-[#4ADE80] via-[#38BDF8] to-[#1E293B]" />
+      <div className="absolute left-4 top-12 bottom-4 w-0.5 bg-gradient-to-b from-[#1A2C5B] via-[#2563EB] to-blue-200" />
 
       <div className="space-y-3 pl-10">
         {entries.map((entry, i) => {
           const dotColor = CATEGORY_COLORS[entry.category] || CATEGORY_COLORS['Other'];
           return (
-            <div key={i} className="relative bg-[#111827] rounded-lg p-3 border border-[#1E293B] hover:border-[#38BDF8]/50 transition-colors">
+            <div key={i} className="relative bg-white rounded-lg p-3 border border-gray-200 hover:border-[#2563EB]/50 shadow-sm transition-colors">
               {/* Timeline dot */}
-              <div className={`absolute -left-[26px] top-4 h-3 w-3 rounded-full ${dotColor} ring-2 ring-[#0A0F1A]`} />
+              <div className={`absolute -left-[26px] top-4 h-3 w-3 rounded-full ${dotColor} ring-2 ring-white`} />
 
               {/* Header row */}
               <div className="flex items-center gap-2 flex-wrap mb-1">
                 {entry.date && (
-                  <span className="text-[#4ADE80] text-xs font-mono font-bold">{entry.date}</span>
+                  <span className="text-[#1A2C5B] text-xs font-mono font-bold">{entry.date}</span>
                 )}
                 {!entry.date && (
-                  <span className="text-[#94A3B8] text-xs font-mono italic">Date not specified</span>
+                  <span className="text-gray-400 text-xs font-mono italic">Date not specified</span>
                 )}
                 {entry.page && (
                   <button
                     onClick={() => onPageClick(entry.page!)}
-                    className="text-[#38BDF8] text-xs font-mono hover:underline hover:text-[#7DD3FC] transition-colors"
+                    className="text-[#2563EB] text-xs font-mono hover:underline hover:text-blue-800 transition-colors"
                   >
                     Page {entry.page}
                   </button>
                 )}
                 {entry.section && (
-                  <span className="text-[#94A3B8] text-xs bg-[#1E293B] px-1.5 py-0.5 rounded">{entry.section}</span>
+                  <span className="text-gray-500 text-xs bg-blue-50 px-1.5 py-0.5 rounded">{entry.section}</span>
                 )}
                 <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
                   getCategoryStyle(entry.category)
@@ -84,11 +84,11 @@ export default function ReconTimeline({ entries, onPageClick }: ReconTimelinePro
               </div>
 
               {/* Excerpt */}
-              <p className="text-[#F1F5F9] text-sm font-mono leading-relaxed">&ldquo;{entry.entry}&rdquo;</p>
+              <p className="text-gray-700 text-sm font-mono leading-relaxed">&ldquo;{entry.entry}&rdquo;</p>
 
               {/* Provider */}
               {entry.provider && (
-                <p className="text-[#94A3B8] text-xs mt-1">Provider: {entry.provider}</p>
+                <p className="text-gray-500 text-xs mt-1">Provider: {entry.provider}</p>
               )}
             </div>
           );
@@ -100,19 +100,19 @@ export default function ReconTimeline({ entries, onPageClick }: ReconTimelinePro
 
 function getCategoryStyle(category: string): string {
   const styles: Record<string, string> = {
-    'Musculoskeletal': 'bg-orange-900/40 text-orange-300',
-    'Mental Health': 'bg-purple-900/40 text-purple-300',
-    'Hearing': 'bg-yellow-900/40 text-yellow-300',
-    'Respiratory': 'bg-cyan-900/40 text-cyan-300',
-    'Sleep': 'bg-indigo-900/40 text-indigo-300',
-    'Cardiovascular': 'bg-red-900/40 text-red-300',
-    'Neurological': 'bg-pink-900/40 text-pink-300',
-    'GI': 'bg-lime-900/40 text-lime-300',
-    'Endocrine': 'bg-teal-900/40 text-teal-300',
-    'Genitourinary': 'bg-blue-900/40 text-blue-300',
-    'Dermatological': 'bg-amber-900/40 text-amber-300',
-    'Ophthalmological': 'bg-emerald-900/40 text-emerald-300',
-    'Oncological': 'bg-rose-900/40 text-rose-300',
+    'Musculoskeletal': 'bg-orange-100 text-orange-800',
+    'Mental Health': 'bg-purple-100 text-purple-800',
+    'Hearing': 'bg-yellow-100 text-yellow-800',
+    'Respiratory': 'bg-cyan-100 text-cyan-800',
+    'Sleep': 'bg-indigo-100 text-indigo-800',
+    'Cardiovascular': 'bg-red-100 text-red-800',
+    'Neurological': 'bg-pink-100 text-pink-800',
+    'GI': 'bg-lime-100 text-lime-800',
+    'Endocrine': 'bg-teal-100 text-teal-800',
+    'Genitourinary': 'bg-blue-100 text-blue-800',
+    'Dermatological': 'bg-amber-100 text-amber-800',
+    'Ophthalmological': 'bg-emerald-100 text-emerald-800',
+    'Oncological': 'bg-rose-100 text-rose-800',
   };
-  return styles[category] || 'bg-gray-900/40 text-gray-300';
+  return styles[category] || 'bg-gray-100 text-gray-700';
 }

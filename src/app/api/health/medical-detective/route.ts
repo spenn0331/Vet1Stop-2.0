@@ -159,29 +159,59 @@ const GENERIC_STANDALONE_TERMS = new Set([
 ]);
 
 function extractDateFromText(text: string): string | undefined {
+  const months: Record<string, string> = {
+    january: '01', february: '02', march: '03', april: '04', may: '05', june: '06',
+    july: '07', august: '08', september: '09', october: '10', november: '11', december: '12',
+    jan: '01', feb: '02', mar: '03', apr: '04', jun: '06',
+    jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12',
+  };
+
+  // VA Blue Button format: DATE OF NOTE: FEB 06, 2024@14:48 or ENTRY DATE: FEB 06, 2024@14:49:03
+  const blueButton = text.match(/(?:DATE\s*OF\s*NOTE|ENTRY\s*DATE|DATE\s*ENTERED|DATE\s*SIGNED|DATE\s*OF\s*SERVICE|VISIT\s*DATE|NOTE\s*DATE|ADMISSION\s*DATE|DISCHARGE\s*DATE|Date\s*entered|Date\s*signed)[:\s]+([A-Za-z]{3,9})\s+(\d{1,2}),?\s+(\d{4})(?:@[\d:]+)?/i);
+  if (blueButton) {
+    const monthNum = months[blueButton[1].toLowerCase()];
+    if (monthNum) return `${blueButton[3]}-${monthNum}-${blueButton[2].padStart(2, '0')}`;
+  }
+
+  // VA Blue Button numeric format: DATE OF NOTE: 02/06/2024@14:48
+  const blueButtonNumeric = text.match(/(?:DATE\s*OF\s*NOTE|ENTRY\s*DATE|DATE\s*ENTERED|DATE\s*SIGNED|DATE\s*OF\s*SERVICE|VISIT\s*DATE|NOTE\s*DATE|ADMISSION\s*DATE|DISCHARGE\s*DATE|Date\s*entered|Date\s*signed)[:\s]+(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})(?:@[\d:]+)?/i);
+  if (blueButtonNumeric) {
+    const [, m, d, y] = blueButtonNumeric;
+    return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+  }
+
+  // ISO format: 2024-02-06
   const iso = text.match(/(\d{4})-(\d{2})-(\d{2})/);
   if (iso) return iso[0];
+
+  // Numeric MM/DD/YYYY or MM-DD-YYYY
   const mdy = text.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
   if (mdy) {
     const [, m, d, y] = mdy;
     return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
   }
+
+  // Labeled date: note date, date of service, dos, visit date, encounter date
   const noteDate = text.match(/(?:note\s*date|date\s*of\s*service|dos|visit\s*date|encounter\s*date)[:\s]*(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/i);
   if (noteDate) {
     const y = noteDate[3].length === 2 ? `20${noteDate[3]}` : noteDate[3];
     return `${y}-${noteDate[1].padStart(2, '0')}-${noteDate[2].padStart(2, '0')}`;
   }
-  const months: Record<string, string> = {
-    january: '01', february: '02', march: '03', april: '04', june: '06',
-    july: '07', august: '08', september: '09', october: '10', november: '11', december: '12',
-    jan: '01', feb: '02', mar: '03', apr: '04', jun: '06',
-    jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12',
-  };
+
+  // Abbreviated month with @timestamp: FEB 06, 2024@14:48 (standalone, not after a label)
+  const abbrAt = text.match(/([A-Z]{3})\s+(\d{1,2}),?\s+(\d{4})@/i);
+  if (abbrAt) {
+    const monthNum = months[abbrAt[1].toLowerCase()];
+    if (monthNum) return `${abbrAt[3]}-${monthNum}-${abbrAt[2].padStart(2, '0')}`;
+  }
+
+  // Named month: February 6, 2024 or Feb 06, 2024
   const named = text.match(/(\w{3,9})\s+(\d{1,2}),?\s+(\d{4})/);
   if (named) {
     const monthNum = months[named[1].toLowerCase()];
     if (monthNum) return `${named[3]}-${monthNum}-${named[2].padStart(2, '0')}`;
   }
+
   return undefined;
 }
 
