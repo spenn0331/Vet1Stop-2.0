@@ -121,6 +121,7 @@ export default function RecordsReconPanel() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
 
   // Clean up PDF URL on unmount
   useEffect(() => {
@@ -176,7 +177,12 @@ export default function RecordsReconPanel() {
     if (!pdfUrl) return;
     // Use #page=N fragment — supported by Chrome/Edge/Firefox built-in PDF viewers
     const baseUrl = pdfUrl.split('#')[0];
-    setPdfUrl(`${baseUrl}#page=${pageNumber}`);
+    const newUrl = `${baseUrl}#page=${pageNumber}`;
+    // Direct DOM manipulation forces the browser to navigate even for hash-only changes
+    if (iframeRef.current) {
+      iframeRef.current.src = newUrl;
+    }
+    setPdfUrl(newUrl);
   }, [pdfUrl]);
 
   // ─── Clipboard ────────────────────────────────────────────────────────────
@@ -662,6 +668,7 @@ export default function RecordsReconPanel() {
               <span className="text-gray-500 text-xs">Click any page number to jump</span>
             </div>
             <iframe
+              ref={iframeRef}
               src={pdfUrl}
               className="flex-1 w-full min-h-[400px] lg:min-h-0"
               title="PDF Viewer"

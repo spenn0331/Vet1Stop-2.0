@@ -290,7 +290,7 @@ function isScreeningFalsePositive(text: string, keyword: string): boolean {
 
 const EXTRACTION_PROMPT = `You are a medical record document extraction system. Extract all diagnosable conditions from medical records. Follow rules EXACTLY.
 
-Each paragraph is tagged like "[Page 45 | Assessment] text..." showing page and clinical section.
+Each paragraph is tagged like "[Page 45 | Assessment | Date: 2024-02-06] text..." showing page, clinical section, and the date of the note/entry. Use the Date from the tag when the text itself does not contain an explicit date. If no Date tag is present, output null for the date field.
 
 EXTRACTION LAYERS (use all three):
 
@@ -438,35 +438,47 @@ function smartPreFilter(text: string): {
   detectedHeaders: string[];
 } {
   const rawLines = text.split(/\n/);
-  const paragraphs: { text: string; page: number }[] = [];
+  const paragraphs: { text: string; page: number; nearestDate: string | undefined }[] = [];
   let currentGroup = '';
   let currentPage = 1;
   let groupPage = 1;
+  // Track the most recent date seen across ALL lines (even short/filtered ones)
+  // so date headers like "DATE OF NOTE: FEB 06, 2024@14:48" propagate to nearby conditions
+  let rollingDate: string | undefined = undefined;
+  let groupDate: string | undefined = undefined;
+
   for (const line of rawLines) {
     const trimmed = line.trim();
     const pageMarker = trimmed.match(/^<<<PAGE (\d+)>>>$/);
     if (pageMarker) {
-      if (currentGroup.length > 0) { paragraphs.push({ text: currentGroup.trim(), page: groupPage }); currentGroup = ''; }
+      if (currentGroup.length > 0) { paragraphs.push({ text: currentGroup.trim(), page: groupPage, nearestDate: groupDate }); currentGroup = ''; }
       currentPage = parseInt(pageMarker[1]);
       groupPage = currentPage;
+      groupDate = rollingDate;
       continue;
+    }
+    // Check every line for dates (even short ones that might get filtered as paragraphs)
+    if (trimmed.length > 0) {
+      const lineDate = extractDateFromText(trimmed);
+      if (lineDate) rollingDate = lineDate;
     }
     if (trimmed.length === 0) {
-      if (currentGroup.length > 0) { paragraphs.push({ text: currentGroup.trim(), page: groupPage }); currentGroup = ''; groupPage = currentPage; }
+      if (currentGroup.length > 0) { paragraphs.push({ text: currentGroup.trim(), page: groupPage, nearestDate: groupDate }); currentGroup = ''; groupPage = currentPage; groupDate = rollingDate; }
       continue;
     }
-    if (currentGroup.length === 0) groupPage = currentPage;
+    if (currentGroup.length === 0) { groupPage = currentPage; groupDate = rollingDate; }
     if (currentGroup.length > 0 && trimmed.length < MIN_PARAGRAPH_LENGTH && currentGroup.length < MIN_PARAGRAPH_LENGTH) {
       currentGroup += ' ' + trimmed;
     } else if (currentGroup.length > 0 && currentGroup.length >= MIN_PARAGRAPH_LENGTH) {
-      paragraphs.push({ text: currentGroup.trim(), page: groupPage });
+      paragraphs.push({ text: currentGroup.trim(), page: groupPage, nearestDate: groupDate });
       currentGroup = trimmed;
       groupPage = currentPage;
+      groupDate = rollingDate;
     } else {
       currentGroup += (currentGroup ? ' ' : '') + trimmed;
     }
   }
-  if (currentGroup.trim().length > 0) paragraphs.push({ text: currentGroup.trim(), page: groupPage });
+  if (currentGroup.trim().length > 0) paragraphs.push({ text: currentGroup.trim(), page: groupPage, nearestDate: groupDate });
 
   interface ScoredPara {
     text: string;
@@ -476,6 +488,7 @@ function smartPreFilter(text: string): {
     sectionKey: string | null;
     pageNumber: number;
     sectionName: string;
+    nearestDate: string | undefined;
   }
 
   const scored: ScoredPara[] = [];
@@ -483,7 +496,7 @@ function smartPreFilter(text: string): {
   const detectedHeadersSet = new Set<string>();
   let currentSection = '';
 
-  for (const { text: para, page } of paragraphs) {
+  for (const { text: para, page, nearestDate } of paragraphs) {
     const trimmed = para.trim();
     if (trimmed.length < MIN_PARAGRAPH_LENGTH) continue;
     if (NOISE_REGEX.test(trimmed)) continue;
@@ -516,7 +529,9 @@ function smartPreFilter(text: string): {
     }
 
     if (matchedKeywords.length >= 1 || isHeader) {
-      scored.push({ text: trimmed, keywordCount: matchedKeywords.length, matchedKeywords, isHeader, sectionKey, pageNumber: page, sectionName: currentSection });
+      // Use date found directly in the paragraph text, or fall back to the nearest date from prior lines
+      const inlineDate = extractDateFromText(trimmed);
+      scored.push({ text: trimmed, keywordCount: matchedKeywords.length, matchedKeywords, isHeader, sectionKey, pageNumber: page, sectionName: currentSection, nearestDate: inlineDate || nearestDate });
     }
   }
 
@@ -551,7 +566,8 @@ function smartPreFilter(text: string): {
   for (const sp of selected) {
     if (totalChars >= FILTERED_TEXT_CAP) break;
     const sectionTag = sp.sectionName ? ` | ${sp.sectionName}` : '';
-    const tagged = `[Page ${sp.pageNumber}${sectionTag}] ${sp.text}`;
+    const dateTag = sp.nearestDate ? ` | Date: ${sp.nearestDate}` : '';
+    const tagged = `[Page ${sp.pageNumber}${sectionTag}${dateTag}] ${sp.text}`;
     const chunk = tagged.length + totalChars > FILTERED_TEXT_CAP
       ? tagged.substring(0, FILTERED_TEXT_CAP - totalChars)
       : tagged;
@@ -1119,6 +1135,13 @@ export async function POST(request: NextRequest) {
               emit({ type: 'progress', message: `Phase 2a: Extracting — ${tc} tokens...`, percent: Math.min(pct, 60), phase: 'extraction' });
             });
             let items = extractOutput ? parseExtractionOutput(extractOutput) : [];
+            // Post-extraction date fallback for retry path
+            for (const item of items) {
+              if (!item.dateFound && item.excerpt) {
+                const fallbackDate = extractDateFromText(item.excerpt);
+                if (fallbackDate) item.dateFound = fallbackDate;
+              }
+            }
             items = deduplicateItems(items);
 
             if (items.length > 0) {
@@ -1262,6 +1285,13 @@ export async function POST(request: NextRequest) {
 
               if (output) {
                 const items = parseExtractionOutput(output);
+                // Post-extraction date fallback: for items with null dates, try regex on excerpt
+                for (const item of items) {
+                  if (!item.dateFound && item.excerpt) {
+                    const fallbackDate = extractDateFromText(item.excerpt);
+                    if (fallbackDate) item.dateFound = fallbackDate;
+                  }
+                }
                 if (items.length > 0) {
                   rawItems = items;
                   extractionSucceeded = true;
