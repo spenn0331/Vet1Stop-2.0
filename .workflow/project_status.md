@@ -6,46 +6,100 @@
 - **Primary Goal**: MVP Launch (Q2 2026)
 - **Current Phase**: Strategic Foundation & "Super App" Definition
 - **Dev Server**: `npm run dev` → http://localhost:3000
-- **Last Active Development**: Feb 21, 2026
+- **Last Active Development**: Feb 23, 2026
 - **Recovery Date**: Feb 14, 2026 (restored from git commit `863a42cd`)
 
 ---
 
-## 🟡 Current Status: Active Development — Medical Detective NOT YET COMPLETE
-**As of Feb 21, 2026:** Medical Detective v4.3 shipped — deep evidence synthesis with JSON-structured output, excerpts, claim type mapping, and next-action guidance. Streaming Grok-4 works (no more 35% stall). However, **significant work remains** before Medical Detective is production-ready. See "Remaining Work" below.
+## 🟡 Current Status: Active Development — Records Recon v4.7 REFACTORED
+**As of Feb 23, 2026:** "Medical Detective" has been **retired and replaced** by **Records Recon v4.7** — a legally safe document organizer. All claims advice language, next-step suggestions, rating estimates, DC codes, and filing instructions have been removed. The feature now provides pure extraction + organization + user-controlled export. See "Records Recon v4.7" section below.
 
 ### ✅ Recently Completed
+* **Records Recon v4.7 (Feb 23, 2026):** Complete legal-safe refactor of "Medical Detective". Retired all claims advice language. New two-phase architecture: Phase 2a (Extraction) + Phase 2b (Structuring). Tactical command-center UI with dark theme, tabbed dashboard (Dashboard | Timeline | Conditions Index | Export), MVP PDF viewer split-pane with jump-to-page, VSO Briefing Pack export, and permanent legal disclaimer. See detailed section below.
 * **Strategic Pivot:** Defined the "Living Master Strategy" (replacing the traditional business plan).
 * **Revenue Model:** Finalized the "Hybrid Engine" (SaaS + B2B Spotlights + Gov Contracting).
 * **Documentation:** Completed the **AI Command Center Cheat Sheet** for operational efficiency.
 * **Vertical Expansion:** Formally integrated "Life & Leisure" (Space-A/Retreats) and "Education" (EdTech) into the core product pillars.
 * **Grok API Key:** Configured server-side `GROK_API_KEY` in `.env.local` (was missing, causing both Symptom Finder and Medical Detective to silently fail).
 * **Symptom Finder (Health Page):** Fully operational — conversational triage wizard uses `grok-4-latest` model, produces personalized VA/NGO/State resource recommendations with crisis detection.
-* **Medical Detective v2 (Health Page — Feb 19, 2026):** Complete rewrite with: `pdf-parse` library for robust PDF text extraction, 14k-char chunked processing (~3500 tokens/chunk), streaming NDJSON response for real-time progress, exact expert VA evidence analyst system prompt (Grok 4), "No Flags Found" state with actionable suggestions, page-number + date metadata on each flag, downloadable HTML→PDF evidence report, bold disclaimer on every screen. API uses `XAI_API_KEY` env var + `grok-4` model.
 * **Model Upgrades:** Updated all AI endpoints from older Grok models to `grok-4` (text/NLP via `XAI_API_KEY`) and `grok-2-vision-1212` (image analysis).
 
-### 🚧 In Progress — Medical Detective (LOTS of work remaining)
-* **Medical Detective is NOT production-ready.** v4.3 establishes the architecture (streaming, JSON prompt, deep fields) but needs extensive testing, tuning, and polish before it delivers consistent value to veterans.
+### 🚧 In Progress
+* **Records Recon v4.7 testing:** Architecture is complete. Needs real-world validation with VA Blue Button PDFs and mock records to verify extraction quality, structuring accuracy, and timeline correctness.
 * **Living Master Strategy:** Founder reviewing and adding Life/Leisure and Education feature sets.
 * **Legal Setup:** LLC formation in PA (Pending).
 
-### ⚠️ Medical Detective — Remaining Work (Phase 1 ★)
-This is a prioritized list of what still needs to happen before Medical Detective is truly "ship it" quality:
+### ✅ Records Recon v4.7 (Feb 23, 2026) — Legal-Safe Refactor Complete
 
-1. **Output quality validation** — Run the real 1001-page Blue Button AND 12-page mock PDF through v4.3 and verify Grok-4 actually returns the deep JSON format (excerpts, dates, context, claim types, next actions). The JSON prompt has not been validated against real VA records yet.
-2. **Parser robustness** — If Grok-4 returns malformed JSON or mixed text/JSON, the fallback text parser needs to handle it gracefully. Edge cases need testing.
-3. **Excerpt quality** — Verify Grok-4 is extracting real verbatim quotes from the records, not hallucinating text. This is critical — veterans will share these with VSOs.
-4. **Claim type accuracy** — "Primary Service-Connected" vs "Secondary" vs "PACT Act Presumptive" must be correct. Wrong guidance could mislead a veteran.
-5. **Timing targets** — Real Blue Button must finish <75s, mock PDF <20s. Neither has been confirmed on v4.3.
-6. **Frontend card rendering** — The expanded cards (excerpt box, context box, next action box) need visual QA on mobile and desktop to match the rest of the Health page design.
-7. **PDF report** — The downloadable report now includes claim type and next action fields, but needs visual QA (formatting, page breaks, readability).
-8. **Image upload path** — Image uploads (PNG/JPG of records) were removed in v4.3 to fix the build crash. If image support is needed for Phase 1, it must be re-implemented cleanly (separate from PDF path).
-9. **Error handling edge cases** — What happens if the PDF has 0 extractable text? What if Grok-4 returns empty? What if the API key expires mid-scan?
-10. **Authentication gate** — The "Loading authentication..." spinner blocks the Health page for unauthenticated users. May need a public-access path for Medical Detective demo.
-11. **Disclaimer compliance** — Verify bold disclaimers appear on: upload screen, processing screen, results screen, interim report, PDF report, and every API response. Per master-strategy.md: "Bold disclaimer on every screen and report."
-12. **Performance on Vercel** — The 70s + 30s idle timeout + retry may exceed Vercel's serverless function limits in production. Need to test deployed behavior, not just localhost.
-13. **Pre-filter tuning** — The 10K char / 80 paragraph cap may be too aggressive for some records or too loose for others. Need data from real scans to tune.
-14. **Retry UX** — The "Retry Deep Analysis" flow sends `useReducedCap: true` but the reduced text may lose important sections. Need to verify the 60% cap doesn't drop critical evidence.
+**Why:** "Medical Detective" v4.3 contained legally dangerous language — claim types ("Primary Service-Connected", "Secondary", "PACT Act Presumptive"), next-action instructions ("File at va.gov", "Request nexus letter", "Submit buddy statement"), DC code references, rating estimates, and "Why This Matters for Your Claim" framing. These crossed red lines from VA OGC (38 CFR §14.629), FTC Operation AI Comply, and PA UTPCPL.
+
+**What Changed:**
+* **Retired "Medical Detective"** — renamed to **Records Recon** everywhere (API, UI, page.tsx, docs)
+* **New API route:** `src/app/api/health/records-recon/route.ts` — completely rewritten
+* **Two-phase architecture preserved, repurposed:**
+  - Phase 1 (Smart Pre-Filter): Unchanged — `smartPreFilter()` works perfectly
+  - Phase 2a (Extraction): Rewritten prompt — extracts conditions with page, date, section, provider, excerpt, category. **ZERO claim language.**
+  - Phase 2b (Structuring): **Replaces** the old "claims analyst" call. Organizes raw extractions into `timeline[]`, `conditions_index[]`, `keyword_frequency[]`, `document_summary`. Pure reorganization — no advice.
+* **Banned-words policy (softened):** Only claim/strategy words banned. Neutral document words allowed (excerpt, mention, found, referenced, page, section, etc.)
+* **New UI:** Tactical command-center dashboard with dark theme (`#0A0F1A` background)
+  - Tabbed layout: Dashboard | Timeline | Conditions Index | Export
+  - MVP PDF viewer: `<iframe>` split-pane with `#page=N` jump-to-page
+  - Clickable page badges throughout — timeline entries, condition excerpts, all jump to PDF page
+  - Permanent amber disclaimer banner (non-dismissible)
+  - Pre-scan consent checkbox required before "Run Recon" activates
+  - Copy-to-clipboard on every excerpt
+  - VSO Briefing Pack HTML export with full-page disclaimer cover, timeline, conditions index, and blank "My Notes" pages
+* **Deleted (legal kills):**
+  - `ANALYSIS_PROMPT` (the "VA disability claims analyst")
+  - `generateInterimContext()` (contained claim filing instructions)
+  - `addPactActCrossRef()` (implied eligibility determination)
+  - All `claimType`, `nextAction`, `suggestedNextSteps`, `suggestedClaimCategory` fields
+  - All UI text: "Why This Matters for Your Claim", "Recommended Next Step", "claim-relevant", "evidence flags"
+
+**Files Created:**
+- `src/app/api/health/records-recon/route.ts` — new legal-safe API (~900 lines)
+- `src/app/health/components/RecordsReconPanel.tsx` — main tabbed panel + PDF viewer (~680 lines)
+- `src/app/health/components/records-recon/ReconDisclaimer.tsx` — shared disclaimer banner
+- `src/app/health/components/records-recon/ReconTimeline.tsx` — interactive vertical timeline
+- `src/app/health/components/records-recon/ConditionFrequencyChart.tsx` — CSS bar chart
+- `src/app/health/components/records-recon/ConditionsIndex.tsx` — searchable conditions table
+- `src/app/health/components/records-recon/BriefingPackExport.tsx` — VSO Briefing Pack generator
+
+**Files Modified:**
+- `src/app/health/page.tsx` — rebranded all "Medical Detective" → "Records Recon"
+
+**Files Preserved (not deleted):**
+- `src/app/api/health/medical-detective/route.ts` — kept for reference/rollback
+- `src/app/health/components/MedicalDetectivePanel.tsx` — kept for reference/rollback
+
+### ⚠️ Records Recon — Remaining Work
+1. **Real-world testing** — Run the 1001-page Blue Button and mock PDFs through v4.7 to validate extraction quality and structuring accuracy.
+2. **Excerpt quality** — Verify Grok-4 extracts real verbatim quotes, not hallucinated text.
+3. **Timing targets** — Blue Button <75s, mock PDF <20s.
+4. **PDF viewer edge cases** — Test iframe `#page=N` jump across Chrome, Edge, Firefox.
+5. **Mobile responsiveness** — Test split-pane collapse on mobile (should stack vertically).
+6. **Vercel deployment** — Verify serverless function timeouts work in production.
+7. **VSO Briefing Pack polish** — Consider migrating from HTML to native PDF via `pdf-lib`.
+
+### 🔮 Records Recon — Future Sprint Roadmap
+
+**Phase 1.5 — Enhanced PDF Viewer**
+- Replace `<iframe>` with `react-pdf` + `pdfjs-dist` for virtualized rendering
+- Page thumbnails sidebar, search within PDF
+- Handles 1000+ page PDFs without browser memory issues
+
+**Phase 2 — Premium Features**
+- Stripe integration — premium gating, checkout, webhooks
+- Multi-file merge — upload multiple records, merged timeline
+- Advanced analytics — frequency trends over time, provider comparison
+- Authentication gate — require login for premium tabs
+- Custom filters — date range, category, provider filtering on timeline
+
+**Phase 3 — Scale**
+- Mobile-responsive command center optimization
+- Native PDF generation via pdf-lib (replace HTML export)
+- AI chatbot integration ("ask questions about your records")
+- Rate limiting + usage tracking for freemium enforcement
 
 ### ✅ Medical Detective v4.2 (Feb 20, 2026) — Streaming Architecture Stable
 * **Root cause fixed:** Switched from `response.json()` (hung forever) to streaming API (`stream: true`) with token-by-token receipt
@@ -231,7 +285,7 @@ Vet1Stop is a centralized platform for U.S. veterans to access resources (Educat
 - **State-specific resources**: Location-aware resource filtering
 - **NGO Resources Section**: 133+ health NGOs with filtering, pagination, detail views
 - **Symptom Finder** ✅: AI-powered conversational triage wizard — category selection → symptom chat → severity assessment → personalized triple-track (VA/NGO/State) resource recommendations. Uses `grok-4-latest` with crisis detection and fallback responses.
-- **Medical Detective** ✅: Upload VA medical records (PDF/images) → AI scans for 25+ high-value evidence flags (PTSD, tinnitus, PACT Act conditions, claim language, nexus statements) → generates downloadable Personal Evidence Report. Uses `grok-4-latest` (text NLP) + `grok-2-vision-1206` (image/scanned PDF analysis).
+- **Records Recon** ✅ (v4.7): Upload VA medical records (PDF) → AI extracts and organizes conditions into structured timeline, conditions index, and keyword frequency chart → generates downloadable VSO Briefing Pack. Tactical command-center UI with dark theme, tabbed dashboard, MVP PDF viewer split-pane with jump-to-page. **Legally safe — zero claims advice language.** Uses `grok-4-1-fast-non-reasoning` (extraction) + `grok-4-1-fast-reasoning` (structuring).
 - **Crisis Banner**: Always-visible Veterans Crisis Line info with crisis detection
 - **VA Healthcare Benefits Section**: Accordion-based benefit explanations
 - **Resource Pathways**: Step-by-step pathway navigator (PathwaySelector, PathwayNavigator, PathwayStep)

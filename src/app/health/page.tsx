@@ -14,13 +14,13 @@ import {
 import { PhoneIcon as PhoneIconSolid } from '@heroicons/react/24/solid';
 import Link from 'next/link';
 import SymptomFinderWizard from './components/SymptomFinderWizard';
-import MedicalDetectivePanel from './components/MedicalDetectivePanel';
+import RecordsReconPanel from './components/RecordsReconPanel';
 import AutoFillButton from '@/components/shared/AutoFillButton';
 
 export const metadata: Metadata = {
   title: 'Health Resources | Vet1Stop',
-  description: 'Access comprehensive veteran health resources, AI-powered symptom triage, medical record scanning, and connections to VA, NGO, and state programs.',
-  keywords: 'veteran health, VA healthcare, PTSD, mental health veterans, medical detective, symptom finder, veteran wellness, disability claims',
+  description: 'Access comprehensive veteran health resources, AI-powered symptom triage, medical record organization, and connections to VA, NGO, and state programs.',
+  keywords: 'veteran health, VA healthcare, PTSD, mental health veterans, records recon, symptom finder, veteran wellness, medical records',
 };
 
 export default function HealthPage() {
@@ -79,11 +79,11 @@ export default function HealthPage() {
                   <ChatBubbleLeftRightIcon className="ml-2 h-5 w-5" aria-hidden="true" />
                 </a>
                 <a
-                  href="#medical-detective"
+                  href="#records-recon"
                   className="inline-flex items-center px-6 py-3 rounded-md bg-transparent border-2 border-white text-white font-semibold hover:bg-white/10 focus:outline-none focus:ring-4 focus:ring-white/30 transition-colors"
-                  aria-label="Jump to Medical Detective section"
+                  aria-label="Jump to Records Recon section"
                 >
-                  Medical Detective
+                  Records Recon
                   <DocumentMagnifyingGlassIcon className="ml-2 h-5 w-5" aria-hidden="true" />
                 </a>
               </div>
@@ -134,27 +134,27 @@ export default function HealthPage() {
               </div>
             </a>
 
-            {/* Medical Detective Card */}
+            {/* Records Recon Card */}
             <a
-              href="#medical-detective"
+              href="#records-recon"
               className="bg-blue-50 rounded-lg p-6 border border-blue-100 shadow-sm hover:shadow-md transition-shadow group"
             >
               <div className="mb-4 flex justify-between items-start">
-                <h3 className="text-xl font-bold text-[#1A2C5B]">Medical Detective</h3>
+                <h3 className="text-xl font-bold text-[#1A2C5B]">Records Recon</h3>
                 <DocumentMagnifyingGlassIcon className="h-6 w-6 text-[#1A2C5B]" aria-hidden="true" />
               </div>
               <p className="text-gray-700 mb-4">
-                Upload your VA medical records and AI scans for 25+ high-value evidence flags relevant to disability claims.
+                Upload your VA medical records and organize them into a structured VSO Briefing Pack with timeline, conditions index, and excerpts.
               </p>
               <ul className="list-disc list-inside text-gray-700 space-y-2 text-sm">
-                <li>Upload PDFs, screenshots, Blue Button</li>
-                <li>AI-powered evidence scanning</li>
-                <li>Personal Evidence Report PDF</li>
-                <li>Files auto-deleted — zero storage</li>
+                <li>Upload PDFs — auto-deleted after scan</li>
+                <li>AI-powered condition extraction</li>
+                <li>Interactive timeline + PDF viewer</li>
+                <li>Downloadable VSO Briefing Pack</li>
               </ul>
               <div className="mt-4 pt-4 border-t border-blue-100">
                 <span className="text-[#1A2C5B] font-medium inline-flex items-center group-hover:text-blue-700">
-                  Scan Your Records
+                  Run Recon
                   <ArrowRightIcon className="ml-1 h-4 w-4" aria-hidden="true" />
                 </span>
               </div>
@@ -215,26 +215,26 @@ export default function HealthPage() {
         </div>
       </section>
 
-      {/* ─── Medical Detective Section ─── */}
+      {/* ─── Records Recon Section ─── */}
       <section
-        id="medical-detective"
-        aria-labelledby="medical-detective-heading"
+        id="records-recon"
+        aria-labelledby="records-recon-heading"
         className="py-16 bg-white scroll-mt-20"
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-10">
             <h2
-              id="medical-detective-heading"
+              id="records-recon-heading"
               className="text-2xl md:text-3xl font-bold text-[#1A2C5B] mb-3"
             >
-              Medical Detective
+              Records Recon
             </h2>
             <p className="text-gray-700 max-w-2xl mx-auto">
-              Upload your VA medical records and our AI scans for evidence flags that could support disability claims. Strictly informational — files are auto-deleted after processing.
+              Organize your VA medical records into a structured briefing pack with timeline, conditions index, and verbatim excerpts. A document organizer — not medical or legal advice.
             </p>
           </div>
 
-          <MedicalDetectivePanel />
+          <RecordsReconPanel />
         </div>
       </section>
 
@@ -326,7 +326,7 @@ export default function HealthPage() {
                   <div>
                     <span className="font-medium text-[#1A2C5B]">Gather medical evidence</span>
                     <p className="mt-1 text-gray-600">
-                      Collect service treatment records, VA medical records, and private medical records. Use Medical Detective above to find evidence flags.
+                      Collect service treatment records, VA medical records, and private medical records. Use Records Recon above to organize your records.
                     </p>
                   </div>
                 </li>
