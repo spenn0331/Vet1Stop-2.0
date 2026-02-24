@@ -829,8 +829,8 @@ function buildReconReportFromItems(
   isInterim?: boolean,
   interimNote?: string,
 ): ReconReport {
-  // Build timeline from raw items (sorted by date)
-  const timeline: ReconTimelineEntry[] = items
+  // Build timeline from raw items (sorted by date), deduplicated by content
+  const rawTimeline: ReconTimelineEntry[] = items
     .map(item => ({
       date: item.dateFound,
       page: item.pageNumber,
@@ -845,6 +845,15 @@ function buildReconReportFromItems(
       if (!b.date) return -1;
       return a.date.localeCompare(b.date);
     });
+
+  // Deduplicate timeline entries by date+page+excerpt+category
+  const timelineSeen = new Set<string>();
+  const timeline: ReconTimelineEntry[] = rawTimeline.filter(entry => {
+    const key = `${entry.date || ''}|${entry.page || ''}|${entry.entry.toLowerCase().substring(0, 80)}|${entry.category}`;
+    if (timelineSeen.has(key)) return false;
+    timelineSeen.add(key);
+    return true;
+  });
 
   // Build conditions index from raw items
   const condMap = new Map<string, ReconCondition>();
@@ -925,13 +934,22 @@ function buildReconReport(
   aiModel: string,
   synopsis?: ScanSynopsis,
 ): ReconReport {
+  // Deduplicate timeline entries from Phase 2b output
+  const tlSeen = new Set<string>();
+  const dedupedTimeline = structured.timeline.filter(entry => {
+    const key = `${entry.date || ''}|${entry.page || ''}|${(entry.entry || '').toLowerCase().substring(0, 80)}|${entry.category}`;
+    if (tlSeen.has(key)) return false;
+    tlSeen.add(key);
+    return true;
+  });
+
   return {
     disclaimer: DISCLAIMER,
     summary: items.length > 0
       ? `${items.length} condition(s) extracted and organized from ${filesProcessed} document(s). This is a structured summary of what was found in your records.`
       : `No conditions were extracted from the ${filesProcessed} document(s) processed. Consider uploading additional records for a more thorough scan.`,
     documentSummary: structured.documentSummary,
-    timeline: structured.timeline,
+    timeline: dedupedTimeline,
     conditionsIndex: structured.conditionsIndex,
     keywordFrequency: structured.keywordFrequency,
     extractedItems: items,

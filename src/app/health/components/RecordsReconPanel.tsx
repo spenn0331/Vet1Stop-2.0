@@ -16,6 +16,7 @@ import ReconTimeline from './records-recon/ReconTimeline';
 import ConditionFrequencyChart from './records-recon/ConditionFrequencyChart';
 import ConditionsIndex from './records-recon/ConditionsIndex';
 import BriefingPackExport from './records-recon/BriefingPackExport';
+import PdfViewerPaneLoader from './records-recon/PdfViewerPaneLoader';
 
 // ─── Types matching route.ts ──────────────────────────────────────────────────
 
@@ -119,16 +120,22 @@ export default function RecordsReconPanel() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [pdfKey, setPdfKey] = useState(0);
+  const [pdfTargetPage, setPdfTargetPage] = useState<number | undefined>(undefined);
+  const [pdfSearchText, setPdfSearchText] = useState<string>('');
+  const pdfBlobUrlRef = useRef<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  // Clean up PDF URL on unmount
+  // Clean up PDF blob URL only on unmount
   useEffect(() => {
     return () => {
-      if (pdfUrl) URL.revokeObjectURL(pdfUrl);
+      if (pdfBlobUrlRef.current) {
+        URL.revokeObjectURL(pdfBlobUrlRef.current);
+        pdfBlobUrlRef.current = null;
+      }
     };
-  }, [pdfUrl]);
+  }, []);
 
   // ─── File Handling ────────────────────────────────────────────────────────
 
@@ -154,33 +161,36 @@ export default function RecordsReconPanel() {
       setFiles(prev => [...prev, ...newFiles]);
       setError('');
       // Create PDF URL for viewer (use first PDF)
-      if (!pdfUrl && newFiles[0].file) {
-        setPdfUrl(URL.createObjectURL(newFiles[0].file));
+      if (!pdfBlobUrlRef.current && newFiles[0].file) {
+        const blobUrl = URL.createObjectURL(newFiles[0].file);
+        pdfBlobUrlRef.current = blobUrl;
+        setPdfUrl(blobUrl);
       }
     }
-  }, [pdfUrl]);
+  }, []);
 
   const removeFile = (index: number) => {
     setFiles(prev => {
       const updated = prev.filter((_, i) => i !== index);
-      if (updated.length === 0 && pdfUrl) {
-        URL.revokeObjectURL(pdfUrl);
+      if (updated.length === 0 && pdfBlobUrlRef.current) {
+        URL.revokeObjectURL(pdfBlobUrlRef.current);
+        pdfBlobUrlRef.current = null;
         setPdfUrl(null);
       }
       return updated;
     });
   };
 
-  // ─── PDF Page Jump ────────────────────────────────────────────────────────
+  // ─── PDF Page Jump + Highlight ─────────────────────────────────────────────
 
-  const scrollToPage = useCallback((pageNumber: number) => {
-    if (!pdfUrl) return;
-    // Use #page=N fragment — supported by Chrome/Edge/Firefox built-in PDF viewers
-    const baseUrl = pdfUrl.split('#')[0];
-    setPdfUrl(`${baseUrl}#page=${pageNumber}`);
-    // Force iframe re-mount so the browser loads the PDF at the new page
+  const scrollToPage = useCallback((pageNumber: number, searchText?: string) => {
+    if (!pdfBlobUrlRef.current) return;
+    // Set target page and search text for the PDF viewer component
+    setPdfTargetPage(pageNumber);
+    setPdfSearchText(searchText || '');
+    // Increment key to signal the viewer to re-process the jump + highlight
     setPdfKey(prev => prev + 1);
-  }, [pdfUrl]);
+  }, []);
 
   // ─── Clipboard ────────────────────────────────────────────────────────────
 
@@ -284,7 +294,7 @@ export default function RecordsReconPanel() {
     setScanCache(null);
     setConsentChecked(false);
     setActiveTab('dashboard');
-    if (pdfUrl) { URL.revokeObjectURL(pdfUrl); setPdfUrl(null); }
+    if (pdfBlobUrlRef.current) { URL.revokeObjectURL(pdfBlobUrlRef.current); pdfBlobUrlRef.current = null; setPdfUrl(null); }
   };
 
   const retryWithCache = (useReducedCap = false) => {
@@ -608,7 +618,7 @@ export default function RecordsReconPanel() {
                           <div className="flex items-center gap-3 mt-1">
                             {item.pageNumber && (
                               <button
-                                onClick={() => scrollToPage(item.pageNumber!)}
+                                onClick={() => scrollToPage(item.pageNumber!, item.excerpt)}
                                 className="text-[#2563EB] text-xs hover:underline font-mono"
                               >
                                 Page {item.pageNumber}
@@ -657,20 +667,21 @@ export default function RecordsReconPanel() {
           </div>
         </div>
 
-        {/* RIGHT PANE — PDF Viewer */}
+        {/* RIGHT PANE — PDF Viewer with Highlight */}
         {pdfUrl && (
           <div className="lg:w-[40%] border-t lg:border-t-0 lg:border-l border-blue-100 flex flex-col bg-gray-50">
             <div className="bg-blue-50 border-b border-blue-100 px-4 py-2 flex items-center justify-between">
               <span className="text-gray-600 text-xs font-mono truncate">{files[0]?.name || 'Document'}</span>
-              <span className="text-gray-500 text-xs">Click any page number to jump</span>
+              <span className="text-gray-500 text-xs">Click any page number to jump & highlight</span>
             </div>
-            <iframe
-              key={pdfKey}
-              src={pdfUrl}
-              className="flex-1 w-full min-h-[400px] lg:min-h-0"
-              title="PDF Viewer"
-              style={{ border: 'none' }}
-            />
+            <div className="flex-1 min-h-[400px] lg:min-h-0">
+              <PdfViewerPaneLoader
+                fileUrl={pdfUrl}
+                targetPage={pdfTargetPage}
+                searchText={pdfSearchText}
+                jumpTrigger={pdfKey}
+              />
+            </div>
           </div>
         )}
       </div>

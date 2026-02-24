@@ -15,7 +15,7 @@ interface ReconCondition {
 
 interface ConditionsIndexProps {
   conditions: ReconCondition[];
-  onPageClick: (page: number) => void;
+  onPageClick: (page: number, searchText?: string) => void;
   onCopy: (text: string, id: string) => void;
   copiedId: string | null;
 }
@@ -112,7 +112,7 @@ export default function ConditionsIndex({ conditions, onPageClick, onCopy, copie
                       {cond.pagesFound.map(page => (
                         <button
                           key={page}
-                          onClick={() => onPageClick(page)}
+                          onClick={() => onPageClick(page, cond.excerpts[0]?.text)}
                           className="text-[#2563EB] text-xs font-mono hover:underline hover:text-blue-800 bg-blue-50 px-1.5 py-0.5 rounded"
                         >
                           p.{page}
@@ -145,7 +145,7 @@ export default function ConditionsIndex({ conditions, onPageClick, onCopy, copie
                           <div className="flex gap-2 mt-0.5">
                             {exc.page && (
                               <button
-                                onClick={() => onPageClick(exc.page!)}
+                                onClick={() => onPageClick(exc.page!, exc.text)}
                                 className="text-[#2563EB] text-[10px] font-mono hover:underline"
                               >
                                 Page {exc.page}

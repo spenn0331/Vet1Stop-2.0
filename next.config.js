@@ -20,7 +20,7 @@ const nextConfig = {
     typedRoutes: false,
   },
   // Improve compatibility with older TypeScript versions
-  serverExternalPackages: ['pdf-parse'],
+  serverExternalPackages: ['pdf-parse', 'pdfjs-dist'],
   // Increase timeout for builds
   staticPageGenerationTimeout: 180,
   // Disable source maps in production
@@ -28,6 +28,11 @@ const nextConfig = {
   // Increase body size limit for Medical Detective large PDF uploads (50MB base64)
   serverActions: {
     bodySizeLimit: '50mb',
+  },
+  // Webpack config: ignore 'canvas' module used by pdfjs-dist server-side
+  webpack: (config) => {
+    config.resolve.alias.canvas = false;
+    return config;
   },
 };
 

@@ -30,7 +30,7 @@ const CATEGORY_COLORS: Record<string, string> = {
 
 interface ReconTimelineProps {
   entries: ReconTimelineEntry[];
-  onPageClick: (page: number) => void;
+  onPageClick: (page: number, searchText?: string) => void;
 }
 
 export default function ReconTimeline({ entries, onPageClick }: ReconTimelineProps) {
@@ -67,7 +67,7 @@ export default function ReconTimeline({ entries, onPageClick }: ReconTimelinePro
                 )}
                 {entry.page && (
                   <button
-                    onClick={() => onPageClick(entry.page!)}
+                    onClick={() => onPageClick(entry.page!, entry.entry)}
                     className="text-[#2563EB] text-xs font-mono hover:underline hover:text-blue-800 transition-colors"
                   >
                     Page {entry.page}
