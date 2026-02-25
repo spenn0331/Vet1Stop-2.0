@@ -1,16 +1,16 @@
 'use client';
 
-import React, { useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useEffect, useRef, useCallback, useState } from 'react';
 import { Worker, Viewer, SpecialZoomLevel } from '@react-pdf-viewer/core';
 import { defaultLayoutPlugin } from '@react-pdf-viewer/default-layout';
 import { searchPlugin } from '@react-pdf-viewer/search';
-import type { OnHighlightKeyword, FlagKeyword } from '@react-pdf-viewer/search';
+import type { OnHighlightKeyword } from '@react-pdf-viewer/search';
 
 import '@react-pdf-viewer/core/lib/styles/index.css';
 import '@react-pdf-viewer/default-layout/lib/styles/index.css';
 import '@react-pdf-viewer/search/lib/styles/index.css';
 
-const WORKER_URL = `https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js`;
+const WORKER_URL = 'https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
 
 interface PdfViewerPaneProps {
   fileUrl: string;
@@ -18,6 +18,12 @@ interface PdfViewerPaneProps {
   searchText?: string;
   jumpTrigger?: number;
   onReady?: () => void;
+}
+
+interface SearchKeyword {
+  keyword: string;
+  matchCase: boolean;
+  wholeWords: boolean;
 }
 
 const handleHighlightKeyword = (props: OnHighlightKeyword) => {
@@ -28,92 +34,72 @@ const handleHighlightKeyword = (props: OnHighlightKeyword) => {
 };
 
 export default function PdfViewerPane({ fileUrl, targetPage, searchText, jumpTrigger, onReady }: PdfViewerPaneProps) {
-  const docLoadedRef = useRef(false);
+  const [docLoaded, setDocLoaded] = useState(false);
   const lastTriggerRef = useRef<number>(0);
 
-  // Keep latest prop values in refs so the useEffect can read them without
-  // being listed as deps (avoids re-firing the effect on every prop change).
+  // @react-pdf-viewer plugins call React hooks internally, so they MUST be
+  // called at the top level of the component (Rules of Hooks).
+  // They cannot be wrapped in useMemo, useEffect, or any other hook.
+  // We call them every render (required), but stabilise the Viewer by only
+  // ever passing the FIRST render's instances via a ref — the Viewer never
+  // reinitialises, so jumpToPage and highlight stay connected.
+  const _search = searchPlugin({ onHighlightKeyword: handleHighlightKeyword });
+  const _layout = defaultLayoutPlugin({ sidebarTabs: () => [] });
+
+  // Initialised once from the first render and never updated.
+  const stableSearchRef = useRef(_search);
+  const stableLayoutRef = useRef(_layout);
+  const stablePluginsRef = useRef([stableSearchRef.current, stableLayoutRef.current]);
+
+  const { highlight, clearHighlights } = stableSearchRef.current;
+  const { jumpToPage } = stableLayoutRef.current.toolbarPluginInstance.pageNavigationPluginInstance;
+
+  // Keep the latest prop values in refs so the effect reads them without
+  // needing to list them as dependencies (prevents spurious re-fires).
   const targetPageRef = useRef(targetPage);
   const searchTextRef = useRef(searchText);
-  useEffect(() => { targetPageRef.current = targetPage; });
-  useEffect(() => { searchTextRef.current = searchText; });
-
-  // Plugin instances are memoized once — the Viewer internally binds to
-  // these exact objects.  Creating new instances each render produces
-  // orphaned plugins where jumpToPage / highlight are no-ops.
-  const searchPluginInstance = useMemo(
-    () => searchPlugin({ onHighlightKeyword: handleHighlightKeyword }),
-    []
-  );
-  const defaultLayoutPluginInstance = useMemo(
-    () => defaultLayoutPlugin({
-      sidebarTabs: () => [],
-      toolbarPlugin: {
-        fullScreenPlugin: { onEnterFullScreen: () => {}, onExitFullScreen: () => {} },
-      },
-    }),
-    []
-  );
-  const plugins = useMemo(
-    () => [searchPluginInstance, defaultLayoutPluginInstance],
-    [searchPluginInstance, defaultLayoutPluginInstance]
-  );
-
-  // Store the plugin API functions in refs so they're never deps of useEffect
-  // (avoids the infinite-loop caused by new function references each render).
-  const jumpToPageRef = useRef<(page: number) => void>(() => {});
-  const highlightRef = useRef<(keyword: FlagKeyword) => void>(() => {});
-  const clearHighlightsRef = useRef<() => void>(() => {});
-
-  // Sync refs to the current (memoized) plugin functions after every render.
-  // Since the instances are memoized, these will be stable after first render.
-  jumpToPageRef.current = defaultLayoutPluginInstance.toolbarPluginInstance
-    .pageNavigationPluginInstance.jumpToPage;
-  highlightRef.current = searchPluginInstance.highlight;
-  clearHighlightsRef.current = searchPluginInstance.clearHighlights;
+  targetPageRef.current = targetPage;
+  searchTextRef.current = searchText;
 
   const handleDocumentLoad = useCallback(() => {
-    docLoadedRef.current = true;
+    setDocLoaded(true);
     onReady?.();
   }, [onReady]);
 
-  // Fires only when jumpTrigger increments — no plugin functions in deps.
   useEffect(() => {
     if (!jumpTrigger || jumpTrigger === lastTriggerRef.current) return;
-    if (!docLoadedRef.current) return;
+    if (!docLoaded) return;
 
     lastTriggerRef.current = jumpTrigger;
     const currentTrigger = jumpTrigger;
 
     const page = targetPageRef.current;
     if (page && page >= 1) {
-      jumpToPageRef.current(page - 1);
+      jumpToPage(page - 1);
     }
 
-    // Retry highlighting across 4 intervals — the PDF text layer for the
-    // target page may take a moment to render after the scroll.
+    // Retry highlighting at multiple intervals — the PDF text layer for the
+    // target page may not be rendered immediately after jumpToPage scrolls.
     const timers: ReturnType<typeof setTimeout>[] = [];
 
     const runHighlight = () => {
       if (lastTriggerRef.current !== currentTrigger) return;
-      clearHighlightsRef.current();
+      clearHighlights();
       const text = searchTextRef.current;
       if (!text || text.trim().length === 0) return;
       const query = text.substring(0, 60).replace(/\s+/g, ' ').trim();
       if (query.length >= 3) {
-        highlightRef.current({ keyword: query, matchCase: false, wholeWords: false });
+        highlight({ keyword: query, matchCase: false, wholeWords: false } as SearchKeyword);
       }
     };
 
-    for (const delay of [400, 900, 1600, 2500]) {
-      timers.push(setTimeout(runHighlight, delay));
-    }
+    [400, 900, 1600, 2500].forEach(delay => timers.push(setTimeout(runHighlight, delay)));
     timers.push(setTimeout(() => {
-      if (lastTriggerRef.current === currentTrigger) clearHighlightsRef.current();
+      if (lastTriggerRef.current === currentTrigger) clearHighlights();
     }, 10000));
 
     return () => timers.forEach(clearTimeout);
-  }, [jumpTrigger]); // only jumpTrigger — all other values read from refs
+  }, [jumpTrigger, docLoaded, jumpToPage, highlight, clearHighlights]);
 
   return (
     <div className="h-full w-full relative" style={{ minHeight: '400px' }}>
@@ -136,7 +122,7 @@ export default function PdfViewerPane({ fileUrl, targetPage, searchText, jumpTri
         <Viewer
           fileUrl={fileUrl}
           defaultScale={SpecialZoomLevel.PageWidth}
-          plugins={plugins}
+          plugins={stablePluginsRef.current}
           onDocumentLoad={handleDocumentLoad}
         />
       </Worker>
