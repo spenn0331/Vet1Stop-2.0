@@ -1,10 +1,10 @@
 'use client';
 
-import React, { useEffect, useRef, useCallback, useState, useMemo } from 'react';
+import React, { useEffect, useRef, useCallback, useMemo } from 'react';
 import { Worker, Viewer, SpecialZoomLevel } from '@react-pdf-viewer/core';
 import { defaultLayoutPlugin } from '@react-pdf-viewer/default-layout';
 import { searchPlugin } from '@react-pdf-viewer/search';
-import type { OnHighlightKeyword } from '@react-pdf-viewer/search';
+import type { OnHighlightKeyword, FlagKeyword } from '@react-pdf-viewer/search';
 
 import '@react-pdf-viewer/core/lib/styles/index.css';
 import '@react-pdf-viewer/default-layout/lib/styles/index.css';
@@ -28,19 +28,23 @@ const handleHighlightKeyword = (props: OnHighlightKeyword) => {
 };
 
 export default function PdfViewerPane({ fileUrl, targetPage, searchText, jumpTrigger, onReady }: PdfViewerPaneProps) {
-  const [docLoaded, setDocLoaded] = useState(false);
-  const viewerContainerRef = useRef<HTMLDivElement>(null);
+  const docLoadedRef = useRef(false);
   const lastTriggerRef = useRef<number>(0);
 
-  // Stable plugin instances — memoized so the Viewer keeps its internal
-  // connection to these exact objects across renders.  Without this,
-  // every render creates new disconnected plugins, making jumpToPage
-  // and highlight no-ops on orphaned instances.
+  // Keep latest prop values in refs so the useEffect can read them without
+  // being listed as deps (avoids re-firing the effect on every prop change).
+  const targetPageRef = useRef(targetPage);
+  const searchTextRef = useRef(searchText);
+  useEffect(() => { targetPageRef.current = targetPage; });
+  useEffect(() => { searchTextRef.current = searchText; });
+
+  // Plugin instances are memoized once — the Viewer internally binds to
+  // these exact objects.  Creating new instances each render produces
+  // orphaned plugins where jumpToPage / highlight are no-ops.
   const searchPluginInstance = useMemo(
     () => searchPlugin({ onHighlightKeyword: handleHighlightKeyword }),
     []
   );
-
   const defaultLayoutPluginInstance = useMemo(
     () => defaultLayoutPlugin({
       sidebarTabs: () => [],
@@ -50,71 +54,69 @@ export default function PdfViewerPane({ fileUrl, targetPage, searchText, jumpTri
     }),
     []
   );
-
-  // Stable plugins array so the Viewer doesn't re-install on every render
   const plugins = useMemo(
     () => [searchPluginInstance, defaultLayoutPluginInstance],
     [searchPluginInstance, defaultLayoutPluginInstance]
   );
 
-  const { highlight, clearHighlights } = searchPluginInstance;
-  const { toolbarPluginInstance } = defaultLayoutPluginInstance;
-  const { pageNavigationPluginInstance } = toolbarPluginInstance;
-  const { jumpToPage } = pageNavigationPluginInstance;
+  // Store the plugin API functions in refs so they're never deps of useEffect
+  // (avoids the infinite-loop caused by new function references each render).
+  const jumpToPageRef = useRef<(page: number) => void>(() => {});
+  const highlightRef = useRef<(keyword: FlagKeyword) => void>(() => {});
+  const clearHighlightsRef = useRef<() => void>(() => {});
+
+  // Sync refs to the current (memoized) plugin functions after every render.
+  // Since the instances are memoized, these will be stable after first render.
+  jumpToPageRef.current = defaultLayoutPluginInstance.toolbarPluginInstance
+    .pageNavigationPluginInstance.jumpToPage;
+  highlightRef.current = searchPluginInstance.highlight;
+  clearHighlightsRef.current = searchPluginInstance.clearHighlights;
 
   const handleDocumentLoad = useCallback(() => {
-    setDocLoaded(true);
+    docLoadedRef.current = true;
     onReady?.();
   }, [onReady]);
 
+  // Fires only when jumpTrigger increments — no plugin functions in deps.
   useEffect(() => {
     if (!jumpTrigger || jumpTrigger === lastTriggerRef.current) return;
-    if (!docLoaded) return;
+    if (!docLoadedRef.current) return;
 
     lastTriggerRef.current = jumpTrigger;
     const currentTrigger = jumpTrigger;
 
-    if (targetPage && targetPage >= 1) {
-      jumpToPage(targetPage - 1);
+    const page = targetPageRef.current;
+    if (page && page >= 1) {
+      jumpToPageRef.current(page - 1);
     }
 
-    // Highlight with retries — the text layer for the target page may not
-    // be rendered immediately after jumpToPage scrolls to it.
+    // Retry highlighting across 4 intervals — the PDF text layer for the
+    // target page may take a moment to render after the scroll.
     const timers: ReturnType<typeof setTimeout>[] = [];
-    const delays = [400, 900, 1600, 2500];
 
     const runHighlight = () => {
       if (lastTriggerRef.current !== currentTrigger) return;
-      clearHighlights();
-
-      if (!searchText || searchText.trim().length === 0) return;
-
-      const query = searchText
-        .substring(0, 60)
-        .replace(/\s+/g, ' ')
-        .trim();
-
+      clearHighlightsRef.current();
+      const text = searchTextRef.current;
+      if (!text || text.trim().length === 0) return;
+      const query = text.substring(0, 60).replace(/\s+/g, ' ').trim();
       if (query.length >= 3) {
-        highlight({ keyword: query, matchCase: false, wholeWords: false });
+        highlightRef.current({ keyword: query, matchCase: false, wholeWords: false });
       }
     };
 
-    for (const delay of delays) {
+    for (const delay of [400, 900, 1600, 2500]) {
       timers.push(setTimeout(runHighlight, delay));
     }
-
-    // Auto-clear highlights after 10 seconds
     timers.push(setTimeout(() => {
-      if (lastTriggerRef.current === currentTrigger) {
-        clearHighlights();
-      }
+      if (lastTriggerRef.current === currentTrigger) clearHighlightsRef.current();
     }, 10000));
 
     return () => timers.forEach(clearTimeout);
-  }, [jumpTrigger, targetPage, searchText, docLoaded, jumpToPage, highlight, clearHighlights]);
+  }, [jumpTrigger]); // only jumpTrigger — all other values read from refs
 
   return (
-    <div ref={viewerContainerRef} className="h-full w-full relative" style={{ minHeight: '400px' }}>
+    <div className="h-full w-full relative" style={{ minHeight: '400px' }}>
       <style>{`
         @keyframes recon-highlight-pulse {
           0% { background-color: rgba(234, 179, 8, 0.8); }

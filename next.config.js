@@ -29,9 +29,32 @@ const nextConfig = {
   serverActions: {
     bodySizeLimit: '50mb',
   },
-  // Webpack config: ignore 'canvas' module used by pdfjs-dist server-side
-  webpack: (config) => {
+  webpack: (config, { isServer }) => {
     config.resolve.alias.canvas = false;
+
+    if (!isServer) {
+      // pdfjs-dist references Node built-ins that webpack 5 won't polyfill —
+      // tell it to silently ignore them on the client side.
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        canvas: false,
+        fs: false,
+        http: false,
+        https: false,
+        url: false,
+        zlib: false,
+        stream: false,
+        path: false,
+        util: false,
+      };
+      // The @react-pdf-viewer chunk is very large in dev; extend the
+      // default 120 000 ms timeout so it doesn't abort during first compile.
+      config.output = {
+        ...config.output,
+        chunkLoadTimeout: 300000,
+      };
+    }
+
     return config;
   },
 };
