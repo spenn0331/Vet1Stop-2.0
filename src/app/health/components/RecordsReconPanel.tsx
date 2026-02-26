@@ -10,6 +10,7 @@ import {
   CheckIcon,
   ShieldExclamationIcon,
   MagnifyingGlassIcon,
+  DocumentTextIcon,
 } from '@heroicons/react/24/outline';
 import ReconDisclaimer from './records-recon/ReconDisclaimer';
 import ReconTimeline from './records-recon/ReconTimeline';
@@ -122,6 +123,7 @@ export default function RecordsReconPanel() {
   const [pdfKey, setPdfKey] = useState(0);
   const [pdfTargetPage, setPdfTargetPage] = useState<number | undefined>(undefined);
   const [pdfSearchText, setPdfSearchText] = useState<string>('');
+  const [showMobilePdf, setShowMobilePdf] = useState(false);
   const pdfBlobUrlRef = useRef<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -190,6 +192,10 @@ export default function RecordsReconPanel() {
     setPdfSearchText(searchText || '');
     // Increment key to signal the viewer to re-process the jump + highlight
     setPdfKey(prev => prev + 1);
+    // On mobile, auto-open the PDF modal so the user sees the jump
+    if (window.innerWidth < 1024) {
+      setShowMobilePdf(true);
+    }
   }, []);
 
   // ─── Clipboard ────────────────────────────────────────────────────────────
@@ -530,8 +536,10 @@ export default function RecordsReconPanel() {
         </div>
       )}
 
-      {/* Split Pane Layout */}
-      <div className="flex flex-col lg:flex-row" style={{ minHeight: '600px' }}>
+      {/* Split Pane Layout — fixed viewport height so the PDF viewer's
+           internal virtualizer has a constrained scroll container.
+           Without this, scrollTop has no effect and jumpToPage silently no-ops. */}
+      <div className="flex flex-col lg:flex-row h-[calc(100vh-220px)] min-h-[600px]">
 
         {/* LEFT PANE — Tabbed Dashboard */}
         <div className={`flex-1 flex flex-col ${pdfUrl ? 'lg:w-[60%]' : 'w-full'}`}>
@@ -667,14 +675,14 @@ export default function RecordsReconPanel() {
           </div>
         </div>
 
-        {/* RIGHT PANE — PDF Viewer with Highlight */}
+        {/* RIGHT PANE — PDF Viewer with Highlight (hidden on mobile, shown on lg+) */}
         {pdfUrl && (
-          <div className="lg:w-[40%] border-t lg:border-t-0 lg:border-l border-blue-100 flex flex-col bg-gray-50">
+          <div className="hidden lg:flex lg:w-[40%] border-l border-blue-100 flex-col bg-gray-50">
             <div className="bg-blue-50 border-b border-blue-100 px-4 py-2 flex items-center justify-between">
               <span className="text-gray-600 text-xs font-mono truncate">{files[0]?.name || 'Document'}</span>
               <span className="text-gray-500 text-xs">Click any page number to jump & highlight</span>
             </div>
-            <div className="flex-1 min-h-[400px] lg:min-h-0">
+            <div className="flex-1 min-h-0 overflow-hidden">
               <PdfViewerPaneLoader
                 fileUrl={pdfUrl}
                 targetPage={pdfTargetPage}
@@ -685,6 +693,47 @@ export default function RecordsReconPanel() {
           </div>
         )}
       </div>
+
+      {/* ── Mobile PDF Floating Button + Modal ─────────────────────────── */}
+      {pdfUrl && (
+        <>
+          {/* Floating button — visible only on mobile when PDF modal is closed */}
+          {!showMobilePdf && (
+            <button
+              onClick={() => setShowMobilePdf(true)}
+              className="lg:hidden fixed bottom-6 right-6 z-40 flex items-center gap-2 bg-[#1A2C5B] text-white px-4 py-3 rounded-full shadow-lg hover:bg-[#2563EB] transition-colors"
+            >
+              <DocumentTextIcon className="h-5 w-5" />
+              <span className="text-sm font-semibold">View PDF</span>
+            </button>
+          )}
+
+          {/* Full-screen modal — mobile only */}
+          {showMobilePdf && (
+            <div className="lg:hidden fixed inset-0 z-50 flex flex-col bg-white">
+              {/* Modal header */}
+              <div className="flex items-center justify-between bg-[#1A2C5B] px-4 py-3 text-white">
+                <span className="text-sm font-semibold truncate">{files[0]?.name || 'Document'}</span>
+                <button
+                  onClick={() => setShowMobilePdf(false)}
+                  className="p-1.5 rounded-full hover:bg-white/20 transition-colors"
+                >
+                  <XMarkIcon className="h-5 w-5" />
+                </button>
+              </div>
+              {/* PDF viewer fills remaining space */}
+              <div className="flex-1 min-h-0 overflow-hidden">
+                <PdfViewerPaneLoader
+                  fileUrl={pdfUrl}
+                  targetPage={pdfTargetPage}
+                  searchText={pdfSearchText}
+                  jumpTrigger={pdfKey}
+                />
+              </div>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

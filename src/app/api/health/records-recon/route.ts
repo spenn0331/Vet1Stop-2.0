@@ -395,26 +395,63 @@ async function extractPDFData(base64Data: string): Promise<{ text: string; numPa
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const pdfParse = require('pdf-parse');
     const buffer = Buffer.from(base64Data, 'base64');
-    const data = await pdfParse(buffer);
-    const rawText = data.text || '';
+
+    // Collect per-page text keyed by 0-indexed page number.  This guarantees
+    // a 1:1 mapping between <<<PAGE N>>> tags and physical PDF pages,
+    // regardless of form-feed placement or async resolution order.
+    const pageTextMap = new Map<number, string>();
+
+    interface PdfTextItem { str: string; transform: number[] }
+    interface PdfTextContent { items: PdfTextItem[] }
+    interface PdfPageData {
+      pageIndex: number;
+      getTextContent: (opts?: Record<string, boolean>) => Promise<PdfTextContent>;
+    }
+
+    const data = await pdfParse(buffer, {
+      pagerender: (pageData: PdfPageData) => {
+        return pageData.getTextContent({ normalizeWhitespace: false, disableCombineTextItems: false })
+          .then((textContent: PdfTextContent) => {
+            let lastY: number | undefined;
+            let pageText = '';
+            for (const item of textContent.items) {
+              if (lastY === item.transform[5] || lastY === undefined) {
+                pageText += item.str;
+              } else {
+                pageText += '\n' + item.str;
+              }
+              lastY = item.transform[5];
+            }
+            pageTextMap.set(pageData.pageIndex, pageText);
+            return pageText;
+          });
+      },
+    });
+
     const numPages = data.numpages || 1;
 
-    let text: string;
+    // Diagnostic: compare per-page render count with old \f-split approach
+    const rawText = data.text || '';
     if (rawText.includes('\f')) {
-      const pages = rawText.split('\f');
-      text = pages.map((p: string, i: number) => `<<<PAGE ${i + 1}>>>\n${p}`).join('\n');
-    } else if (numPages > 1) {
-      const charsPerPage = Math.ceil(rawText.length / numPages);
-      const parts: string[] = [];
-      for (let i = 0; i < numPages; i++) {
-        const start = i * charsPerPage;
-        const end = Math.min((i + 1) * charsPerPage, rawText.length);
-        parts.push(`<<<PAGE ${i + 1}>>>\n${rawText.substring(start, end)}`);
-      }
-      text = parts.join('\n');
+      const ffSegments = rawText.split('\f').length;
+      console.log(
+        `[RecordsRecon] Page alignment: ${pageTextMap.size} pages via per-page render, ` +
+        `${ffSegments} segments via \\f split, ${numPages} reported by pdf-parse. ` +
+        `Old \\f drift: ${ffSegments - numPages} pages.`
+      );
     } else {
-      text = `<<<PAGE 1>>>\n${rawText}`;
+      console.log(
+        `[RecordsRecon] Page alignment: ${pageTextMap.size} pages via per-page render, ` +
+        `no \\f characters found, ${numPages} reported by pdf-parse.`
+      );
     }
+
+    // Build tagged text using per-page map — correct page numbers guaranteed
+    const parts: string[] = [];
+    for (let i = 0; i < numPages; i++) {
+      parts.push(`<<<PAGE ${i + 1}>>>\n${pageTextMap.get(i) || ''}`);
+    }
+    const text = parts.join('\n');
 
     return { text, numPages };
   } catch (err) {
