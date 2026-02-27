@@ -44,10 +44,10 @@ export default function ReconTimeline({ entries, onPageClick }: ReconTimelinePro
 
   return (
     <div className="relative">
-      <h3 className="text-[#1A2C5B] font-bold text-sm mb-4 uppercase tracking-wider">Chronological Timeline</h3>
+      <h3 className="text-[#1A2C5B] font-bold text-sm mb-4 uppercase tracking-wider sticky top-0 bg-white z-10 py-2 border-b border-gray-100">Chronological Timeline ({entries.length})</h3>
 
       {/* Vertical line */}
-      <div className="absolute left-4 top-12 bottom-4 w-0.5 bg-gradient-to-b from-[#1A2C5B] via-[#2563EB] to-blue-200" />
+      <div className="absolute left-4 top-16 bottom-4 w-0.5 bg-gradient-to-b from-[#1A2C5B] via-[#2563EB] to-blue-200" />
 
       <div className="space-y-3 pl-10">
         {entries.map((entry, i) => {

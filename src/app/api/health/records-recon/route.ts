@@ -1485,6 +1485,17 @@ export async function POST(request: NextRequest) {
           }
         }
 
+        // ── Fail-fast: image-only / scanned PDFs with no searchable text ──
+        const pureTextDensity = allFilteredText.replace(/\s+/g, '').replace(/<<<PAGE\s*\d+>>>/g, '').length;
+        if (pureTextDensity < 50) {
+          emit({
+            type: 'error',
+            message: 'This PDF appears to be image-only (scanned) with no searchable text. Records Recon currently requires text-searchable PDFs — such as VA Blue Button exports, MyHealtheVet downloads, or standard digital medical records. If your document is a scanned image, try using your device\'s OCR tool first, then re-upload.',
+          });
+          try { controller.close(); } catch { /* already closed */ }
+          return;
+        }
+
         const filteredTokenEstimate = Math.round(allFilteredText.length / 4);
         const overallReductionPct = allTotalParagraphs > 0 ? Math.round((1 - allKeptParagraphs / allTotalParagraphs) * 100) : 0;
 
@@ -1591,8 +1602,29 @@ export async function POST(request: NextRequest) {
         }
 
       } catch (err) {
-        console.error('[RecordsRecon] Stream error:', err);
-        emit({ type: 'error', message: (err as Error).message || 'Processing failed.' });
+        // Determine which phase failed based on current progress state
+        const error = err as Error;
+        let phaseLabel = 'Unknown phase';
+        const errMsg = error.message || 'Processing failed.';
+
+        if (errMsg.includes('Extraction')) {
+          phaseLabel = 'Phase 2a: Extraction';
+        } else if (errMsg.includes('Structuring')) {
+          phaseLabel = 'Phase 2b: Structuring';
+        } else if (errMsg.includes('pdf-parse') || errMsg.includes('PDF') || errMsg.includes('extractPDF')) {
+          phaseLabel = 'Phase 1: PDF Text Extraction';
+        } else if (errMsg.includes('Pre-filter') || errMsg.includes('filter')) {
+          phaseLabel = 'Phase 1: Pre-Filter';
+        } else if (errMsg.includes('API') || errMsg.includes('timed out')) {
+          phaseLabel = 'Phase 2: AI Processing';
+        }
+
+        console.error(`[RecordsRecon] ${phaseLabel} failed:`, errMsg, error.stack?.substring(0, 300));
+        emit({
+          type: 'error',
+          message: `${phaseLabel} encountered an error: ${errMsg}`,
+          phase: phaseLabel,
+        });
       } finally {
         try { controller.close(); } catch { /* already closed */ }
       }

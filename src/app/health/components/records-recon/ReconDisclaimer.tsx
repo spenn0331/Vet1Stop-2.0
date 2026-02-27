@@ -1,16 +1,15 @@
 'use client';
 
 import React from 'react';
-import { ShieldExclamationIcon } from '@heroicons/react/24/outline';
+import { InformationCircleIcon } from '@heroicons/react/24/outline';
 
 export default function ReconDisclaimer() {
   return (
-    <div className="bg-yellow-50 border border-yellow-300 rounded-lg px-4 py-3 mb-4">
-      <div className="flex items-start gap-2">
-        <ShieldExclamationIcon className="h-5 w-5 text-[#EAB308] flex-shrink-0 mt-0.5" />
-        <p className="text-sm text-yellow-800 font-semibold leading-relaxed">
-          Records Recon is a document organizer only — not medical, legal, or claims advice.
-          Always consult an accredited VSO before making decisions about VA benefits.
+    <div className="bg-slate-50 border-b border-slate-200 px-4 py-2">
+      <div className="flex items-center gap-2 max-w-5xl mx-auto">
+        <InformationCircleIcon className="h-4 w-4 text-slate-400 flex-shrink-0" />
+        <p className="text-[11px] text-slate-500 leading-snug">
+          Records Recon scans your uploaded files for potential evidence only. We never file claims, store data, or give medical advice. Share the generated report with your VSO or accredited representative.
         </p>
       </div>
     </div>

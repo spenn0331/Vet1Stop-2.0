@@ -3,14 +3,17 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   DocumentArrowUpIcon,
-  ArrowPathIcon,
   XMarkIcon,
-  ArrowDownTrayIcon,
   ClipboardDocumentIcon,
   CheckIcon,
   ShieldExclamationIcon,
   MagnifyingGlassIcon,
   DocumentTextIcon,
+  ChevronDoubleLeftIcon,
+  ChevronDoubleRightIcon,
+  EnvelopeIcon,
+  QuestionMarkCircleIcon,
+  BeakerIcon,
 } from '@heroicons/react/24/outline';
 import ReconDisclaimer from './records-recon/ReconDisclaimer';
 import ReconTimeline from './records-recon/ReconTimeline';
@@ -124,6 +127,8 @@ export default function RecordsReconPanel() {
   const [pdfTargetPage, setPdfTargetPage] = useState<number | undefined>(undefined);
   const [pdfSearchText, setPdfSearchText] = useState<string>('');
   const [showMobilePdf, setShowMobilePdf] = useState(false);
+  const [pdfCollapsed, setPdfCollapsed] = useState(false);
+  const [showBlueButtonHelp, setShowBlueButtonHelp] = useState(false);
   const pdfBlobUrlRef = useRef<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -308,6 +313,78 @@ export default function RecordsReconPanel() {
     startScan({ ...scanCache, useReducedCap });
   };
 
+  // ─── Sample Record Demo ─────────────────────────────────────────────────
+
+  const startSampleScan = () => {
+    const sampleText = `[Page 1 | Assessment | Date: 2023-03-15 | Provider: Smith, John MD] Patient presents with chronic bilateral tinnitus, rated 6/10 severity. Onset during active duty service in 2008 following exposure to artillery fire. Audiogram shows bilateral sensorineural hearing loss, mild to moderate. Assessment: 1. Bilateral tinnitus, chronic 2. Bilateral sensorineural hearing loss
+
+[Page 2 | Problem List | Date: 2023-03-15 | Provider: Smith, John MD] Active Problems: 1. Post-traumatic stress disorder (PTSD) - diagnosed 2019-06-12 2. Lumbar degenerative disc disease - diagnosed 2020-01-08 3. Obstructive sleep apnea - CPAP prescribed 2021-11-20 4. Gastroesophageal reflux disease (GERD) 5. Bilateral tinnitus 6. Left knee osteoarthritis
+
+[Page 3 | HPI | Date: 2022-11-10 | Provider: Jones, Mary PA-C] History of Present Illness: Veteran reports worsening low back pain with radiculopathy into left lower extremity. MRI lumbar spine shows L4-L5 disc herniation with moderate central canal stenosis. ROM testing: flexion limited to 40 degrees with pain on use. DeLuca criteria: additional functional loss of 15 degrees during flare-ups.
+
+[Page 4 | Mental Health | Date: 2023-01-22 | Provider: Williams, Sarah PhD] PHQ-9 score: 18 (moderately severe depression). PCL-5 score: 52. Patient endorses nightmares 3-4x/week, hypervigilance, avoidance of crowds. Diagnosis: PTSD with comorbid major depressive disorder (MDD). Sleep study confirms moderate OSA, AHI 22.`;
+
+    const sampleFlags = [
+      { condition: 'Tinnitus', confidence: 'high' as const, excerpt: 'chronic bilateral tinnitus, rated 6/10 severity' },
+      { condition: 'PTSD', confidence: 'high' as const, excerpt: 'Post-traumatic stress disorder (PTSD)' },
+      { condition: 'Sleep Apnea', confidence: 'high' as const, excerpt: 'Obstructive sleep apnea - CPAP prescribed' },
+      { condition: 'Lumbar DDD', confidence: 'high' as const, excerpt: 'Lumbar degenerative disc disease' },
+      { condition: 'GERD', confidence: 'medium' as const, excerpt: 'Gastroesophageal reflux disease' },
+    ];
+
+    const sampleSynopsis: ScanSynopsis = {
+      totalPages: 4,
+      totalParagraphs: 12,
+      keptParagraphs: 4,
+      reductionPct: 67,
+      keywordsDetected: ['tinnitus', 'hearing loss', 'ptsd', 'sleep apnea', 'gerd', 'lumbar', 'radiculopathy', 'depression'],
+      sectionHeadersFound: ['assessment', 'problem list', 'hpi'],
+    };
+
+    setConsentChecked(true);
+    startScan({
+      filteredText: sampleText,
+      keywordFlags: sampleFlags,
+      synopsis: sampleSynopsis,
+      fileNames: 'Sample_VA_Record.pdf',
+    });
+  };
+
+  // ─── Tab Badge Counts ──────────────────────────────────────────────────────
+
+  const getTabBadge = (tabId: TabId): number | null => {
+    if (!report) return null;
+    switch (tabId) {
+      case 'timeline': return report.timeline.length || null;
+      case 'conditions': return report.conditionsIndex.length || null;
+      case 'dashboard': return report.extractedItems.length || null;
+      default: return null;
+    }
+  };
+
+  // ─── VSO Email Draft ───────────────────────────────────────────────────────
+
+  const generateVsoEmailDraft = () => {
+    const condCount = report?.extractedItems.length || 0;
+    const dateRange = report?.documentSummary.dateRange;
+    const rangeStr = dateRange?.earliest && dateRange?.latest
+      ? `${dateRange.earliest} to ${dateRange.latest}`
+      : 'see attached';
+    const subject = encodeURIComponent('Records Recon Briefing Pack — Request for VSO Review');
+    const body = encodeURIComponent(
+      `Dear VSO Representative,\n\n` +
+      `I have used the Records Recon tool to organize my VA medical records and would like to schedule a meeting to review the findings with you.\n\n` +
+      `Summary:\n` +
+      `- Conditions identified: ${condCount}\n` +
+      `- Record date range: ${rangeStr}\n\n` +
+      `I have attached my VSO Briefing Pack (PDF) which includes a chronological timeline, conditions index, and supporting excerpts from my records.\n\n` +
+      `Please let me know your earliest availability for a review.\n\n` +
+      `Thank you for your service to veterans.\n\n` +
+      `Respectfully,\n[Your Name]\n[Your Phone Number]`
+    );
+    window.open(`mailto:?subject=${subject}&body=${body}`, '_self');
+  };
+
   // ─── Drag & Drop ──────────────────────────────────────────────────────────
 
   const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(true); };
@@ -320,6 +397,14 @@ export default function RecordsReconPanel() {
 
   // ─── Tab Config ───────────────────────────────────────────────────────────
 
+  // ─── Stepper Phase Mapping ─────────────────────────────────────────────────
+
+  const getStepperPhase = (): 0 | 1 | 2 => {
+    if (panelState === 'results' || panelState === 'no_items') return 2;
+    if (panelState === 'processing') return 1;
+    return 0;
+  };
+
   const tabs: { id: TabId; label: string }[] = [
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'timeline', label: 'Timeline' },
@@ -331,89 +416,124 @@ export default function RecordsReconPanel() {
 
   if (panelState === 'upload') {
     return (
-      <div className="bg-white rounded-xl border border-blue-100 shadow-md p-6 space-y-4">
+      <div className="bg-white rounded-xl border border-blue-100 shadow-md overflow-hidden">
         <ReconDisclaimer />
 
-        {/* Upload Zone */}
-        <div
-          className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-            isDragging ? 'border-[#EAB308] bg-yellow-50' : 'border-blue-200 hover:border-[#2563EB]/50'
-          }`}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-        >
-          <DocumentArrowUpIcon className="h-12 w-12 mx-auto mb-3 text-[#1A2C5B]" />
-          <p className="text-gray-900 font-semibold mb-1">Upload VA Medical Records</p>
-          <p className="text-gray-500 text-sm mb-4">PDF files up to 50MB. Your files are processed in memory only — never stored.</p>
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="px-5 py-2.5 bg-[#1A2C5B] text-white font-bold rounded-lg hover:bg-[#2563EB] transition-colors"
+        {/* Horizontal Stepper — Upload phase */}
+        <HorizontalStepper currentStep={getStepperPhase()} />
+
+        <div className="p-6 space-y-4">
+          {/* Upload Zone */}
+          <div
+            className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+              isDragging ? 'border-[#EAB308] bg-yellow-50' : 'border-blue-200 hover:border-[#2563EB]/50'
+            }`}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
           >
-            Select Files
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".pdf"
-            multiple
-            className="hidden"
-            onChange={(e) => e.target.files && processFiles(e.target.files)}
-          />
-        </div>
-
-        {/* File List */}
-        {files.length > 0 && (
-          <div className="space-y-2">
-            {files.map((f, i) => (
-              <div key={i} className="flex items-center justify-between bg-blue-50 rounded-lg px-4 py-2 border border-blue-100">
-                <span className="text-gray-900 text-sm font-mono truncate">{f.name}</span>
-                <div className="flex items-center gap-2">
-                  <span className="text-gray-500 text-xs">{(f.size / 1024 / 1024).toFixed(1)}MB</span>
-                  <button onClick={() => removeFile(i)} className="text-gray-400 hover:text-red-500">
-                    <XMarkIcon className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-            ))}
+            <DocumentArrowUpIcon className="h-12 w-12 mx-auto mb-3 text-[#1A2C5B]" />
+            <p className="text-gray-900 font-semibold mb-1">Upload VA Medical Records</p>
+            <p className="text-gray-500 text-sm mb-4">PDF files up to 50MB. Your files are processed in memory only — never stored.</p>
+            <div className="flex items-center justify-center gap-3">
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="px-5 py-2.5 bg-[#1A2C5B] text-white font-bold rounded-lg hover:bg-[#2563EB] transition-colors"
+              >
+                Select Files
+              </button>
+              <button
+                onClick={startSampleScan}
+                className="px-4 py-2.5 border border-slate-300 text-slate-600 font-medium rounded-lg hover:bg-slate-50 hover:border-slate-400 transition-colors flex items-center gap-1.5 text-sm"
+              >
+                <BeakerIcon className="h-4 w-4" />
+                Try Sample Record
+              </button>
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf"
+              multiple
+              className="hidden"
+              onChange={(e) => e.target.files && processFiles(e.target.files)}
+            />
           </div>
-        )}
 
-        {/* Consent + Run */}
-        {files.length > 0 && (
-          <div className="space-y-3">
-            <label className="flex items-start gap-3 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={consentChecked}
-                onChange={(e) => setConsentChecked(e.target.checked)}
-                className="mt-1 h-4 w-4 rounded border-blue-300 bg-white text-[#1A2C5B] focus:ring-[#2563EB]"
-              />
-              <span className="text-gray-600 text-sm leading-relaxed">
-                I understand that Records Recon organizes my records for my personal use.
-                It does not provide medical advice, legal advice, or claims assistance.
-                I will consult an accredited VSO for professional guidance.
-              </span>
-            </label>
+          {/* "How Do I Get This?" Collapsible Help */}
+          <div className="text-center">
             <button
-              onClick={() => startScan()}
-              disabled={!consentChecked}
-              className={`w-full py-3 rounded-lg font-bold text-lg transition-all ${
-                consentChecked
-                  ? 'bg-[#EAB308] text-[#1A2C5B] hover:bg-[#FACC15] shadow-lg shadow-yellow-500/20'
-                  : 'bg-gray-200 text-gray-400 cursor-not-allowed opacity-50'
-              }`}
+              onClick={() => setShowBlueButtonHelp(prev => !prev)}
+              className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-[#2563EB] transition-colors"
             >
-              🎯 Run Recon
+              <QuestionMarkCircleIcon className="h-3.5 w-3.5" />
+              How do I get my VA records?
             </button>
+            {showBlueButtonHelp && (
+              <div className="mt-2 bg-blue-50 border border-blue-100 rounded-lg p-3 text-left max-w-md mx-auto">
+                <p className="text-slate-700 text-xs font-semibold mb-1.5">Download your Blue Button record from MyHealtheVet:</p>
+                <ol className="text-slate-600 text-xs space-y-1 list-decimal list-inside">
+                  <li>Log in at <span className="font-mono text-[#2563EB]">myhealth.va.gov</span> and go to <strong>Health Records</strong></li>
+                  <li>Select <strong>Blue Button Reports</strong> → choose your date range → click <strong>Download PDF</strong></li>
+                  <li>Upload that PDF here — Records Recon does the rest</li>
+                </ol>
+              </div>
+            )}
           </div>
-        )}
 
-        {error && (
-          <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3">
-            <p className="text-red-700 text-sm">{error}</p>
-          </div>
-        )}
+          {/* File List */}
+          {files.length > 0 && (
+            <div className="space-y-2">
+              {files.map((f, i) => (
+                <div key={i} className="flex items-center justify-between bg-blue-50 rounded-lg px-4 py-2 border border-blue-100">
+                  <span className="text-gray-900 text-sm font-mono truncate">{f.name}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-500 text-xs">{(f.size / 1024 / 1024).toFixed(1)}MB</span>
+                    <button onClick={() => removeFile(i)} className="text-gray-400 hover:text-red-500">
+                      <XMarkIcon className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Consent + Run */}
+          {files.length > 0 && (
+            <div className="space-y-3">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={consentChecked}
+                  onChange={(e) => setConsentChecked(e.target.checked)}
+                  className="mt-1 h-4 w-4 rounded border-blue-300 bg-white text-[#1A2C5B] focus:ring-[#2563EB]"
+                />
+                <span className="text-gray-600 text-sm leading-relaxed">
+                  I understand that Records Recon organizes my records for my personal use.
+                  It does not provide medical advice, legal advice, or claims assistance.
+                  I will consult an accredited VSO for professional guidance.
+                </span>
+              </label>
+              <button
+                onClick={() => startScan()}
+                disabled={!consentChecked}
+                className={`w-full py-3 rounded-lg font-bold text-lg transition-all ${
+                  consentChecked
+                    ? 'bg-[#EAB308] text-[#1A2C5B] hover:bg-[#FACC15] shadow-lg shadow-yellow-500/20'
+                    : 'bg-gray-200 text-gray-400 cursor-not-allowed opacity-50'
+                }`}
+              >
+                Run Recon
+              </button>
+            </div>
+          )}
+
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+              <p className="text-red-700 text-sm">{error}</p>
+            </div>
+          )}
+        </div>
       </div>
     );
   }
@@ -422,53 +542,51 @@ export default function RecordsReconPanel() {
 
   if (panelState === 'processing') {
     return (
-      <div className="bg-white rounded-xl border border-blue-100 shadow-md p-6 space-y-4">
+      <div className="bg-white rounded-xl border border-blue-100 shadow-md overflow-hidden">
         <ReconDisclaimer />
 
-        <div className="bg-blue-50 rounded-lg p-6 border border-blue-100">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-[#1A2C5B] font-bold text-lg">Records Recon in Progress</h3>
-            <button onClick={cancelScan} className="text-gray-500 hover:text-red-500 text-sm font-medium">
-              Cancel
-            </button>
-          </div>
+        {/* Horizontal Stepper — Analyzing phase */}
+        <HorizontalStepper currentStep={getStepperPhase()} />
 
-          {/* Progress Bar */}
-          <div className="w-full bg-blue-100 rounded-full h-3 mb-3">
-            <div
-              className="bg-gradient-to-r from-[#1A2C5B] to-[#2563EB] h-3 rounded-full transition-all duration-500"
-              style={{ width: `${progress.percent}%` }}
-            />
-          </div>
-          <p className="text-gray-600 text-sm font-mono">{progress.message}</p>
-
-          {/* Phase Indicators */}
-          <div className="flex gap-4 mt-4">
-            {['filter', 'extraction', 'structuring'].map((phase) => (
-              <div key={phase} className="flex items-center gap-2">
-                <div className={`h-2.5 w-2.5 rounded-full ${
-                  progress.phase === phase ? 'bg-[#EAB308] animate-pulse'
-                  : progress.phase && ['filter_done', 'extraction', 'structuring', 'structuring_done'].indexOf(progress.phase) > ['filter', 'extraction', 'structuring'].indexOf(phase) ? 'bg-[#1A2C5B]'
-                  : 'bg-blue-200'
-                }`} />
-                <span className="text-gray-600 text-xs capitalize">{phase === 'filter' ? 'Pre-Filter' : phase === 'extraction' ? 'Extract' : 'Organize'}</span>
-              </div>
-            ))}
-          </div>
-
-          {/* Live Keyword Flags */}
-          {liveFlags.length > 0 && (
-            <div className="mt-4 space-y-1">
-              <p className="text-gray-600 text-xs font-semibold uppercase tracking-wider">Live Detections</p>
-              <div className="flex flex-wrap gap-2">
-                {liveFlags.map((flag, i) => (
-                  <span key={i} className="bg-[#1A2C5B] text-[#EAB308] text-xs px-2 py-1 rounded font-mono">
-                    {flag.condition}
-                  </span>
-                ))}
-              </div>
+        <div className="p-6 space-y-4">
+          <div className="bg-blue-50 rounded-lg p-6 border border-blue-100">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-[#1A2C5B] font-bold text-lg">Records Recon in Progress</h3>
             </div>
-          )}
+
+            {/* Progress Bar */}
+            <div className="w-full bg-blue-100 rounded-full h-3 mb-3">
+              <div
+                className="bg-gradient-to-r from-[#1A2C5B] to-[#2563EB] h-3 rounded-full transition-all duration-500"
+                style={{ width: `${progress.percent}%` }}
+              />
+            </div>
+            <p className="text-gray-600 text-sm font-mono">{progress.message}</p>
+
+            {/* Live Keyword Flags */}
+            {liveFlags.length > 0 && (
+              <div className="mt-4 space-y-1">
+                <p className="text-gray-600 text-xs font-semibold uppercase tracking-wider">Live Detections</p>
+                <div className="flex flex-wrap gap-2">
+                  {liveFlags.map((flag, i) => (
+                    <span key={i} className="bg-[#1A2C5B] text-[#EAB308] text-xs px-2 py-1 rounded font-mono animate-pulse">
+                      {flag.condition}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Cancel Scan — ghost button */}
+            <div className="mt-5 text-center">
+              <button
+                onClick={cancelScan}
+                className="px-5 py-2 border border-slate-300 text-slate-500 font-medium rounded-lg hover:bg-red-50 hover:border-red-300 hover:text-red-600 transition-colors text-sm"
+              >
+                Cancel Scan
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -526,6 +644,9 @@ export default function RecordsReconPanel() {
     <div className="bg-white rounded-xl lg:rounded-md border border-blue-100 shadow-md overflow-hidden lg:sticky lg:top-[68px] lg:z-10">
       <ReconDisclaimer />
 
+      {/* Horizontal Stepper — Report Ready */}
+      <HorizontalStepper currentStep={getStepperPhase()} />
+
       {/* Interim Banner */}
       {report?.isInterim && (
         <div className="bg-yellow-50 border-b border-yellow-200 px-4 py-3 flex items-center justify-between">
@@ -539,26 +660,34 @@ export default function RecordsReconPanel() {
       {/* Split Pane Layout — fixed viewport height so the PDF viewer's
            internal virtualizer has a constrained scroll container.
            Without this, scrollTop has no effect and jumpToPage silently no-ops. */}
-      <div className="flex flex-col lg:flex-row h-[calc(100vh-220px)] min-h-[600px]">
+      <div className="flex flex-col lg:flex-row h-[calc(100vh-260px)] min-h-[600px]">
 
         {/* LEFT PANE — Tabbed Dashboard */}
-        <div className={`flex-1 flex flex-col ${pdfUrl ? 'lg:w-[60%]' : 'w-full'}`}>
+        <div className={`flex-1 flex flex-col min-w-0 ${pdfUrl && !pdfCollapsed ? 'lg:w-[60%]' : 'w-full'}`}>
 
-          {/* Tab Navigation */}
-          <div className="flex border-b border-blue-100 bg-blue-50">
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`px-4 py-3 text-sm font-semibold transition-colors ${
-                  activeTab === tab.id
-                    ? 'text-[#1A2C5B] border-b-2 border-[#EAB308] bg-white'
-                    : 'text-gray-500 hover:text-[#1A2C5B] hover:bg-white/50'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
+          {/* Tab Navigation — sticky */}
+          <div className="flex border-b border-blue-100 bg-blue-50 sticky top-0 z-20">
+            {tabs.map((tab) => {
+              const badge = getTabBadge(tab.id);
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`px-4 py-3 text-sm font-semibold transition-colors relative ${
+                    activeTab === tab.id
+                      ? 'text-[#1A2C5B] border-b-2 border-[#EAB308] bg-white'
+                      : 'text-gray-500 hover:text-[#1A2C5B] hover:bg-white/50'
+                  }`}
+                >
+                  {tab.label}
+                  {badge !== null && (
+                    <span className="ml-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold rounded-full bg-[#1A2C5B] text-white">
+                      {badge}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
             <div className="flex-1" />
             <button onClick={resetPanel} className="px-3 py-2 text-gray-500 hover:text-[#1A2C5B] text-xs font-medium">
               New Scan
@@ -586,6 +715,15 @@ export default function RecordsReconPanel() {
                   <StatCard label="Providers" value={report.documentSummary.providersFound.length || 'N/A'} />
                 </div>
 
+                {/* VSO Email Draft Button */}
+                <button
+                  onClick={generateVsoEmailDraft}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-[#1A2C5B] text-white font-semibold rounded-lg hover:bg-[#2563EB] transition-colors text-sm"
+                >
+                  <EnvelopeIcon className="h-4 w-4" />
+                  Generate VSO Email Draft
+                </button>
+
                 {/* Processing Details */}
                 {report.scanSynopsis && (
                   <div className="bg-blue-50 rounded-lg p-3 border border-blue-100">
@@ -609,7 +747,7 @@ export default function RecordsReconPanel() {
 
                 {/* Quick Extracted Items List */}
                 <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm">
-                  <h4 className="text-[#1A2C5B] font-semibold text-sm mb-3">Extracted Conditions ({report.extractedItems.length})</h4>
+                  <h4 className="text-[#1A2C5B] font-semibold text-sm mb-3 sticky top-0 bg-white z-10 pb-2 border-b border-gray-100">Extracted Conditions ({report.extractedItems.length})</h4>
                   <div className="space-y-2 max-h-80 overflow-y-auto">
                     {report.extractedItems.map((item, i) => (
                       <div key={item.itemId} className="flex items-start gap-3 bg-blue-50 rounded p-3 border border-blue-100">
@@ -675,8 +813,22 @@ export default function RecordsReconPanel() {
           </div>
         </div>
 
-        {/* RIGHT PANE — PDF Viewer with Highlight (hidden on mobile, shown on lg+) */}
+        {/* PDF Focus Mode Toggle — chevron between panes */}
         {pdfUrl && (
+          <button
+            onClick={() => setPdfCollapsed(prev => !prev)}
+            className="hidden lg:flex items-center justify-center w-5 bg-blue-50 border-x border-blue-100 hover:bg-blue-100 transition-colors flex-shrink-0 group"
+            title={pdfCollapsed ? 'Show PDF viewer' : 'Hide PDF viewer'}
+          >
+            {pdfCollapsed
+              ? <ChevronDoubleLeftIcon className="h-4 w-4 text-slate-400 group-hover:text-[#1A2C5B]" />
+              : <ChevronDoubleRightIcon className="h-4 w-4 text-slate-400 group-hover:text-[#1A2C5B]" />
+            }
+          </button>
+        )}
+
+        {/* RIGHT PANE — PDF Viewer with Highlight (hidden on mobile, shown on lg+) */}
+        {pdfUrl && !pdfCollapsed && (
           <div className="hidden lg:flex lg:w-[40%] border-l border-blue-100 flex-col bg-gray-50">
             <div className="bg-blue-50 border-b border-blue-100 px-3 py-1.5 flex items-center gap-2">
               <span className="text-gray-600 text-xs font-mono truncate min-w-0">{files[0]?.name || 'Document'}</span>
@@ -782,5 +934,57 @@ function ConfidenceBadge({ confidence }: { confidence: 'high' | 'medium' | 'low'
     <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${styles[confidence]}`}>
       {confidence}
     </span>
+  );
+}
+
+// ─── Horizontal Stepper ──────────────────────────────────────────────────────
+
+const STEPPER_STEPS = ['Upload', 'Analyzing', 'Report Ready'] as const;
+
+function HorizontalStepper({ currentStep }: { currentStep: 0 | 1 | 2 }) {
+  return (
+    <div className="px-6 py-3 bg-white border-b border-blue-100">
+      <div className="flex items-center justify-between max-w-md mx-auto">
+        {STEPPER_STEPS.map((label, i) => {
+          const isComplete = i < currentStep;
+          const isActive = i === currentStep;
+          return (
+            <React.Fragment key={label}>
+              {/* Step circle + label */}
+              <div className="flex flex-col items-center gap-1">
+                <div
+                  className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-300 ${
+                    isComplete
+                      ? 'bg-[#1A2C5B] text-white'
+                      : isActive
+                        ? 'bg-[#EAB308] text-[#1A2C5B] ring-2 ring-[#EAB308]/30'
+                        : 'bg-slate-100 text-slate-400'
+                  }`}
+                >
+                  {isComplete ? (
+                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                    </svg>
+                  ) : (
+                    i + 1
+                  )}
+                </div>
+                <span className={`text-[10px] font-medium ${
+                  isActive ? 'text-[#1A2C5B]' : isComplete ? 'text-slate-600' : 'text-slate-400'
+                }`}>
+                  {label}
+                </span>
+              </div>
+              {/* Connector line between steps */}
+              {i < STEPPER_STEPS.length - 1 && (
+                <div className={`flex-1 h-0.5 mx-2 rounded transition-all duration-500 ${
+                  i < currentStep ? 'bg-[#1A2C5B]' : 'bg-slate-200'
+                }`} />
+              )}
+            </React.Fragment>
+          );
+        })}
+      </div>
+    </div>
   );
 }

@@ -60,34 +60,36 @@ export default function ConditionsIndex({ conditions, onPageClick, onCopy, copie
 
   return (
     <div className="space-y-4">
-      {/* Search & Filter Bar */}
-      <div className="flex gap-3">
-        <div className="flex-1 relative">
-          <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Search conditions..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-white border border-gray-200 rounded-lg pl-9 pr-3 py-2 text-gray-900 text-sm placeholder:text-gray-400 focus:outline-none focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB]"
-          />
+      {/* Search & Filter Bar — sticky */}
+      <div className="sticky top-0 bg-white z-10 pb-2 border-b border-gray-100 space-y-2">
+        <div className="flex gap-3">
+          <div className="flex-1 relative">
+            <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search conditions..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full bg-white border border-gray-200 rounded-lg pl-9 pr-3 py-2 text-gray-900 text-sm placeholder:text-gray-400 focus:outline-none focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB]"
+            />
+          </div>
+          <select
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+            className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-gray-900 text-sm focus:outline-none focus:border-[#2563EB]"
+          >
+            <option value="all">All Categories</option>
+            {categories.map(cat => (
+              <option key={cat} value={cat}>{cat}</option>
+            ))}
+          </select>
         </div>
-        <select
-          value={categoryFilter}
-          onChange={(e) => setCategoryFilter(e.target.value)}
-          className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-gray-900 text-sm focus:outline-none focus:border-[#2563EB]"
-        >
-          <option value="all">All Categories</option>
-          {categories.map(cat => (
-            <option key={cat} value={cat}>{cat}</option>
-          ))}
-        </select>
-      </div>
 
-      {/* Results Count */}
-      <p className="text-gray-500 text-xs">
-        Showing {filtered.length} of {conditions.length} condition{conditions.length !== 1 ? 's' : ''}
-      </p>
+        {/* Results Count */}
+        <p className="text-gray-500 text-xs">
+          Showing {filtered.length} of {conditions.length} condition{conditions.length !== 1 ? 's' : ''}
+        </p>
+      </div>
 
       {/* Conditions List */}
       <div className="space-y-3">
