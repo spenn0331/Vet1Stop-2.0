@@ -319,16 +319,57 @@ export default function PdfViewerPane({ fileUrl, targetPage, searchText, jumpTri
         .rpv-default-layout__toolbar {
           background-color: #EFF6FF !important;
           border-bottom: 1px solid #DBEAFE !important;
+          padding: 2px 4px !important;
+          min-height: 0 !important;
+          flex-wrap: nowrap !important;
+          overflow-x: auto !important;
+          gap: 0 !important;
         }
         .rpv-default-layout__body {
           background-color: #F9FAFB !important;
         }
-        /* Widen the page number input so large page numbers aren't clipped */
+        /* Compact toolbar buttons */
+        .rpv-default-layout__toolbar .rpv-core__minimal-button {
+          padding: 4px !important;
+          width: 28px !important;
+          height: 28px !important;
+        }
+        .rpv-default-layout__toolbar .rpv-core__minimal-button svg {
+          width: 16px !important;
+          height: 16px !important;
+        }
+        /* Compact zoom dropdown */
+        .rpv-default-layout__toolbar .rpv-zoom__popover-target {
+          padding: 2px 4px !important;
+          font-size: 11px !important;
+        }
+        .rpv-default-layout__toolbar .rpv-zoom__popover-target-scale {
+          font-size: 11px !important;
+        }
+        /* Hide the dropdown arrow on the zoom button to prevent overlap */
+        .rpv-default-layout__toolbar .rpv-zoom__popover-target-arrow {
+          display: none !important;
+        }
+        /* Compact page nav input and label */
         .rpv-core__page-navigation-current-page-input {
-          width: 4rem !important;
+          width: 3rem !important;
         }
         .rpv-page-navigation__current-page-input {
-          width: 4rem !important;
+          width: 3rem !important;
+        }
+        .rpv-default-layout__toolbar .rpv-core__page-navigation-current-page-input input {
+          padding: 2px 4px !important;
+          font-size: 12px !important;
+          width: 3rem !important;
+        }
+        /* Compact separator dividers */
+        .rpv-default-layout__toolbar .rpv-toolbar__item {
+          padding: 0 1px !important;
+        }
+        /* Shrink "of N" label */
+        .rpv-default-layout__toolbar .rpv-core__page-navigation-num-pages,
+        .rpv-default-layout__toolbar .rpv-page-navigation__current-page-input-of {
+          font-size: 11px !important;
         }
       `}</style>
 

@@ -115,14 +115,16 @@ interface ScanSynopsis {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const FILTERED_TEXT_CAP = 5_000;
-const MAX_PARAGRAPHS_TO_SEND = 25;
-const SECTION_GUARANTEE_COUNT = 3;
+const FILTERED_TEXT_CAP = 20_000;
+const MAX_PARAGRAPHS_TO_SEND = 100;
+const SECTION_GUARANTEE_COUNT = 6;
 const SYNTHESIS_TIMEOUT_MS = 90_000;
 const IDLE_TIMEOUT_MS = 45_000;
-const RETRY_CHAR_CAP = 2_500;
+const RETRY_CHAR_CAP = 10_000;
 const MIN_PARAGRAPH_LENGTH = 30;
 const MIN_KEYWORD_MATCHES_FLAG = 2;
+const MAX_PARALLEL_CHUNKS = 4;
+const CHARS_PER_CHUNK = 5_000;
 
 const MODEL_EXTRACT = 'grok-4-1-fast-non-reasoning';
 const MODEL_STRUCTURE = 'grok-4-1-fast-reasoning';
@@ -203,6 +205,84 @@ const GENERIC_STANDALONE_TERMS = new Set([
   'range of motion', 'rom', 'deluca', 'functional loss',
   'flare-up', 'flare up',
 ]);
+
+// ─── Condition Synonym Map (for deduplication) ──────────────────────────────
+
+const CONDITION_SYNONYMS = new Map<string, string>([
+  ['bppv', 'benign paroxysmal positional vertigo'],
+  ['benign positional vertigo', 'benign paroxysmal positional vertigo'],
+  ['ptsd', 'post-traumatic stress disorder'],
+  ['post traumatic stress disorder', 'post-traumatic stress disorder'],
+  ['post-traumatic stress', 'post-traumatic stress disorder'],
+  ['osa', 'obstructive sleep apnea'],
+  ['sleep apnea', 'obstructive sleep apnea'],
+  ['mdd', 'major depressive disorder'],
+  ['major depression', 'major depressive disorder'],
+  ['gad', 'generalized anxiety disorder'],
+  ['gerd', 'gastroesophageal reflux disease'],
+  ['acid reflux', 'gastroesophageal reflux disease'],
+  ['gastroesophageal reflux', 'gastroesophageal reflux disease'],
+  ['tbi', 'traumatic brain injury'],
+  ['copd', 'chronic obstructive pulmonary disease'],
+  ['cad', 'coronary artery disease'],
+  ['chf', 'congestive heart failure'],
+  ['ibs', 'irritable bowel syndrome'],
+  ['ddd', 'degenerative disc disease'],
+  ['ckd', 'chronic kidney disease'],
+  ['ed', 'erectile dysfunction'],
+  ['crps', 'complex regional pain syndrome'],
+  ['rls', 'restless leg syndrome'],
+  ['restless legs syndrome', 'restless leg syndrome'],
+  ['htn', 'hypertension'],
+  ['dm', 'diabetes mellitus'],
+  ['dm2', 'diabetes mellitus type 2'],
+  ['dm ii', 'diabetes mellitus type 2'],
+  ['afib', 'atrial fibrillation'],
+  ['a-fib', 'atrial fibrillation'],
+  ['oa', 'osteoarthritis'],
+  ['ra', 'rheumatoid arthritis'],
+  ['mst', 'military sexual trauma'],
+]);
+
+function normalizeConditionName(name: string): string {
+  const lower = name.toLowerCase().replace(/[^a-z0-9\s\-]/g, '').trim();
+  const canonical = CONDITION_SYNONYMS.get(lower);
+  if (canonical) return canonical;
+  return lower
+    .replace(/\b(bilateral|chronic|acute|mild|moderate|severe|recurrent|left|right|unspecified)\b/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// ─── Chunk Filtered Text for Parallel Extraction ────────────────────────────
+
+function chunkFilteredText(text: string, maxChunks: number, targetCharsPerChunk: number): string[] {
+  const paragraphs = text.split('\n\n').filter(p => p.trim().length > 0);
+  if (paragraphs.length <= 1) return [text];
+
+  const totalChars = paragraphs.reduce((sum, p) => sum + p.length, 0);
+  const numChunks = Math.min(maxChunks, Math.max(1, Math.ceil(totalChars / targetCharsPerChunk)));
+  if (numChunks <= 1) return [text];
+
+  const targetSize = Math.ceil(totalChars / numChunks);
+  const chunks: string[] = [];
+  let currentChunk: string[] = [];
+  let currentSize = 0;
+
+  for (const para of paragraphs) {
+    if (currentSize >= targetSize && chunks.length < numChunks - 1) {
+      chunks.push(currentChunk.join('\n\n'));
+      currentChunk = [];
+      currentSize = 0;
+    }
+    currentChunk.push(para);
+    currentSize += para.length;
+  }
+  if (currentChunk.length > 0) {
+    chunks.push(currentChunk.join('\n\n'));
+  }
+  return chunks;
+}
 
 // ─── Utility Functions ───────────────────────────────────────────────────────
 
@@ -600,26 +680,48 @@ function smartPreFilter(text: string): {
     }
   }
 
-  scored.sort((a, b) => b.keywordCount - a.keywordCount);
+  // Stable sort: keyword count desc, then page asc, then text length desc
+  scored.sort((a, b) => {
+    if (b.keywordCount !== a.keywordCount) return b.keywordCount - a.keywordCount;
+    if (a.pageNumber !== b.pageNumber) return a.pageNumber - b.pageNumber;
+    return b.text.length - a.text.length;
+  });
 
-  const guaranteed: ScoredPara[] = [];
+  const selected: ScoredPara[] = [];
+  const selectedTexts = new Set<string>();
+
+  // Pass 1 — breadth-first: one paragraph per unique keyword for full coverage
+  const coveredKeywords = new Set<string>();
+  for (const sp of scored) {
+    if (selected.length >= MAX_PARAGRAPHS_TO_SEND) break;
+    const uncovered = sp.matchedKeywords.filter(k => !coveredKeywords.has(k));
+    if (uncovered.length > 0 && !selectedTexts.has(sp.text)) {
+      selected.push(sp);
+      selectedTexts.add(sp.text);
+      sp.matchedKeywords.forEach(k => coveredKeywords.add(k));
+    }
+  }
+
+  // Pass 2 — guaranteed sections (Assessment, Problem List, etc.)
   const sectionCounts = new Map<string, number>();
   for (const sp of scored) {
-    if (sp.sectionKey) {
+    if (selected.length >= MAX_PARAGRAPHS_TO_SEND) break;
+    if (sp.sectionKey && !selectedTexts.has(sp.text)) {
       const count = sectionCounts.get(sp.sectionKey) || 0;
       if (count < SECTION_GUARANTEE_COUNT) {
-        guaranteed.push(sp);
+        selected.push(sp);
+        selectedTexts.add(sp.text);
         sectionCounts.set(sp.sectionKey, count + 1);
       }
     }
   }
-  const guaranteedTexts = new Set(guaranteed.map(g => g.text));
 
-  const selected: ScoredPara[] = [...guaranteed];
+  // Pass 3 — fill remaining slots from highest-scored paragraphs
   for (const sp of scored) {
     if (selected.length >= MAX_PARAGRAPHS_TO_SEND) break;
-    if (!guaranteedTexts.has(sp.text)) {
+    if (!selectedTexts.has(sp.text)) {
       selected.push(sp);
+      selectedTexts.add(sp.text);
     }
   }
 
@@ -1016,9 +1118,13 @@ function keywordFlagsToReconItems(flags: KeywordFlag[]): ReconExtractedItem[] {
 function deduplicateItems(items: ReconExtractedItem[]): ReconExtractedItem[] {
   const seen = new Map<string, ReconExtractedItem>();
   for (const item of items) {
-    const key = item.condition.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 20);
+    const key = normalizeConditionName(item.condition);
     const existing = seen.get(key);
-    if (!existing || item.confidence === 'high') seen.set(key, item);
+    if (!existing ||
+        (item.confidence === 'high' && existing.confidence !== 'high') ||
+        (item.confidence === existing.confidence && item.excerpt.length > existing.excerpt.length)) {
+      seen.set(key, item);
+    }
   }
   return Array.from(seen.values());
 }
@@ -1066,7 +1172,7 @@ async function callGrokAPIStreaming(
     const response = await fetch('https://api.x.ai/v1/chat/completions', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model, messages, temperature: 0.1, max_tokens: maxTokens, stream: true }),
+      body: JSON.stringify({ model, messages, temperature: 0, max_tokens: maxTokens, stream: true }),
       signal: controller.signal,
     });
 
@@ -1183,6 +1289,79 @@ async function synthesizeStructuring(
   );
 }
 
+// ─── Parallel Chunked Extraction ──────────────────────────────────────────────
+
+async function parallelExtraction(
+  filteredText: string,
+  fileNames: string,
+  emit: (event: object) => void,
+  phaseStartPct: number,
+  phaseEndPct: number,
+): Promise<{ items: ReconExtractedItem[]; succeeded: boolean }> {
+  const chunks = chunkFilteredText(filteredText, MAX_PARALLEL_CHUNKS, CHARS_PER_CHUNK);
+  const numChunks = chunks.length;
+
+  emit({
+    type: 'progress',
+    message: `Phase 2a: Extracting conditions across ${numChunks} parallel stream${numChunks > 1 ? 's' : ''}...`,
+    percent: phaseStartPct,
+    phase: 'extraction',
+  });
+
+  const completedCount = { n: 0 };
+
+  const extractionPromises = chunks.map(async (chunk, i) => {
+    try {
+      const onProgress = i === 0 ? (tc: number, mt: number) => {
+        const pct = phaseStartPct + Math.round((tc / mt) * (phaseEndPct - phaseStartPct) * 0.8);
+        emit({
+          type: 'progress',
+          message: `Phase 2a: Extracting — ${tc} tokens (${numChunks} stream${numChunks > 1 ? 's' : ''})...`,
+          percent: Math.min(pct, phaseEndPct - 5),
+          phase: 'extraction',
+        });
+      } : undefined;
+
+      const output = await synthesizeExtraction(chunk, fileNames, onProgress);
+
+      completedCount.n++;
+      if (numChunks > 1) {
+        emit({
+          type: 'progress',
+          message: `Phase 2a: ${completedCount.n}/${numChunks} streams complete...`,
+          percent: phaseStartPct + Math.round((completedCount.n / numChunks) * (phaseEndPct - phaseStartPct)),
+          phase: 'extraction',
+        });
+      }
+
+      if (output) {
+        const items = parseExtractionOutput(output);
+        for (const item of items) {
+          if (!item.dateFound && item.excerpt) {
+            const fallbackDate = extractDateFromText(item.excerpt);
+            if (fallbackDate) item.dateFound = fallbackDate;
+          }
+          if (!item.provider && item.excerpt) {
+            const fallbackProvider = extractProviderFromText(item.excerpt);
+            if (fallbackProvider) item.provider = fallbackProvider;
+          }
+        }
+        return items;
+      }
+      return [];
+    } catch (err) {
+      console.warn(`[RecordsRecon] Chunk ${i + 1}/${numChunks} extraction failed:`, (err as Error).message);
+      return [];
+    }
+  });
+
+  const results = await Promise.all(extractionPromises);
+  const allItems = results.flat();
+  const succeeded = allItems.length > 0 || completedCount.n > 0;
+
+  return { items: deduplicateItems(allItems), succeeded };
+}
+
 // ─── POST Handler ────────────────────────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
@@ -1211,26 +1390,9 @@ export async function POST(request: NextRequest) {
             ? retryFilteredText.substring(0, RETRY_CHAR_CAP)
             : retryFilteredText;
 
-          emit({ type: 'progress', message: 'Retrying — Phase 2a: Extracting conditions...', percent: 30, phase: 'extraction' });
-
           try {
-            const extractOutput = await synthesizeExtraction(textForSynthesis, retryFileNames, (tc, mt) => {
-              const pct = 30 + Math.round((tc / mt) * 30);
-              emit({ type: 'progress', message: `Phase 2a: Extracting — ${tc} tokens...`, percent: Math.min(pct, 60), phase: 'extraction' });
-            });
-            let items = extractOutput ? parseExtractionOutput(extractOutput) : [];
-            // Post-extraction date/provider fallback for retry path
-            for (const item of items) {
-              if (!item.dateFound && item.excerpt) {
-                const fallbackDate = extractDateFromText(item.excerpt);
-                if (fallbackDate) item.dateFound = fallbackDate;
-              }
-              if (!item.provider && item.excerpt) {
-                const fallbackProvider = extractProviderFromText(item.excerpt);
-                if (fallbackProvider) item.provider = fallbackProvider;
-              }
-            }
-            items = deduplicateItems(items);
+            const result = await parallelExtraction(textForSynthesis, retryFileNames, emit, 30, 60);
+            const items = result.items;
 
             if (items.length > 0) {
               emit({ type: 'progress', message: `Phase 2b: Organizing ${items.length} conditions...`, percent: 65, phase: 'structuring' });
@@ -1247,11 +1409,16 @@ export async function POST(request: NextRequest) {
                   emit({ type: 'complete', report: buildReconReportFromItems(items, 1, Date.now() - startTime, MODEL_EXTRACT, retrySynopsis), percent: 100 });
                 }
               } catch {
-                // Structuring failed — use raw extraction
                 emit({ type: 'complete', report: buildReconReportFromItems(items, 1, Date.now() - startTime, MODEL_EXTRACT, retrySynopsis), percent: 100 });
               }
             } else {
-              emit({ type: 'complete', report: buildReconReportFromItems([], 1, Date.now() - startTime, MODEL_EXTRACT, retrySynopsis), percent: 100 });
+              // Fall back to keyword flags if parallel extraction found nothing
+              if (retryKeywordFlags.length > 0) {
+                const interim = deduplicateItems(keywordFlagsToReconItems(retryKeywordFlags));
+                emit({ type: 'complete', report: buildReconReportFromItems(interim, 1, Date.now() - startTime, 'keyword pre-filter', retrySynopsis, true, 'Extraction found no conditions — showing keyword-detected items. Click Retry to try again.'), percent: 100 });
+              } else {
+                emit({ type: 'complete', report: buildReconReportFromItems([], 1, Date.now() - startTime, MODEL_EXTRACT, retrySynopsis), percent: 100 });
+              }
             }
           } catch (retryErr) {
             if ((retryErr as Error).name === 'GrokTimeoutError') {
@@ -1345,62 +1512,15 @@ export async function POST(request: NextRequest) {
           fileNames: files.map(f => f.name).join(', '),
         });
 
-        // ═══ PHASE 2a: Extraction ═══
+        // ═══ PHASE 2a: Parallel Chunked Extraction ═══
+        const fileNames = files.map(f => f.name).join(', ');
         let rawItems: ReconExtractedItem[] = [];
         let extractionSucceeded = false;
-        const fileNames = files.map(f => f.name).join(', ');
 
         if (allFilteredText.length > 50) {
-          for (let attempt = 1; attempt <= 2; attempt++) {
-            const textForAttempt = attempt > 1
-              ? allFilteredText.substring(0, RETRY_CHAR_CAP)
-              : allFilteredText;
-
-            emit({
-              type: 'progress',
-              message: attempt === 1
-                ? `Phase 2a: Extracting conditions (~${filteredTokenEstimate} tokens)...`
-                : 'Phase 2a: Retry extraction with focused scope...',
-              percent: attempt === 1 ? 30 : 42,
-              phase: 'extraction',
-            });
-
-            try {
-              const output = await synthesizeExtraction(textForAttempt, fileNames, (tc, mt) => {
-                const pct = 30 + Math.round((tc / mt) * 25);
-                emit({ type: 'progress', message: `Phase 2a: Extracting — ${tc} tokens...`, percent: Math.min(pct, 55), phase: 'extraction' });
-              });
-
-              if (output) {
-                const items = parseExtractionOutput(output);
-                // Post-extraction fallback: for items with null dates/providers, try regex on excerpt
-                for (const item of items) {
-                  if (!item.dateFound && item.excerpt) {
-                    const fallbackDate = extractDateFromText(item.excerpt);
-                    if (fallbackDate) item.dateFound = fallbackDate;
-                  }
-                  if (!item.provider && item.excerpt) {
-                    const fallbackProvider = extractProviderFromText(item.excerpt);
-                    if (fallbackProvider) item.provider = fallbackProvider;
-                  }
-                }
-                if (items.length > 0) {
-                  rawItems = items;
-                  extractionSucceeded = true;
-                  break;
-                }
-                if (output.trim() === '[]' || output.length < 50) {
-                  extractionSucceeded = true;
-                  break;
-                }
-                console.warn(`[RecordsRecon] Extraction attempt ${attempt}: format error — ${output.length} chars → 0 items`);
-              }
-            } catch (err) {
-              if ((err as Error).name === 'GrokTimeoutError') {
-                console.warn(`[RecordsRecon] Extraction attempt ${attempt} timed out`);
-              } else { throw err; }
-            }
-          }
+          const result = await parallelExtraction(allFilteredText, fileNames, emit, 30, 55);
+          rawItems = result.items;
+          extractionSucceeded = result.succeeded;
         }
 
         // ═══ PHASE 2b: Structuring ═══

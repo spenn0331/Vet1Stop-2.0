@@ -523,7 +523,7 @@ export default function RecordsReconPanel() {
   // ─── Render: Results State (Split-Pane Command Center) ────────────────────
 
   return (
-    <div className="bg-white rounded-xl border border-blue-100 shadow-md overflow-hidden">
+    <div className="bg-white rounded-xl lg:rounded-md border border-blue-100 shadow-md overflow-hidden lg:sticky lg:top-[68px] lg:z-10">
       <ReconDisclaimer />
 
       {/* Interim Banner */}
@@ -678,9 +678,9 @@ export default function RecordsReconPanel() {
         {/* RIGHT PANE — PDF Viewer with Highlight (hidden on mobile, shown on lg+) */}
         {pdfUrl && (
           <div className="hidden lg:flex lg:w-[40%] border-l border-blue-100 flex-col bg-gray-50">
-            <div className="bg-blue-50 border-b border-blue-100 px-4 py-2 flex items-center justify-between">
-              <span className="text-gray-600 text-xs font-mono truncate">{files[0]?.name || 'Document'}</span>
-              <span className="text-gray-500 text-xs">Click any page number to jump & highlight</span>
+            <div className="bg-blue-50 border-b border-blue-100 px-3 py-1.5 flex items-center gap-2">
+              <span className="text-gray-600 text-xs font-mono truncate min-w-0">{files[0]?.name || 'Document'}</span>
+              <span className="text-gray-400 text-[10px] whitespace-nowrap flex-shrink-0">Page # → jump & highlight</span>
             </div>
             <div className="flex-1 min-h-0 overflow-hidden">
               <PdfViewerPaneLoader
