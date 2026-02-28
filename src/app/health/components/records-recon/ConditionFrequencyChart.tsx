@@ -1,11 +1,7 @@
 'use client';
 
 import React from 'react';
-
-interface ReconKeywordFrequency {
-  term: string;
-  count: number;
-}
+import type { ReconKeywordFrequency } from '@/types/records-recon';
 
 interface ConditionFrequencyChartProps {
   data: ReconKeywordFrequency[];

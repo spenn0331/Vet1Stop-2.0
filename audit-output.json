@@ -1,0 +1,455 @@
+﻿{
+  "auditReportVersion": 2,
+  "vulnerabilities": {
+    "@mapbox/node-pre-gyp": {
+      "name": "@mapbox/node-pre-gyp",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "tar"
+      ],
+      "effects": [
+        "canvas"
+      ],
+      "range": "<=1.0.11",
+      "nodes": [
+        "node_modules/@mapbox/node-pre-gyp"
+      ],
+      "fixAvailable": false
+    },
+    "@react-pdf-viewer/attachment": {
+      "name": "@react-pdf-viewer/attachment",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@react-pdf-viewer/core"
+      ],
+      "effects": [],
+      "range": "*",
+      "nodes": [
+        "node_modules/@react-pdf-viewer/attachment"
+      ],
+      "fixAvailable": true
+    },
+    "@react-pdf-viewer/bookmark": {
+      "name": "@react-pdf-viewer/bookmark",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@react-pdf-viewer/core"
+      ],
+      "effects": [],
+      "range": "*",
+      "nodes": [
+        "node_modules/@react-pdf-viewer/bookmark"
+      ],
+      "fixAvailable": true
+    },
+    "@react-pdf-viewer/core": {
+      "name": "@react-pdf-viewer/core",
+      "severity": "high",
+      "isDirect": true,
+      "via": [
+        "pdfjs-dist"
+      ],
+      "effects": [
+        "@react-pdf-viewer/attachment",
+        "@react-pdf-viewer/bookmark",
+        "@react-pdf-viewer/default-layout",
+        "@react-pdf-viewer/full-screen",
+        "@react-pdf-viewer/get-file",
+        "@react-pdf-viewer/open",
+        "@react-pdf-viewer/page-navigation",
+        "@react-pdf-viewer/print",
+        "@react-pdf-viewer/properties",
+        "@react-pdf-viewer/rotate",
+        "@react-pdf-viewer/scroll-mode",
+        "@react-pdf-viewer/search",
+        "@react-pdf-viewer/selection-mode",
+        "@react-pdf-viewer/theme",
+        "@react-pdf-viewer/thumbnail",
+        "@react-pdf-viewer/toolbar",
+        "@react-pdf-viewer/zoom"
+      ],
+      "range": "*",
+      "nodes": [
+        "node_modules/@react-pdf-viewer/core"
+      ],
+      "fixAvailable": false
+    },
+    "@react-pdf-viewer/default-layout": {
+      "name": "@react-pdf-viewer/default-layout",
+      "severity": "high",
+      "isDirect": true,
+      "via": [
+        "@react-pdf-viewer/attachment",
+        "@react-pdf-viewer/bookmark",
+        "@react-pdf-viewer/core",
+        "@react-pdf-viewer/thumbnail",
+        "@react-pdf-viewer/toolbar"
+      ],
+      "effects": [],
+      "range": "*",
+      "nodes": [
+        "node_modules/@react-pdf-viewer/default-layout"
+      ],
+      "fixAvailable": false
+    },
+    "@react-pdf-viewer/full-screen": {
+      "name": "@react-pdf-viewer/full-screen",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@react-pdf-viewer/core"
+      ],
+      "effects": [],
+      "range": "*",
+      "nodes": [
+        "node_modules/@react-pdf-viewer/full-screen"
+      ],
+      "fixAvailable": true
+    },
+    "@react-pdf-viewer/get-file": {
+      "name": "@react-pdf-viewer/get-file",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@react-pdf-viewer/core"
+      ],
+      "effects": [],
+      "range": "*",
+      "nodes": [
+        "node_modules/@react-pdf-viewer/get-file"
+      ],
+      "fixAvailable": true
+    },
+    "@react-pdf-viewer/open": {
+      "name": "@react-pdf-viewer/open",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@react-pdf-viewer/core"
+      ],
+      "effects": [],
+      "range": "*",
+      "nodes": [
+        "node_modules/@react-pdf-viewer/open"
+      ],
+      "fixAvailable": true
+    },
+    "@react-pdf-viewer/page-navigation": {
+      "name": "@react-pdf-viewer/page-navigation",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@react-pdf-viewer/core"
+      ],
+      "effects": [],
+      "range": "*",
+      "nodes": [
+        "node_modules/@react-pdf-viewer/page-navigation"
+      ],
+      "fixAvailable": true
+    },
+    "@react-pdf-viewer/print": {
+      "name": "@react-pdf-viewer/print",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@react-pdf-viewer/core"
+      ],
+      "effects": [],
+      "range": "*",
+      "nodes": [
+        "node_modules/@react-pdf-viewer/print"
+      ],
+      "fixAvailable": true
+    },
+    "@react-pdf-viewer/properties": {
+      "name": "@react-pdf-viewer/properties",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@react-pdf-viewer/core"
+      ],
+      "effects": [],
+      "range": "*",
+      "nodes": [
+        "node_modules/@react-pdf-viewer/properties"
+      ],
+      "fixAvailable": true
+    },
+    "@react-pdf-viewer/rotate": {
+      "name": "@react-pdf-viewer/rotate",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@react-pdf-viewer/core"
+      ],
+      "effects": [],
+      "range": "*",
+      "nodes": [
+        "node_modules/@react-pdf-viewer/rotate"
+      ],
+      "fixAvailable": true
+    },
+    "@react-pdf-viewer/scroll-mode": {
+      "name": "@react-pdf-viewer/scroll-mode",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@react-pdf-viewer/core"
+      ],
+      "effects": [],
+      "range": "*",
+      "nodes": [
+        "node_modules/@react-pdf-viewer/scroll-mode"
+      ],
+      "fixAvailable": true
+    },
+    "@react-pdf-viewer/search": {
+      "name": "@react-pdf-viewer/search",
+      "severity": "high",
+      "isDirect": true,
+      "via": [
+        "@react-pdf-viewer/core"
+      ],
+      "effects": [],
+      "range": "*",
+      "nodes": [
+        "node_modules/@react-pdf-viewer/search"
+      ],
+      "fixAvailable": false
+    },
+    "@react-pdf-viewer/selection-mode": {
+      "name": "@react-pdf-viewer/selection-mode",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@react-pdf-viewer/core"
+      ],
+      "effects": [],
+      "range": "*",
+      "nodes": [
+        "node_modules/@react-pdf-viewer/selection-mode"
+      ],
+      "fixAvailable": true
+    },
+    "@react-pdf-viewer/theme": {
+      "name": "@react-pdf-viewer/theme",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@react-pdf-viewer/core"
+      ],
+      "effects": [
+        "@react-pdf-viewer/toolbar"
+      ],
+      "range": "*",
+      "nodes": [
+        "node_modules/@react-pdf-viewer/theme"
+      ],
+      "fixAvailable": true
+    },
+    "@react-pdf-viewer/thumbnail": {
+      "name": "@react-pdf-viewer/thumbnail",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@react-pdf-viewer/core"
+      ],
+      "effects": [],
+      "range": "*",
+      "nodes": [
+        "node_modules/@react-pdf-viewer/thumbnail"
+      ],
+      "fixAvailable": true
+    },
+    "@react-pdf-viewer/toolbar": {
+      "name": "@react-pdf-viewer/toolbar",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@react-pdf-viewer/core",
+        "@react-pdf-viewer/full-screen",
+        "@react-pdf-viewer/get-file",
+        "@react-pdf-viewer/open",
+        "@react-pdf-viewer/page-navigation",
+        "@react-pdf-viewer/print",
+        "@react-pdf-viewer/properties",
+        "@react-pdf-viewer/rotate",
+        "@react-pdf-viewer/scroll-mode",
+        "@react-pdf-viewer/search",
+        "@react-pdf-viewer/selection-mode",
+        "@react-pdf-viewer/theme",
+        "@react-pdf-viewer/zoom"
+      ],
+      "effects": [],
+      "range": "*",
+      "nodes": [
+        "node_modules/@react-pdf-viewer/toolbar"
+      ],
+      "fixAvailable": true
+    },
+    "@react-pdf-viewer/zoom": {
+      "name": "@react-pdf-viewer/zoom",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@react-pdf-viewer/core"
+      ],
+      "effects": [],
+      "range": "*",
+      "nodes": [
+        "node_modules/@react-pdf-viewer/zoom"
+      ],
+      "fixAvailable": true
+    },
+    "canvas": {
+      "name": "canvas",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@mapbox/node-pre-gyp"
+      ],
+      "effects": [
+        "pdfjs-dist"
+      ],
+      "range": "2.8.0 - 2.11.2",
+      "nodes": [
+        "node_modules/canvas"
+      ],
+      "fixAvailable": false
+    },
+    "pdfjs-dist": {
+      "name": "pdfjs-dist",
+      "severity": "high",
+      "isDirect": true,
+      "via": [
+        {
+          "source": 1104044,
+          "name": "pdfjs-dist",
+          "dependency": "pdfjs-dist",
+          "title": "PDF.js vulnerable to arbitrary JavaScript execution upon opening a malicious PDF",
+          "url": "https://github.com/advisories/GHSA-wgrm-67xf-hhpq",
+          "severity": "high",
+          "cwe": [
+            "CWE-754"
+          ],
+          "cvss": {
+            "score": 8.8,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:H"
+          },
+          "range": "<=4.1.392"
+        },
+        "canvas"
+      ],
+      "effects": [
+        "@react-pdf-viewer/core"
+      ],
+      "range": "<=4.7.76",
+      "nodes": [
+        "node_modules/pdfjs-dist"
+      ],
+      "fixAvailable": false
+    },
+    "tar": {
+      "name": "tar",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1112329,
+          "name": "tar",
+          "dependency": "tar",
+          "title": "Race Condition in node-tar Path Reservations via Unicode Ligature Collisions on macOS APFS",
+          "url": "https://github.com/advisories/GHSA-r6q2-hw4h-h46w",
+          "severity": "high",
+          "cwe": [
+            "CWE-176"
+          ],
+          "cvss": {
+            "score": 8.8,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:H/A:L"
+          },
+          "range": "<=7.5.3"
+        },
+        {
+          "source": 1112659,
+          "name": "tar",
+          "dependency": "tar",
+          "title": "node-tar Vulnerable to Arbitrary File Creation/Overwrite via Hardlink Path Traversal",
+          "url": "https://github.com/advisories/GHSA-34x7-hfp2-rc4v",
+          "severity": "high",
+          "cwe": [
+            "CWE-22",
+            "CWE-59"
+          ],
+          "cvss": {
+            "score": 8.2,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:H/I:L/A:N"
+          },
+          "range": "<7.5.7"
+        },
+        {
+          "source": 1113300,
+          "name": "tar",
+          "dependency": "tar",
+          "title": "node-tar is Vulnerable to Arbitrary File Overwrite and Symlink Poisoning via Insufficient Path Sanitization",
+          "url": "https://github.com/advisories/GHSA-8qq5-rm4j-mr97",
+          "severity": "high",
+          "cwe": [
+            "CWE-22"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": "<=7.5.2"
+        },
+        {
+          "source": 1113375,
+          "name": "tar",
+          "dependency": "tar",
+          "title": "Arbitrary File Read/Write via Hardlink Target Escape Through Symlink Chain in node-tar Extraction",
+          "url": "https://github.com/advisories/GHSA-83g3-92jg-28cx",
+          "severity": "high",
+          "cwe": [
+            "CWE-22"
+          ],
+          "cvss": {
+            "score": 7.1,
+            "vectorString": "CVSS:3.1/AV:L/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:N"
+          },
+          "range": "<7.5.8"
+        }
+      ],
+      "effects": [
+        "@mapbox/node-pre-gyp"
+      ],
+      "range": "<=7.5.7",
+      "nodes": [
+        "node_modules/tar"
+      ],
+      "fixAvailable": false
+    }
+  },
+  "metadata": {
+    "vulnerabilities": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 22,
+      "critical": 0,
+      "total": 22
+    },
+    "dependencies": {
+      "prod": 257,
+      "dev": 134,
+      "optional": 90,
+      "peer": 4,
+      "peerOptional": 0,
+      "total": 483
+    }
+  }
+}

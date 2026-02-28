@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   DocumentArrowUpIcon,
   XMarkIcon,
@@ -14,6 +15,7 @@ import {
   EnvelopeIcon,
   QuestionMarkCircleIcon,
   BeakerIcon,
+  ArrowRightIcon,
 } from '@heroicons/react/24/outline';
 import ReconDisclaimer from './records-recon/ReconDisclaimer';
 import ReconTimeline from './records-recon/ReconTimeline';
@@ -21,96 +23,27 @@ import ConditionFrequencyChart from './records-recon/ConditionFrequencyChart';
 import ConditionsIndex from './records-recon/ConditionsIndex';
 import BriefingPackExport from './records-recon/BriefingPackExport';
 import PdfViewerPaneLoader from './records-recon/PdfViewerPaneLoader';
-
-// ─── Types matching route.ts ──────────────────────────────────────────────────
-
-interface ReconExtractedItem {
-  itemId: string;
-  condition: string;
-  category: string;
-  excerpt: string;
-  dateFound: string | null;
-  pageNumber: number | null;
-  sectionFound: string | null;
-  provider: string | null;
-  confidence: 'high' | 'medium' | 'low';
-}
-
-interface ReconTimelineEntry {
-  date: string | null;
-  page: number | null;
-  section: string | null;
-  provider: string | null;
-  entry: string;
-  category: string;
-}
-
-interface ReconCondition {
-  condition: string;
-  category: string;
-  firstMentionDate: string | null;
-  firstMentionPage: number | null;
-  mentionCount: number;
-  pagesFound: number[];
-  excerpts: Array<{ text: string; page: number | null; date: string | null }>;
-}
-
-interface ReconKeywordFrequency {
-  term: string;
-  count: number;
-}
-
-interface ReconDocumentSummary {
-  totalPagesReferenced: number;
-  dateRange: { earliest: string | null; latest: string | null };
-  documentTypesDetected: string[];
-  providersFound: string[];
-}
-
-interface ScanSynopsis {
-  totalPages: number;
-  totalParagraphs: number;
-  keptParagraphs: number;
-  reductionPct: number;
-  keywordsDetected: string[];
-  sectionHeadersFound: string[];
-}
-
-interface ReconReport {
-  disclaimer: string;
-  summary: string;
-  documentSummary: ReconDocumentSummary;
-  timeline: ReconTimelineEntry[];
-  conditionsIndex: ReconCondition[];
-  keywordFrequency: ReconKeywordFrequency[];
-  extractedItems: ReconExtractedItem[];
-  processingDetails: { filesProcessed: number; processingTime: number; aiModel: string };
-  scanSynopsis?: ScanSynopsis;
-  isInterim?: boolean;
-  interimNote?: string;
-}
-
-interface UploadedFile {
-  name: string;
-  type: string;
-  data: string;
-  size: number;
-  file?: File; // Keep the raw File object for PDF viewer
-}
-
-interface ScanCache {
-  filteredText: string;
-  keywordFlags: Array<{ condition: string; confidence: string; excerpt: string }>;
-  synopsis: ScanSynopsis;
-  fileNames: string;
-}
-
-type PanelState = 'upload' | 'processing' | 'results' | 'no_items' | 'error';
-type TabId = 'dashboard' | 'timeline' | 'conditions' | 'export';
+import { BRIDGE_STORAGE_KEY } from '@/types/records-recon';
+import type {
+  ReconExtractedItem,
+  ReconTimelineEntry,
+  ReconCondition,
+  ReconKeywordFrequency,
+  ReconDocumentSummary,
+  ScanSynopsis,
+  ReconReport,
+  UploadedFile,
+  ScanCache,
+  PanelState,
+  TabId,
+  ConditionPayload,
+  BridgeData,
+} from '@/types/records-recon';
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function RecordsReconPanel() {
+  const router = useRouter();
   const [panelState, setPanelState] = useState<PanelState>('upload');
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [report, setReport] = useState<ReconReport | null>(null);
@@ -150,8 +83,8 @@ export default function RecordsReconPanel() {
     const newFiles: UploadedFile[] = [];
     for (const file of Array.from(fileList)) {
       if (file.type !== 'application/pdf') continue;
-      if (file.size > 50 * 1024 * 1024) {
-        setError(`"${file.name}" exceeds 50MB limit.`);
+      if (file.size > 15 * 1024 * 1024) {
+        setError(`"${file.name}" exceeds 15MB limit. To ensure fast processing, please split your records into smaller batches.`);
         continue;
       }
       const data = await new Promise<string>((resolve) => {
@@ -215,7 +148,7 @@ export default function RecordsReconPanel() {
 
   // ─── Scan ─────────────────────────────────────────────────────────────────
 
-  const startScan = async (retryData?: { filteredText: string; keywordFlags: unknown[]; synopsis: ScanSynopsis; fileNames: string; useReducedCap?: boolean }) => {
+  const startScan = async (retryData?: { filteredText: string; keywordFlags: Array<{ condition: string; confidence: string; excerpt: string }>; synopsis: ScanSynopsis; fileNames: string; useReducedCap?: boolean }) => {
     setPanelState('processing');
     setReport(null);
     setError('');
@@ -311,6 +244,33 @@ export default function RecordsReconPanel() {
   const retryWithCache = (useReducedCap = false) => {
     if (!scanCache) return;
     startScan({ ...scanCache, useReducedCap });
+  };
+
+  // ─── Smart Bridge: Sender Node ──────────────────────────────────────────
+  // Packages extracted conditions into a standardized payload and stores
+  // it in localStorage for the Symptom Finder (Receiver Node) to consume.
+
+  const handleBridgeHandoff = () => {
+    if (!report || report.conditionsIndex.length === 0) return;
+
+    const conditions: ConditionPayload[] = report.conditionsIndex.map(c => ({
+      condition: c.condition,
+      category: c.category,
+      mentionCount: c.mentionCount,
+      firstMentionDate: c.firstMentionDate,
+      pagesFound: c.pagesFound,
+      sourceModule: 'records-recon' as const,
+    }));
+
+    const bridgeData: BridgeData = {
+      conditions,
+      sourceModule: 'records-recon',
+      timestamp: new Date().toISOString(),
+      reportSummary: report.summary,
+    };
+
+    localStorage.setItem(BRIDGE_STORAGE_KEY, JSON.stringify(bridgeData));
+    router.push('/health/symptom-finder');
   };
 
   // ─── Sample Record Demo ─────────────────────────────────────────────────
@@ -448,28 +408,63 @@ export default function RecordsReconPanel() {
         <HorizontalStepper currentStep={getStepperPhase()} />
 
         <div className="p-6 space-y-4">
-          {/* Upload Zone */}
+          {/* Mandatory Consent Checkbox — must be checked before upload is active */}
+          <label className="flex items-start gap-3 cursor-pointer bg-blue-50 border border-blue-100 rounded-lg p-4">
+            <input
+              type="checkbox"
+              checked={consentChecked}
+              onChange={(e) => setConsentChecked(e.target.checked)}
+              className="mt-1 h-4 w-4 rounded border-blue-300 bg-white text-[#1A2C5B] focus:ring-[#2563EB]"
+              aria-label="Consent to Records Recon terms of use"
+            />
+            <span className="text-gray-600 text-sm leading-relaxed">
+              I understand that Records Recon is an automated AI tool. It is for informational organization only, may contain errors, and does not provide medical or legal advice. Vet1Stop is not a VSO.
+            </span>
+          </label>
+
+          {/* Upload Zone — disabled until consent is checked */}
           <div
-            className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-              isDragging ? 'border-[#EAB308] bg-yellow-50' : 'border-blue-200 hover:border-[#2563EB]/50'
+            className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors relative ${
+              !consentChecked
+                ? 'border-gray-200 bg-gray-50 opacity-50 cursor-not-allowed'
+                : isDragging ? 'border-[#EAB308] bg-yellow-50' : 'border-blue-200 hover:border-[#2563EB]/50'
             }`}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
+            onDragOver={consentChecked ? handleDragOver : undefined}
+            onDragLeave={consentChecked ? handleDragLeave : undefined}
+            onDrop={consentChecked ? handleDrop : undefined}
+            role="button"
+            tabIndex={0}
+            aria-label="Upload VA medical records PDF files"
+            aria-disabled={!consentChecked}
           >
+            {!consentChecked && (
+              <div className="absolute inset-0 z-10" />
+            )}
             <DocumentArrowUpIcon className="h-12 w-12 mx-auto mb-3 text-[#1A2C5B]" />
             <p className="text-gray-900 font-semibold mb-1">Upload VA Medical Records</p>
-            <p className="text-gray-500 text-sm mb-4">PDF files up to 50MB. Your files are processed in memory only — never stored.</p>
+            <p className="text-gray-500 text-sm mb-4">PDF files up to 15MB. Your files are processed in memory only — never stored.</p>
             <div className="flex items-center justify-center gap-3">
               <button
-                onClick={() => fileInputRef.current?.click()}
-                className="px-5 py-2.5 bg-[#1A2C5B] text-white font-bold rounded-lg hover:bg-[#2563EB] transition-colors"
+                onClick={() => consentChecked && fileInputRef.current?.click()}
+                disabled={!consentChecked}
+                className={`px-5 py-2.5 font-bold rounded-lg transition-colors ${
+                  consentChecked
+                    ? 'bg-[#1A2C5B] text-white hover:bg-[#2563EB]'
+                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                }`}
+                aria-label="Select PDF files to upload"
               >
                 Select Files
               </button>
               <button
-                onClick={startSampleScan}
-                className="px-4 py-2.5 border border-slate-300 text-slate-600 font-medium rounded-lg hover:bg-slate-50 hover:border-slate-400 transition-colors flex items-center gap-1.5 text-sm"
+                onClick={consentChecked ? startSampleScan : undefined}
+                disabled={!consentChecked}
+                className={`px-4 py-2.5 border font-medium rounded-lg flex items-center gap-1.5 text-sm transition-colors ${
+                  consentChecked
+                    ? 'border-slate-300 text-slate-600 hover:bg-slate-50 hover:border-slate-400'
+                    : 'border-gray-200 text-gray-400 cursor-not-allowed'
+                }`}
+                aria-label="Try a sample VA medical record scan"
               >
                 <BeakerIcon className="h-4 w-4" />
                 Try Sample Record
@@ -514,7 +509,7 @@ export default function RecordsReconPanel() {
                   <span className="text-gray-900 text-sm font-mono truncate">{f.name}</span>
                   <div className="flex items-center gap-2">
                     <span className="text-gray-500 text-xs">{(f.size / 1024 / 1024).toFixed(1)}MB</span>
-                    <button onClick={() => removeFile(i)} className="text-gray-400 hover:text-red-500">
+                    <button onClick={() => removeFile(i)} className="text-gray-400 hover:text-red-500" aria-label={`Remove file ${f.name}`}>
                       <XMarkIcon className="h-4 w-4" />
                     </button>
                   </div>
@@ -523,34 +518,15 @@ export default function RecordsReconPanel() {
             </div>
           )}
 
-          {/* Consent + Run */}
+          {/* Run Recon Button */}
           {files.length > 0 && (
-            <div className="space-y-3">
-              <label className="flex items-start gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={consentChecked}
-                  onChange={(e) => setConsentChecked(e.target.checked)}
-                  className="mt-1 h-4 w-4 rounded border-blue-300 bg-white text-[#1A2C5B] focus:ring-[#2563EB]"
-                />
-                <span className="text-gray-600 text-sm leading-relaxed">
-                  I understand that Records Recon organizes my records for my personal use.
-                  It does not provide medical advice, legal advice, or claims assistance.
-                  I will consult an accredited VSO for professional guidance.
-                </span>
-              </label>
-              <button
-                onClick={() => startScan()}
-                disabled={!consentChecked}
-                className={`w-full py-3 rounded-lg font-bold text-lg transition-all ${
-                  consentChecked
-                    ? 'bg-[#EAB308] text-[#1A2C5B] hover:bg-[#FACC15] shadow-lg shadow-yellow-500/20'
-                    : 'bg-gray-200 text-gray-400 cursor-not-allowed opacity-50'
-                }`}
-              >
-                Run Recon
-              </button>
-            </div>
+            <button
+              onClick={() => startScan()}
+              className="w-full py-3 rounded-lg font-bold text-lg transition-all bg-[#EAB308] text-[#1A2C5B] hover:bg-[#FACC15] shadow-lg shadow-yellow-500/20"
+              aria-label="Run Records Recon scan on uploaded files"
+            >
+              Run Recon
+            </button>
           )}
 
           {error && (
@@ -607,6 +583,7 @@ export default function RecordsReconPanel() {
               <button
                 onClick={cancelScan}
                 className="px-5 py-2 border border-slate-300 text-slate-500 font-medium rounded-lg hover:bg-red-50 hover:border-red-300 hover:text-red-600 transition-colors text-sm"
+                aria-label="Cancel records scan"
               >
                 Cancel Scan
               </button>
@@ -691,13 +668,16 @@ export default function RecordsReconPanel() {
         <div className={`flex-1 flex flex-col min-w-0 ${pdfUrl && !pdfCollapsed ? 'lg:w-[60%]' : 'w-full'}`}>
 
           {/* Tab Navigation — sticky */}
-          <div className="flex border-b border-blue-100 bg-blue-50 sticky top-0 z-20">
+          <div className="flex border-b border-blue-100 bg-blue-50 sticky top-0 z-20" role="tablist" aria-label="Records Recon results tabs">
             {tabs.map((tab) => {
               const badge = getTabBadge(tab.id);
               return (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
+                  role="tab"
+                  aria-selected={activeTab === tab.id}
+                  aria-label={`${tab.label} tab${badge ? ` (${badge} items)` : ''}`}
                   className={`px-4 py-3 text-sm font-semibold transition-colors relative ${
                     activeTab === tab.id
                       ? 'text-[#1A2C5B] border-b-2 border-[#EAB308] bg-white'
@@ -714,7 +694,7 @@ export default function RecordsReconPanel() {
               );
             })}
             <div className="flex-1" />
-            <button onClick={resetPanel} className="px-3 py-2 text-gray-500 hover:text-[#1A2C5B] text-xs font-medium">
+            <button onClick={resetPanel} className="px-3 py-2 text-gray-500 hover:text-[#1A2C5B] text-xs font-medium" aria-label="Start a new records scan">
               New Scan
             </button>
           </div>
@@ -745,6 +725,7 @@ export default function RecordsReconPanel() {
                   <button
                     onClick={generateVsoEmailDraft}
                     className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-[#1A2C5B] text-white font-semibold rounded-lg hover:bg-[#2563EB] transition-colors text-sm"
+                    aria-label="Generate VSO email draft"
                   >
                     <EnvelopeIcon className="h-4 w-4" />
                     Generate VSO Email Draft
@@ -753,6 +734,7 @@ export default function RecordsReconPanel() {
                     onClick={copyEmailDraftToClipboard}
                     className="flex items-center justify-center gap-1.5 px-3 py-2.5 border border-slate-300 text-slate-600 font-medium rounded-lg hover:bg-slate-50 hover:border-slate-400 transition-colors text-sm"
                     title="Copy email draft to clipboard"
+                    aria-label="Copy VSO email draft to clipboard"
                   >
                     {emailCopied
                       ? <><CheckIcon className="h-4 w-4 text-green-600" /><span className="text-green-600 text-xs">Copied!</span></>
@@ -830,6 +812,24 @@ export default function RecordsReconPanel() {
                     ))}
                   </div>
                 </div>
+
+                {/* ─── Smart Bridge: Intel Brief CTA ──────────────────────── */}
+                {report.conditionsIndex.length > 0 && (
+                  <div className="bg-gradient-to-r from-[#1A2C5B] to-[#2563EB] rounded-lg p-5 text-white shadow-lg">
+                    <h4 className="font-bold text-lg mb-1">Next Step: Intel Brief</h4>
+                    <p className="text-blue-100 text-sm mb-4">
+                      We found <span className="font-bold text-[#EAB308]">{report.conditionsIndex.length}</span> potential condition{report.conditionsIndex.length !== 1 ? 's' : ''} in your records. Would you like to map these to potential VA pathways?
+                    </p>
+                    <button
+                      onClick={handleBridgeHandoff}
+                      className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#EAB308] text-[#1A2C5B] font-bold rounded-lg hover:bg-[#FACC15] transition-colors shadow-md"
+                      aria-label={`Map ${report.conditionsIndex.length} extracted conditions to VA pathways`}
+                    >
+                      Map My Needs
+                      <ArrowRightIcon className="h-4 w-4" />
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 

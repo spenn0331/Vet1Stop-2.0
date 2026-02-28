@@ -1,15 +1,7 @@
 'use client';
 
 import React from 'react';
-
-interface ReconTimelineEntry {
-  date: string | null;
-  page: number | null;
-  section: string | null;
-  provider: string | null;
-  entry: string;
-  category: string;
-}
+import type { ReconTimelineEntry } from '@/types/records-recon';
 
 const CATEGORY_COLORS: Record<string, string> = {
   'Musculoskeletal': 'bg-orange-400',

@@ -2,74 +2,7 @@
 
 import React, { useState } from 'react';
 import { ArrowDownTrayIcon, ClipboardDocumentIcon, CheckIcon } from '@heroicons/react/24/outline';
-
-// ─── Types ───────────────────────────────────────────────────────────────────
-
-interface ReconTimelineEntry {
-  date: string | null;
-  page: number | null;
-  section: string | null;
-  provider: string | null;
-  entry: string;
-  category: string;
-}
-
-interface ReconCondition {
-  condition: string;
-  category: string;
-  firstMentionDate: string | null;
-  firstMentionPage: number | null;
-  mentionCount: number;
-  pagesFound: number[];
-  excerpts: Array<{ text: string; page: number | null; date: string | null }>;
-}
-
-interface ReconKeywordFrequency {
-  term: string;
-  count: number;
-}
-
-interface ReconDocumentSummary {
-  totalPagesReferenced: number;
-  dateRange: { earliest: string | null; latest: string | null };
-  documentTypesDetected: string[];
-  providersFound: string[];
-}
-
-interface ScanSynopsis {
-  totalPages: number;
-  totalParagraphs: number;
-  keptParagraphs: number;
-  reductionPct: number;
-  keywordsDetected: string[];
-  sectionHeadersFound: string[];
-}
-
-interface ReconExtractedItem {
-  itemId: string;
-  condition: string;
-  category: string;
-  excerpt: string;
-  dateFound: string | null;
-  pageNumber: number | null;
-  sectionFound: string | null;
-  provider: string | null;
-  confidence: 'high' | 'medium' | 'low';
-}
-
-interface ReconReport {
-  disclaimer: string;
-  summary: string;
-  documentSummary: ReconDocumentSummary;
-  timeline: ReconTimelineEntry[];
-  conditionsIndex: ReconCondition[];
-  keywordFrequency: ReconKeywordFrequency[];
-  extractedItems: ReconExtractedItem[];
-  processingDetails: { filesProcessed: number; processingTime: number; aiModel: string };
-  scanSynopsis?: ScanSynopsis;
-  isInterim?: boolean;
-  interimNote?: string;
-}
+import type { ReconReport } from '@/types/records-recon';
 
 interface BriefingPackExportProps {
   report: ReconReport;
@@ -285,6 +218,8 @@ function buildBriefingPackHTML(report: ReconReport, generateDate: string): strin
   <p style="color:#94A3B8; margin-bottom: 2rem;">Generated: ${escH(generateDate)}</p>
   <div class="disclaimer-box">
     <h3>⚠ Important — Please Read Before Use</h3>
+    <p style="font-size:1rem; color:#F59E0B; margin-bottom:1.25rem;"><strong>Document Generated: ${escH(generateDate)}</strong></p>
+    <p><strong>Records Recon is an automated AI tool. It is for informational organization only, may contain errors, and does not provide medical or legal advice. Vet1Stop is NOT a Veterans Service Organization (VSO).</strong></p>
     <p>This document is a <strong>RECORDS ORGANIZATION TOOL ONLY</strong>. It extracts and organizes factual content from medical records that YOU uploaded. It does NOT constitute:</p>
     <ul>
       <li>Medical advice or diagnosis</li>

@@ -2,16 +2,7 @@
 
 import React, { useState } from 'react';
 import { ClipboardDocumentIcon, CheckIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
-
-interface ReconCondition {
-  condition: string;
-  category: string;
-  firstMentionDate: string | null;
-  firstMentionPage: number | null;
-  mentionCount: number;
-  pagesFound: number[];
-  excerpts: Array<{ text: string; page: number | null; date: string | null }>;
-}
+import type { ReconCondition } from '@/types/records-recon';
 
 interface ConditionsIndexProps {
   conditions: ReconCondition[];

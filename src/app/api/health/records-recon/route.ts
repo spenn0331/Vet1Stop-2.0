@@ -1,4 +1,15 @@
 import { NextRequest } from 'next/server';
+import type {
+  FilePayload,
+  ReconExtractedItem,
+  ReconTimelineEntry,
+  ReconCondition,
+  ReconKeywordFrequency,
+  ReconDocumentSummary,
+  ReconReport,
+  KeywordFlag,
+  ScanSynopsis,
+} from '@/types/records-recon';
 
 /**
  * POST /api/health/records-recon — v4.7 "Records Recon"
@@ -28,90 +39,6 @@ import { NextRequest } from 'next/server';
 
 export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
-
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-interface FilePayload {
-  name: string;
-  type: string;
-  data: string;
-  size: number;
-}
-
-interface ReconExtractedItem {
-  itemId: string;
-  condition: string;
-  category: string;
-  excerpt: string;
-  dateFound: string | null;
-  pageNumber: number | null;
-  sectionFound: string | null;
-  provider: string | null;
-  confidence: 'high' | 'medium' | 'low';
-}
-
-interface ReconTimelineEntry {
-  date: string | null;
-  page: number | null;
-  section: string | null;
-  provider: string | null;
-  entry: string;
-  category: string;
-}
-
-interface ReconCondition {
-  condition: string;
-  category: string;
-  firstMentionDate: string | null;
-  firstMentionPage: number | null;
-  mentionCount: number;
-  pagesFound: number[];
-  excerpts: Array<{ text: string; page: number | null; date: string | null }>;
-}
-
-interface ReconKeywordFrequency {
-  term: string;
-  count: number;
-}
-
-interface ReconDocumentSummary {
-  totalPagesReferenced: number;
-  dateRange: { earliest: string | null; latest: string | null };
-  documentTypesDetected: string[];
-  providersFound: string[];
-}
-
-interface ReconReport {
-  disclaimer: string;
-  summary: string;
-  documentSummary: ReconDocumentSummary;
-  timeline: ReconTimelineEntry[];
-  conditionsIndex: ReconCondition[];
-  keywordFrequency: ReconKeywordFrequency[];
-  extractedItems: ReconExtractedItem[];
-  processingDetails: { filesProcessed: number; processingTime: number; aiModel: string };
-  scanSynopsis?: ScanSynopsis;
-  isInterim?: boolean;
-  interimNote?: string;
-}
-
-interface KeywordFlag {
-  condition: string;
-  confidence: 'high' | 'medium' | 'low';
-  excerpt: string;
-  dateFound?: string;
-  pageNumber?: number;
-  sectionFound?: string;
-}
-
-interface ScanSynopsis {
-  totalPages: number;
-  totalParagraphs: number;
-  keptParagraphs: number;
-  reductionPct: number;
-  keywordsDetected: string[];
-  sectionHeadersFound: string[];
-}
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -187,6 +114,8 @@ const NOISE_PHRASES = [
   'demographics updated', 'insurance', 'eligibility', 'means test',
   'flu shot', 'covid vaccine', 'immunization', 'routine vital signs',
   'vital signs within normal', 'height:', 'weight:', 'bmi:',
+  'intentionally left blank', 'this page intentionally', 'this page left blank',
+  'page intentionally left blank', 'blank page',
 ];
 
 const KEYWORD_PATTERNS = CORE_KEYWORDS.map(k =>
@@ -1181,6 +1110,12 @@ async function callGrokAPIStreaming(
 
     if (!response.ok) {
       const errText = await response.text().catch(() => 'unknown error');
+      if (response.status === 429) {
+        throw new Error('AI network is currently at capacity. Please try scanning again in a few moments.');
+      }
+      if (response.status === 504) {
+        throw new Error('AI network is currently at capacity. Please try scanning again in a few moments.');
+      }
       throw new Error(`${label} API error ${response.status}: ${errText.substring(0, 200)}`);
     }
 
@@ -1440,8 +1375,8 @@ export async function POST(request: NextRequest) {
           return;
         }
         for (const f of files) {
-          if (f.size > 50 * 1024 * 1024) {
-            emit({ type: 'error', message: `"${f.name}" exceeds 50MB limit.` });
+          if (f.size > 15 * 1024 * 1024) {
+            emit({ type: 'error', message: `"${f.name}" exceeds 15MB limit. To ensure fast processing, please split your records into smaller batches.` });
             try { controller.close(); } catch { /* already closed */ }
             return;
           }

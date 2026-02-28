@@ -348,6 +348,62 @@ This mapping shows exactly where every feature lives on the site/app and its tar
 
 ---
 
+## **2b. The Smart Bridge Ecosystem**
+
+**Introduced:** February 2026 | **Status:** V1 Active (Records Recon → Symptom Finder)
+
+### **The Problem Context**
+
+Historically, veteran resource platforms are built as isolated silos. A user uses a calculator, gets a result, and hits a "Dead End." They are forced to memorize their result, navigate to a new page, and manually input the data again.
+
+### **The Solution: The Smart Bridge Ecosystem**
+
+Vet1Stop is transitioning from a collection of isolated features to a state-driven, interconnected machine. We view features as "Nodes" and the data transfer between them as "Bridges." The output of Node A must automatically become the initialized state of Node B.
+
+When building or modifying features within Vet1Stop, adhere to the following 4 pillars of the Smart Bridge architecture:
+
+#### **Pillar 1: The "Lego Block" Data Standard (Strict Typing)**
+
+All data crossing a bridge must adhere to a strict, standardized TypeScript interface. We do not pass raw, unstructured strings.
+
+* **Example:** If Records Recon (Node A) extracts conditions, it formats them into a strict `ConditionPayload[]` array. The Symptom Finder (Node B) is built to accept that exact `ConditionPayload[]` array as an initial prop or state.
+* **Implementation:** Shared types live in `src/types/records-recon.ts` (and future `src/types/bridge-*.ts` files).
+
+#### **Pillar 2: The Bridge (The Transport Layer)**
+
+For MVP, the primary transport layer across distinct Next.js routes is `localStorage` (acting as our bridge), moving eventually to a unified database profile.
+
+* **The Sender Logic:** Before routing the user away from Node A, stringify the standardized data and save it to a specific key (e.g., `vet1stop_recon_bridge_data`).
+* **The Receiver Logic:** Node B must have a `useEffect` hook that fires on mount. It checks the bridge key. If data exists, it parses it, hydrates the local component state, and optionally clears the key to prevent stale state loops.
+
+#### **Pillar 3: The "Intel Brief" (User Consent & Context)**
+
+Data should never flow invisibly without the user understanding *why* the screen just changed.
+
+* Before a user crosses a bridge, they must click an explicit CTA (e.g., "Map My 5 Extracted Conditions to VA Pathways").
+* When they land on Node B, there must be a visual acknowledgment: "Hydrating your data from Records Recon..." or "We pre-filled your profile based on your scan."
+
+#### **Pillar 4: Fallback Independence**
+
+While tools are connected via Bridges, they must remain fully capable of functioning independently.
+
+* If a user lands directly on the Symptom Finder without coming from Records Recon (the bridge is empty), the tool must gracefully default to its standard manual input UI. Bridges are enhancements, not strict dependencies.
+
+### **Current Active Bridges**
+
+| Bridge | Node A (Sender) | Bridge Key | Node B (Receiver) | Status |
+|:-------|:----------------|:-----------|:-------------------|:-------|
+| Recon → Symptom | Records Recon (`/health`) | `vet1stop_recon_bridge_data` | Symptom Finder (`/health/symptom-finder`) | V1 Sender Active |
+
+### **Future Planned Bridges**
+
+* **Medical Detective → Records Recon:** Pre-populate scan with flagged conditions
+* **Symptom Finder → Resource Pathways:** Auto-route matched resources based on triage results
+* **Auto-Fill Engine → Any Form Tool:** Pre-fill veteran profile data across all tools
+* **MOS Translator → Careers:** Pre-populate job search with translated skills
+
+---
+
 ## **3. Revenue Engine (The Hybrid Model)**
 
 We utilize a diversified revenue model to ensure resilience without needing outside capital.
