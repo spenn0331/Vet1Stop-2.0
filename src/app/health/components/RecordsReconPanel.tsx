@@ -382,7 +382,7 @@ export default function RecordsReconPanel() {
       `Thank you for your service to veterans.\n\n` +
       `Respectfully,\n[Your Name]\n[Your Phone Number]`
     );
-    window.open(`mailto:?subject=${subject}&body=${body}`, '_self');
+    window.location.href = `mailto:?subject=${subject}&body=${body}`;
   };
 
   // ─── Drag & Drop ──────────────────────────────────────────────────────────
