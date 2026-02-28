@@ -151,7 +151,7 @@ export async function GET(request: Request) {
     }
     
     // Get sample documents from the most likely collection
-    let sampleDocuments = [];
+    let sampleDocuments: any[] = [];
     if (mostLikelyHealthCollection) {
       console.log(`Found likely health collection: ${mostLikelyHealthCollection.database}.${mostLikelyHealthCollection.collection} with ${mostLikelyHealthCollection.documentCount} documents`);
       const db = client.db(mostLikelyHealthCollection.database);

@@ -1,5 +1,5 @@
 import { Collection, ObjectId } from 'mongodb';
-import clientPromise from '@/lib/mongodb';
+import { clientPromise } from '@/lib/mongodb';
 import { Resource, ResourceFilter, ResourceSortOptions } from '@/models/resource';
 
 // Get the MongoDB resource collection

@@ -112,7 +112,8 @@ export async function GET(request: Request) {
     // Get database connection
     let db;
     try {
-      db = await connectToDatabase(dbName);
+      const connection = await connectToDatabase(dbName);
+      db = connection.db;
     } catch (error) {
       console.error('MongoDB connection error:', error);
       
@@ -277,7 +278,7 @@ export async function GET(request: Request) {
     const skip = (page - 1) * limit;
     
     // Determine sort option for MongoDB
-    let sortOption: Record<string, number> = {};
+    let sortOption: Record<string, 1 | -1> = {};
     switch (sort) {
       case 'rating':
         sortOption = { rating: -1 };

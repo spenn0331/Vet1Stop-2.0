@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { connectToDatabase } from '@/lib/mongodb';
+import { connectToDatabase, clientPromise } from '@/lib/mongodb';
 
 export async function GET(request: Request) {
   console.log('==== DB TEST API REQUEST STARTED ====');
@@ -12,13 +12,11 @@ export async function GET(request: Request) {
     
     // Connect to MongoDB
     console.log(`Connecting to database: ${dbName}`);
-    const db = await connectToDatabase(dbName);
+    const { db } = await connectToDatabase(dbName);
     
-    // List all collections
     const collections = await db.listCollections().toArray();
     console.log('Available collections:', collections.map(c => c.name).join(', '));
     
-    // Get a reference to the collection
     const collection = db.collection(collectionName);
     
     // Check if the collection exists
@@ -37,12 +35,12 @@ export async function GET(request: Request) {
     const dbs = await adminDb.listDatabases();
     const dbNames = dbs.databases.map((db: any) => db.name);
     
-    // Also try to look for 'health' collections in each database
     const healthCollections: any[] = [];
+    const mongoClient = await clientPromise;
     for (const dbName of dbNames) {
       if (dbName !== 'admin' && dbName !== 'local') {
         try {
-          const testDb = db.client.db(dbName);
+          const testDb = mongoClient.db(dbName);
           const testCollections = await testDb.listCollections().toArray();
           const healthRelated = testCollections.filter(c => 
             c.name.toLowerCase().includes('health') || 

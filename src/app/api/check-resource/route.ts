@@ -14,17 +14,14 @@ export async function GET(req: NextRequest) {
       }, { status: 400 });
     }
     
-    // Connect to MongoDB
-    const db = await connectToDatabase();
+    const { db } = await connectToDatabase();
     
-    // Search for the resource with exact title or by regex
     const query = { 
       title: { $regex: new RegExp(title, 'i') } 
     };
     
     console.log(`Searching for "${title}" in ${collection} collection`);
     
-    // Get the resources from the specified collection
     const resources = await db.collection(collection).find(query).toArray();
     
     return NextResponse.json({

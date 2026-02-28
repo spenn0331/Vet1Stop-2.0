@@ -364,25 +364,50 @@ export default function RecordsReconPanel() {
 
   // ─── VSO Email Draft ───────────────────────────────────────────────────────
 
-  const generateVsoEmailDraft = () => {
+  const [emailCopied, setEmailCopied] = useState(false);
+
+  const buildVsoEmailText = () => {
     const condCount = report?.extractedItems.length || 0;
     const dateRange = report?.documentSummary.dateRange;
-    const rangeStr = dateRange?.earliest && dateRange?.latest
-      ? `${dateRange.earliest} to ${dateRange.latest}`
-      : 'see attached';
-    const subject = encodeURIComponent('Records Recon Briefing Pack — Request for VSO Review');
-    const body = encodeURIComponent(
-      `Dear VSO Representative,\n\n` +
-      `I have used the Records Recon tool to organize my VA medical records and would like to schedule a meeting to review the findings with you.\n\n` +
-      `Summary:\n` +
-      `- Conditions identified: ${condCount}\n` +
-      `- Record date range: ${rangeStr}\n\n` +
-      `I have attached my VSO Briefing Pack (PDF) which includes a chronological timeline, conditions index, and supporting excerpts from my records.\n\n` +
-      `Please let me know your earliest availability for a review.\n\n` +
-      `Thank you for your service to veterans.\n\n` +
-      `Respectfully,\n[Your Name]\n[Your Phone Number]`
-    );
-    window.location.href = `mailto:?subject=${subject}&body=${body}`;
+    const startDate = dateRange?.earliest || '[Start Date]';
+    const endDate = dateRange?.latest || '[End Date]';
+
+    const subject = 'Claim Review Request & Organized Medical History - [Your Name]';
+    const body =
+      `Good Morning/Afternoon,\n\n` +
+      `I am reaching out to request your assistance in evaluating my medical history for a potential VA disability claim.\n\n` +
+      `To make our initial meeting as productive as possible and save you time, I have pre-organized my VA medical records. I've attached a summary Briefing Pack (PDF) that includes:\n` +
+      `- A chronological timeline of my medical history (Date Range: ${startDate} to ${endDate})\n` +
+      `- An index of ${condCount} identified conditions with direct supporting excerpts\n\n` +
+      `Could you please let me know your availability for an introductory review in the coming weeks? Additionally, please let me know if there are any standard intake forms or representation mandates I should complete prior to our meeting.\n\n` +
+      `Thank you for your time and advocacy.\n\n` +
+      `Respectfully,\n\n` +
+      `[Your Name]\n` +
+      `[Your Phone Number]`;
+    return { subject, body };
+  };
+
+  const generateVsoEmailDraft = () => {
+    const { subject, body } = buildVsoEmailText();
+    const mailtoUrl = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+
+    // Try opening mailto — use window.open with a fallback.
+    // If no email client is configured, window.open returns null or the
+    // popup is blocked. In that case, copy the draft to clipboard instead.
+    const win = window.open(mailtoUrl, '_self');
+    if (!win) {
+      copyEmailDraftToClipboard();
+    }
+  };
+
+  const copyEmailDraftToClipboard = async () => {
+    const { subject, body } = buildVsoEmailText();
+    const fullText = `Subject: ${subject}\n\n${body}`;
+    try {
+      await navigator.clipboard.writeText(fullText);
+      setEmailCopied(true);
+      setTimeout(() => setEmailCopied(false), 4000);
+    } catch { /* clipboard not available */ }
   };
 
   // ─── Drag & Drop ──────────────────────────────────────────────────────────
@@ -569,7 +594,7 @@ export default function RecordsReconPanel() {
                 <p className="text-gray-600 text-xs font-semibold uppercase tracking-wider">Live Detections</p>
                 <div className="flex flex-wrap gap-2">
                   {liveFlags.map((flag, i) => (
-                    <span key={i} className="bg-[#1A2C5B] text-[#EAB308] text-xs px-2 py-1 rounded font-mono animate-pulse">
+                    <span key={i} className="bg-[#1A2C5B] text-[#EAB308] text-xs px-2 py-1 rounded font-mono">
                       {flag.condition}
                     </span>
                   ))}
@@ -715,14 +740,31 @@ export default function RecordsReconPanel() {
                   <StatCard label="Providers" value={report.documentSummary.providersFound.length || 'N/A'} />
                 </div>
 
-                {/* VSO Email Draft Button */}
-                <button
-                  onClick={generateVsoEmailDraft}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-[#1A2C5B] text-white font-semibold rounded-lg hover:bg-[#2563EB] transition-colors text-sm"
-                >
-                  <EnvelopeIcon className="h-4 w-4" />
-                  Generate VSO Email Draft
-                </button>
+                {/* VSO Email Draft Buttons */}
+                <div className="flex gap-2">
+                  <button
+                    onClick={generateVsoEmailDraft}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-[#1A2C5B] text-white font-semibold rounded-lg hover:bg-[#2563EB] transition-colors text-sm"
+                  >
+                    <EnvelopeIcon className="h-4 w-4" />
+                    Generate VSO Email Draft
+                  </button>
+                  <button
+                    onClick={copyEmailDraftToClipboard}
+                    className="flex items-center justify-center gap-1.5 px-3 py-2.5 border border-slate-300 text-slate-600 font-medium rounded-lg hover:bg-slate-50 hover:border-slate-400 transition-colors text-sm"
+                    title="Copy email draft to clipboard"
+                  >
+                    {emailCopied
+                      ? <><CheckIcon className="h-4 w-4 text-green-600" /><span className="text-green-600 text-xs">Copied!</span></>
+                      : <><ClipboardDocumentIcon className="h-4 w-4" /><span className="text-xs">Copy</span></>
+                    }
+                  </button>
+                </div>
+                {emailCopied && (
+                  <p className="text-green-700 text-xs text-center bg-green-50 rounded-lg px-3 py-2 border border-green-200">
+                    Email draft copied to clipboard! Paste it into your email app and send to your VSO representative.
+                  </p>
+                )}
 
                 {/* Processing Details */}
                 {report.scanSynopsis && (

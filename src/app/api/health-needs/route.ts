@@ -23,8 +23,7 @@ export async function GET(request: Request) {
     const collectionName = process.env.MONGODB_COLLECTION || 'healthResources';
     console.log(`Using database: ${dbName}, collection: ${collectionName}`);
     
-    // Connect to MongoDB
-    const db = await connectToDatabase(dbName);
+    const { db } = await connectToDatabase(dbName);
     const collection = db.collection(collectionName);
     
     // Count total resources in collection for reference

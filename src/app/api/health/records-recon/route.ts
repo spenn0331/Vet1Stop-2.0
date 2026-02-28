@@ -444,8 +444,9 @@ RULES:
 3. Neutral words OK: excerpt, mention, found, referenced, page, section, provider, date, category, extracted, documented, noted, recorded, listed, appeared, identified, occurrence, entry, summary, condition, diagnosis, observation
 4. Output ONLY the JSON object below. No text before or after.
 5. Sort timeline chronologically (oldest date first). Null dates go last.
-6. Group conditions_index by unique condition name, merging duplicates.
-7. keyword_frequency: count how many times each unique condition appears.
+6. CRITICAL: Each unique excerpt+date+page combination must appear ONLY ONCE in the timeline. If one paragraph mentions multiple conditions, create ONE timeline entry using the most specific category. Never duplicate the same excerpt across multiple timeline entries.
+7. Group conditions_index by unique condition name, merging duplicates.
+8. keyword_frequency: count how many times each unique condition appears.
 
 OUTPUT SCHEMA:
 {
@@ -985,10 +986,11 @@ function buildReconReportFromItems(
       return a.date.localeCompare(b.date);
     });
 
-  // Deduplicate timeline entries by date+page+excerpt+category
+  // Deduplicate timeline entries by date+page+excerpt (category excluded so the
+  // same verbatim excerpt isn't repeated once per condition category)
   const timelineSeen = new Set<string>();
   const timeline: ReconTimelineEntry[] = rawTimeline.filter(entry => {
-    const key = `${entry.date || ''}|${entry.page || ''}|${entry.entry.toLowerCase().substring(0, 80)}|${entry.category}`;
+    const key = `${entry.date || ''}|${entry.page || ''}|${entry.entry.toLowerCase().substring(0, 80)}`;
     if (timelineSeen.has(key)) return false;
     timelineSeen.add(key);
     return true;
@@ -1073,10 +1075,11 @@ function buildReconReport(
   aiModel: string,
   synopsis?: ScanSynopsis,
 ): ReconReport {
-  // Deduplicate timeline entries from Phase 2b output
+  // Deduplicate timeline entries from Phase 2b output (category excluded so the
+  // same verbatim excerpt isn't repeated once per condition category)
   const tlSeen = new Set<string>();
   const dedupedTimeline = structured.timeline.filter(entry => {
-    const key = `${entry.date || ''}|${entry.page || ''}|${(entry.entry || '').toLowerCase().substring(0, 80)}|${entry.category}`;
+    const key = `${entry.date || ''}|${entry.page || ''}|${(entry.entry || '').toLowerCase().substring(0, 80)}`;
     if (tlSeen.has(key)) return false;
     tlSeen.add(key);
     return true;

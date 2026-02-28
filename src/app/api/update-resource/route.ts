@@ -14,10 +14,8 @@ export async function POST(req: NextRequest) {
       }, { status: 400 });
     }
     
-    // Connect to MongoDB
-    const db = await connectToDatabase();
+    const { db } = await connectToDatabase();
     
-    // Find the resource by title
     const query = { 
       title: { $regex: new RegExp(title, 'i') } 
     };
