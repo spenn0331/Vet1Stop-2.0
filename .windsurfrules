@@ -1,87 +1,34 @@
-# Your rule content
+# .windsurfrules — Vet1Stop (Updated Feb 2026)
+# Source of truth = .workflow/project_status.md + .workflow/master-strategy.md
 
-- Always confer with the .workflow directory for intention, guidelines, and goals
-- Do not duplicate files
-- Always automatically commit changes to the repository at least once every 3 hours of active work to ensure progress is saved
-- Regularly update the .workflow directory files to reflect current project status, progress, and evolving goals
-- When implementing new features or making significant changes, update relevant .workflow files such as sprint-planning.md, feature-prioritization.md, and metrics-success-criteria.md to track progress
-- Maintain documentation of completed work, ongoing tasks, and future plans in the .workflow directory to ensure alignment with project goals
-- Refactor code to improve performance, scalability, and maintainability
-## Project Overview
-- Always confer with the .workflow directory for intention, guidelines, and goals
-- Vet1Stop is being rewritten as a Next.js application following comprehensive blueprint documents in the `.workflow/nextjs-blueprint/` directory
-- The goal is to create a polished MVP for investor pitching while documenting future enhancements
-- Target users: U.S. veterans seeking resources (primary) and general public discovering veteran businesses (secondary)
-- All implementation should follow the technical specifications in the blueprint files
+# 0. THE ZERO-CLUTTER MANDATE (CRITICAL)
+- NEVER generate `.fixed`, `.new`, `.bak`, `.old`, or any temp backup files. 
+- Overwrite existing files cleanly. Output only production-ready code.
 
-## Coding Standards
-- Use Next.js 14+ with App Router architecture following best practices
-- Implement Tailwind CSS for styling with proper configuration through postcss
-- Create responsive, mobile-first designs that follow the design specifications
-- Write TypeScript for type safety and better developer experience
-- Implement Firebase authentication for user management
-- Use MongoDB Atlas for resource data storage
-- Structure the codebase following the architecture outlined in technical-architecture.md
-- Include comprehensive comments and documentation in the code
+# 1. ALWAYS FIRST
+- Read `.workflow/project_status.md` top-to-bottom before ANY task to understand current sprint priorities.
+- Never invent features outside of the Phase 1 MVP scope without explicit PM instructions.
 
-## Implementation Guidelines
-- Generate complete, production-ready code rather than simplified examples
-- Explain all technical concepts in beginner-friendly language
-- Provide file paths and detailed implementation instructions with each code block
-- Configure proper error handling, loading states, and fallback UI
-- Write clean, maintainable React components following atomic design principles
-- Implement proper SEO with Next.js metadata API
-- Set up environment variables and configuration files as needed
-- Create comprehensive test files for critical components
+# 2. Tech Stack & Boundaries (Next.js 15)
+- Next.js 15 (App Router), React 19, TypeScript strict, Tailwind CSS 3.
+- Firebase Auth + Analytics are LOCKED for MVP (do not attempt to replace with custom auth).
+- MongoDB Atlas for all resource/health data.
+- **Server vs. Client:** Respect Next.js 15 boundaries. UI components with interactivity (hooks, `localStorage`) MUST have `"use client"` at the top. Do not export metadata from client components.
 
-## Feature Implementation Priority
-1. Project setup with all required dependencies
-2. Homepage with navigation, hero section, and resource categories
-3. Education page with resource display system
-4. Firebase authentication integration
-5. MongoDB resource data integration
-6. Remaining pages (Health, Life and Leisure, Jobs, Shop, Social, Local)
-7. Admin dashboard implementation
+# 3. The "Smart Bridge" Architecture & Data Strategy
+- We do not build isolated pages; we build connected nodes.
+- **PHI / Medical Data Transport:** Use `localStorage` (key = `vet1stop_recon_bridge_data`) to pass sensitive medical extractions safely between pages. It is ephemeral and privacy-first.
+- **Receiver Nodes:** Must use a `useEffect` hook to parse the `localStorage` payload, hydrate state, and present an "Intel Brief" (toast notification) to the user.
+- **Trend Intelligence (Analytics):** Use Firebase Analytics to log anonymized `resource_clicked` events. NEVER tie specific health clicks directly to a user's persistent database profile to avoid inferred medical records.
 
-## Technical Requirements
-- Implement server components and client components appropriately
-- Use React Server Components for data fetching where possible
-- Implement the resource display system using Grid Cards as specified
-- Configure proper image optimization with Next.js Image component
-- Set up API routes for resource data using Next.js API Routes
-- Create reusable hooks for common functionality (authentication, data fetching)
-- Implement proper state management with React Context or similar
-- Configure proper caching strategy for resource data
-- Optimize for Core Web Vitals and performance
+# 4. Phase 1 Feature Priority (Strict Order)
+1. Health Page MVP (Records Recon + wired Symptom Finder + Hub).
+2. Local VOB Directory (Leaflet + Real Estate).
+3. PCS Commander + Smart Bridge integration.
+4. Auto-Fill shared component.
+- DO NOT touch Social or Shop until Health and Local are live.
 
-## Resource System
-- Implement the resource display system exactly as specified in resource-display-system.md
-- Create dynamic filtering and search functionality for resources
-- Implement proper pagination and loading states
-- Include sorting options by relevance, date, and popularity
-- Create resource detail pages with comprehensive information
-- Distinguish between free and premium resources (visual indicators only for MVP)
-
-## Authentication
-- Follow the Firebase integration blueprint exactly
-- Implement sign-up, sign-in, and password reset flows
-- Create protected routes for authenticated content
-- Include social authentication options as specified
-- Store user preferences and profiles in Firebase
-- Prepare for military verification (placeholder UI only for MVP)
-
-## Deployment
-- Configure the application for Vercel deployment
-- Set up proper environment variables for different environments
-- Implement the CI/CD process as outlined in ci-cd-blueprint.md
-- Create production build optimization configurations
-- Include proper error monitoring and logging
-
-## Best Practices
-- Write code comments for clarity, especially for complex logic
-- Test changes incrementally, starting with small updates
-- Reference the blueprint documents frequently to ensure alignment
-- Prioritize accessibility, performance, and scalability
-- Use responsive design patterns that work across all device sizes
-- Create fallback mechanisms for when external services fail
-- Follow security best practices for authentication and data storage
+# 5. UI/UX & Legal Standards
+- Match the exact styling established in `src/app/health/components/RecordsReconPanel.tsx`.
+- Patriotic, mobile-first design. Ensure error states and empty states are gracefully handled.
+- Legal & Privacy: Bold RESPA disclaimers on real-estate forms. Crisis line (988) visible on all health modules. Auto-Fill must carry "not official VA claims assistance" disclaimers.

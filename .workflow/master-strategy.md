@@ -10,7 +10,7 @@ This document replaces the need for a traditional 30-page static business plan. 
 
 **Structure:** Limited Liability Company (LLC)
 
-**Last Updated:** February 17, 2026
+**Last Updated:** February 28, 2026
 
 **Status:** MVP Development / Pre-Seed
 
@@ -131,8 +131,13 @@ Daily tools that remove paperwork friction.
 
 AI extracts data from DD-214/uploads to pre-populate any form.
 
-**How it works:** Upload once → OCR/NLP pulls name, service dates, disabilities → AI fills state/VA PDFs automatically. Saved to Digital Sea Bag for reuse.  
-#### **2. Medical Detective** – Scans VA records for missed claims evidence
+**How it works:** Upload once → OCR/NLP pulls name, service dates, disabilities → AI fills state/VA PDFs automatically. Saved to Digital Sea Bag for reuse.
+
+> **⚠️ LEGAL RISK — 38 CFR §14.629-630 Compliance**
+>
+> Auto-Fill must **NEVER** be used to auto-generate or populate official VA forms for disability compensation. Due to 38 CFR §14.629-630 regarding unauthorized claims assistance, Vet1Stop cannot provide claims advice or prep. All Auto-Fill features must carry strict legal disclaimers clearly visible to the user before and during form interaction. Any form that touches VA disability compensation is **strictly out of scope** for Auto-Fill.
+
+#### **2. Records Recon** – Scans VA records for missed claims evidence
 
 Uncovers hidden benefits and potential retroactive pay by identifying relevant evidence in clinical notes. (Strictly informational — never files claims or gives medical advice.)
 
@@ -264,7 +269,7 @@ Vet1Stop is designed to be the premier digital social ecosystem exclusively for 
 ### **KPI Dashboard (Track from Launch)**
 
 * **PCS Commander:** Leads generated, referral conversion %, avg fee per closing
-* **Auto-Fill / Medical Detective / Contract Highlighter:** Documents scanned, flags found, time saved
+* **Auto-Fill / Records Recon / Contract Highlighter:** Documents scanned, flags found, time saved
 * **Platform-wide:** MAU, feature engagement %, premium conversion (target 8–12% by Month 6), NPS ≥70
 
 ---
@@ -277,7 +282,7 @@ This mapping shows exactly where every feature lives on the site/app and its tar
 
 ★ = Highest priority (revenue drivers + core user value)
 
-* Health page (Symptom Finder + Medical Detective) ★
+* Health page (Symptom Finder + Records Recon) ★
 * PCS Commander + Real Estate Referral Network (Golden Goose revenue engine) ★
 * Local VOB Directory with Real Estate & Housing category ★
 * Auto-Fill Engine, Contract Highlighter, Smart Matching (quick utility wins) ★
@@ -286,13 +291,13 @@ This mapping shows exactly where every feature lives on the site/app and its tar
 ### **Home Page (The "First and Only Stop" Hub)**
 
 * Smart Matching – Personalized Benefits Finder (quick 3-question quiz → top 3 results with "Why this matches you") (Phase 1, ★ global)
-* Hero Quick Wins cards – Prominent one-click shortcuts to the most-used Phase 1 tools (e.g., PCS Commander, Medical Detective, Contract Highlighter, Auto-Fill) (Phase 1, ★)
+* Hero Quick Wins cards – Prominent one-click shortcuts to the most-used Phase 1 tools (e.g., PCS Commander, Records Recon, Contract Highlighter, Auto-Fill) (Phase 1, ★)
 * Featured Core Foundation tiles (Local VOB Directory, Vet1Stop Shop, Government Contracting Hub, etc.) (Phase 1)
 
 ### **Health Page (/health)**
 
 * Symptom Finder (Core) – Conversational triage wizard (Phase 1, ★)  
-* Medical Detective – Upload/scan VA notes for evidence flags \+ Personal Evidence Report (Phase 1, ★)  
+* Records Recon – Upload/scan VA notes for evidence flags \+ Personal Evidence Report (Phase 1, ★)  
 * AI Wellness Predictor – Daily check-ins \+ early spiral detection (Phase 1–2)  
 * Ambient Scribe Companion – Voice journaling → therapist summaries (Phase 1–2)  
 * Virtual Appointment Prep – C\&P exam role-play simulator (Phase 1–2)  
@@ -371,10 +376,10 @@ All data crossing a bridge must adhere to a strict, standardized TypeScript inte
 
 #### **Pillar 2: The Bridge (The Transport Layer)**
 
-For MVP, the primary transport layer across distinct Next.js routes is `localStorage` (acting as our bridge), moving eventually to a unified database profile.
+For MVP, the primary transport layer across distinct Next.js routes is `localStorage`, moving eventually to a unified database profile. The Smart Bridge passes **strictly typed Next.js payloads** (TypeScript interfaces defined in `src/types/records-recon.ts`) between nodes via the `localStorage` key `vet1stop_recon_bridge_data`. No raw strings or untyped objects are permitted on the bridge.
 
-* **The Sender Logic:** Before routing the user away from Node A, stringify the standardized data and save it to a specific key (e.g., `vet1stop_recon_bridge_data`).
-* **The Receiver Logic:** Node B must have a `useEffect` hook that fires on mount. It checks the bridge key. If data exists, it parses it, hydrates the local component state, and optionally clears the key to prevent stale state loops.
+* **The Sender Logic:** Before routing the user away from Node A, the sender serializes (`JSON.stringify`) the standardized, strictly typed payload and writes it to the designated `localStorage` key (e.g., `vet1stop_recon_bridge_data`).
+* **The Receiver Logic:** Node B must have a `useEffect` hook that fires on mount. It reads the bridge key from `localStorage`, parses the strictly typed payload (`JSON.parse` → cast to `BridgeData`), hydrates the local component state, and optionally clears the key to prevent stale state loops.
 
 #### **Pillar 3: The "Intel Brief" (User Consent & Context)**
 
@@ -397,12 +402,12 @@ While tools are connected via Bridges, they must remain fully capable of functio
 
 ### **Future Planned Bridges**
 
-* **Medical Detective → Records Recon:** Pre-populate scan with flagged conditions
+* **Records Recon → Auto-Fill Engine:** Pre-populate VA form fields with extracted service-connected conditions
 * **Symptom Finder → Resource Pathways:** Auto-route matched resources based on triage results
 * **Auto-Fill Engine → Any Form Tool:** Pre-fill veteran profile data across all tools
 * **MOS Translator → Careers:** Pre-populate job search with translated skills
 
----
+### **Phase Roadmap**
 
 ## **3. Revenue Engine (The Hybrid Model)**
 
