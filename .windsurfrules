@@ -7,7 +7,9 @@
 
 # 1. ALWAYS FIRST
 - Read `.workflow/project_status.md` top-to-bottom before ANY task to understand current sprint priorities.
+- Review `.workflow/master-strategy.md` for overarching goals and long-term vision.
 - Never invent features outside of the Phase 1 MVP scope without explicit PM instructions.
+- Follow the exact instructions in `.workflow/ai-command-center.md` for AI tool coordination.
 
 # 2. Tech Stack & Boundaries (Next.js 15)
 - Next.js 15 (App Router), React 19, TypeScript strict, Tailwind CSS 3.

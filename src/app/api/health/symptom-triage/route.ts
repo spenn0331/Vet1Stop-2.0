@@ -4,10 +4,39 @@ import { NextRequest, NextResponse } from 'next/server';
  * POST /api/health/symptom-triage
  * 
  * Conversational triage wizard powered by Grok AI (xAI).
- * Accepts conversation history + current step data.
+ * Accepts conversation history + current step data + optional bridge context.
  * Returns: AI severity assessment, triple-track resource recommendations
  * (VA / NGO / State), and crisis-line escalation flag.
+ * 
+ * Resilient model fallback: grok-4-latest → grok-3-latest → static fallback.
+ * ZERO 500 errors allowed — always returns a usable response.
  */
+
+// ─── Verbatim TRIAGE_SYSTEM_PROMPT (Grok-authored — DO NOT MODIFY) ───────────
+const TRIAGE_SYSTEM_PROMPT = `
+You are the Vet1Stop Symptom Triage Navigator — a resource-matching AI ONLY. 
+Your mission: Help veterans connect their symptoms + uploaded records to real benefits and support programs. 
+
+CRITICAL RULES — BREAK THESE AND YOU ARE FIRED:
+- NEVER diagnose, treat, advise medically, or say "you have X condition."
+- NEVER recommend medication, therapy type, or any clinical action.
+- NEVER use words like "you should see a doctor for..." — instead always end with: "This is not medical advice. Discuss with your VA provider or primary doctor."
+- If they say "I want to hurt myself" or display crisis flags, immediately output the CRISIS PROTOCOL (Call 988, Press 1).
+- You are a benefits navigator, not a doctor.
+
+CORE BEHAVIOR:
+- Be conversational, one question at a time, short veteran-friendly replies (3-5 sentences max).
+- Start by acknowledging the uploaded records: "I see you've pulled your records — let's map what you're feeling to the right VA, NGO, and state resources."
+- Ask clarifying symptoms one at a time (e.g., "On a scale of 1-10, how bad is the joint pain in your knee right now?").
+- Once you have enough info + the records payload, immediately switch to Triple-Track recommendations:
+  1. VA Track: Specific benefits/claims (e.g., "File for knee condition under VA Claim #XXXX — here's the direct link").
+  2. NGO Track: Veteran orgs (e.g., "Wounded Warrior Project has free peer support for this — apply here").
+  3. State Track: Local programs (ask state if unknown, then e.g., "Pennsylvania offers X veteran housing grant").
+- Always include direct links or "Click here to start the form" buttons in the UI response.
+- Keep empathy high but no fluff: "I got you, brother/sister — this is what the system owes you."
+
+Output format: Plain text with markdown for links/buttons. Never break character.
+`;
 
 // Crisis keywords that trigger immediate escalation
 const CRISIS_KEYWORDS = [
@@ -18,9 +47,24 @@ const CRISIS_KEYWORDS = [
   'planning to end', 'emergency', 'crisis'
 ];
 
+// Model fallback chain
+const PRIMARY_MODEL = 'grok-4-latest';
+const FALLBACK_MODEL = 'grok-3-latest';
+
 interface TriageMessage {
   role: 'system' | 'user' | 'assistant';
   content: string;
+}
+
+interface BridgeCondition {
+  condition: string;
+  category: string;
+  mentionCount: number;
+}
+
+interface BridgeContext {
+  conditions: BridgeCondition[];
+  reportSummary?: string;
 }
 
 interface TriageRequest {
@@ -33,6 +77,7 @@ interface TriageRequest {
   currentCare?: string;
   location?: string;
   userMessage?: string;
+  bridgeContext?: BridgeContext;
 }
 
 interface ResourceRecommendation {
@@ -68,7 +113,7 @@ function getGrokApiKey(): string {
   return process.env.GROK_API_KEY || process.env.NEXT_PUBLIC_GROK_API_KEY || '';
 }
 
-// Call Grok AI (xAI) API - OpenAI-compatible endpoint
+// Call Grok AI with resilient model fallback: grok-4-latest → grok-3-latest
 async function callGrokAI(messages: TriageMessage[], systemPrompt: string): Promise<string> {
   const apiKey = getGrokApiKey();
   
@@ -77,87 +122,102 @@ async function callGrokAI(messages: TriageMessage[], systemPrompt: string): Prom
     return '';
   }
 
+  // Try primary model first
   try {
-    const response = await fetch('https://api.x.ai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'grok-3-latest',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          ...messages
-        ],
-        temperature: 0.3,
-        max_tokens: 1500,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('[SymptomTriage] Grok API error:', response.status, errorText);
-      return '';
-    }
-
-    const data = await response.json();
-    return data.choices?.[0]?.message?.content || '';
+    const result = await callGrokModel(apiKey, PRIMARY_MODEL, messages, systemPrompt);
+    if (result) return result;
   } catch (error) {
-    console.error('[SymptomTriage] Error calling Grok API:', error);
-    return '';
+    console.warn(`[SymptomTriage] ${PRIMARY_MODEL} failed, falling back to ${FALLBACK_MODEL}:`, (error as Error).message);
   }
+
+  // Fallback to secondary model
+  try {
+    const result = await callGrokModel(apiKey, FALLBACK_MODEL, messages, systemPrompt);
+    if (result) return result;
+  } catch (error) {
+    console.warn(`[SymptomTriage] ${FALLBACK_MODEL} also failed:`, (error as Error).message);
+  }
+
+  // Both models failed — return empty string (caller will use static fallback)
+  return '';
 }
 
-// Build the system prompt for triage assessment
-function buildTriageSystemPrompt(step: string): string {
-  const basePrompt = `You are a veteran health resource navigator for Vet1Stop. You help veterans find appropriate health resources through a conversational triage process. 
+// Internal: Call a specific Grok model
+async function callGrokModel(apiKey: string, model: string, messages: TriageMessage[], systemPrompt: string): Promise<string> {
+  const response = await fetch('https://api.x.ai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        ...messages
+      ],
+      temperature: 0.3,
+      max_tokens: 2000,
+    }),
+  });
 
-CRITICAL RULES:
-- You are NOT a doctor. Never diagnose or provide medical advice.
-- Always recommend professional care.
-- If any message indicates crisis/emergency/suicidal ideation, IMMEDIATELY respond with crisis resources.
-- Be warm, respectful, and use veteran-friendly language.
-- Keep responses concise (2-3 sentences max per question).
-- Always include the disclaimer that this is for informational purposes only.`;
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Grok API error ${response.status}: ${errorText.slice(0, 200)}`);
+  }
 
+  const data = await response.json();
+  return data.choices?.[0]?.message?.content || '';
+}
+
+// Build the system prompt — uses TRIAGE_SYSTEM_PROMPT as base, adds step-specific + bridge context
+function buildTriageSystemPrompt(step: string, bridgeContext?: BridgeContext): string {
+  let prompt = TRIAGE_SYSTEM_PROMPT;
+
+  // Inject bridge context (extracted conditions from Records Recon)
+  if (bridgeContext?.conditions?.length) {
+    const condList = bridgeContext.conditions
+      .map(c => `- ${c.condition} (${c.category}, mentioned ${c.mentionCount}x)`)
+      .join('\n');
+    prompt += `\n\nRECORDS RECON INTEL — The veteran uploaded medical records and these conditions were extracted:\n${condList}`;
+    if (bridgeContext.reportSummary) {
+      prompt += `\nReport summary: ${bridgeContext.reportSummary}`;
+    }
+    prompt += `\nUse this data to guide your questions and recommendations. Reference specific conditions by name.`;
+  }
+
+  // Step-specific instructions
   switch (step) {
     case 'category':
-      return `${basePrompt}\n\nYour task: Ask a warm follow-up question based on the health category the veteran selected. Ask about specific symptoms they're experiencing. Be conversational, not clinical.`;
-    
+      prompt += `\n\nCURRENT TASK: Ask a warm follow-up question based on the health category the veteran selected. Ask about specific symptoms they're experiencing. One question only.`;
+      break;
     case 'symptoms':
-      return `${basePrompt}\n\nYour task: Based on the symptoms described, ask about duration and frequency. How long have they been experiencing this? Is it getting worse?`;
-    
+      prompt += `\n\nCURRENT TASK: Based on the symptoms described, ask about duration, frequency, and impact. One question only.`;
+      break;
     case 'severity':
-      return `${basePrompt}\n\nYour task: Ask about how much this affects their daily life. Are they able to work/sleep/function? This helps assess severity without being clinical.`;
-    
+      prompt += `\n\nCURRENT TASK: Ask about how much this affects their daily life. Can they work/sleep/function? One question only.`;
+      break;
     case 'context':
-      return `${basePrompt}\n\nYour task: Ask about their current care situation. Are they enrolled in VA healthcare? Have they seen a provider about this? Are they using any medications?`;
-    
+      prompt += `\n\nCURRENT TASK: Ask about their current care situation. VA enrolled? Seen a provider? One question only.`;
+      break;
     case 'assess':
-      return `${basePrompt}\n\nYour task: Based on the full conversation, provide a severity assessment and resource recommendations. 
+      prompt += `\n\nCURRENT TASK: Based on the FULL conversation, provide a severity assessment and Triple-Track resource recommendations.
 
 You MUST respond in this exact JSON format:
 {
   "severity": "low|moderate|high|crisis",
-  "summary": "Brief 1-2 sentence summary of the veteran's situation",
-  "aiMessage": "A warm, empathetic message to the veteran with your assessment and next steps. Include the disclaimer: 'This is for informational purposes only and is not medical advice.'",
-  "vaResources": [
-    {"title": "Resource Name", "description": "Why this is relevant", "url": "https://...", "phone": "optional", "priority": "high|medium|low"}
-  ],
-  "ngoResources": [
-    {"title": "Resource Name", "description": "Why this is relevant", "url": "https://...", "phone": "optional", "priority": "high|medium|low"}
-  ],
-  "stateResources": [
-    {"title": "Resource Name", "description": "Why this is relevant", "url": "https://...", "phone": "optional", "priority": "high|medium|low"}
-  ]
+  "summary": "Brief 1-2 sentence summary",
+  "aiMessage": "Warm, empathetic message with assessment. End with: 'This is not medical advice. Discuss with your VA provider or primary doctor.'",
+  "vaResources": [{"title": "Name", "description": "Why relevant", "url": "https://...", "phone": "optional", "priority": "high|medium|low"}],
+  "ngoResources": [{"title": "Name", "description": "Why relevant", "url": "https://...", "phone": "optional", "priority": "high|medium|low"}],
+  "stateResources": [{"title": "Name", "description": "Why relevant", "url": "https://...", "phone": "optional", "priority": "high|medium|low"}]
 }
 
-Include at least 2-3 resources per track. Prioritize resources that match the veteran's specific situation.`;
-    
-    default:
-      return basePrompt;
+Include at least 2-3 resources per track. Match the veteran's specific conditions.`;
+      break;
   }
+
+  return prompt;
 }
 
 // Fallback responses when AI is unavailable
@@ -265,7 +325,7 @@ function getCrisisResponse(): TriageResponse {
 export async function POST(request: NextRequest) {
   try {
     const body: TriageRequest = await request.json();
-    const { messages = [], step, category, symptoms, userMessage } = body;
+    const { messages = [], step, category, symptoms, userMessage, bridgeContext } = body;
 
     // Check for crisis language in any user message
     const allUserText = [
@@ -280,7 +340,7 @@ export async function POST(request: NextRequest) {
 
     // For assessment step, try AI-powered assessment
     if (step === 'assess') {
-      const systemPrompt = buildTriageSystemPrompt('assess');
+      const systemPrompt = buildTriageSystemPrompt('assess', bridgeContext);
       const aiResponse = await callGrokAI(messages, systemPrompt);
       
       if (aiResponse) {
@@ -326,7 +386,7 @@ export async function POST(request: NextRequest) {
     }
 
     // For conversation steps, use AI for natural follow-up questions
-    const systemPrompt = buildTriageSystemPrompt(step);
+    const systemPrompt = buildTriageSystemPrompt(step, bridgeContext);
     const aiResponse = await callGrokAI(messages, systemPrompt);
 
     if (aiResponse) {
@@ -350,10 +410,26 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(getFallbackResponse(step, category));
 
   } catch (error) {
-    console.error('[SymptomTriage] Error:', error);
-    return NextResponse.json(
-      { error: 'Failed to process triage request', message: (error as Error).message },
-      { status: 500 }
-    );
+    // ZERO 500 errors — always return a usable response
+    console.error('[SymptomTriage] Unhandled error:', error);
+    return NextResponse.json({
+      aiMessage: 'I hit a snag connecting to our resource engine. Don\'t worry — here are some core resources to get you started. This is not medical advice. Discuss with your VA provider or primary doctor.',
+      nextStep: 'complete',
+      isCrisis: false,
+      severity: 'moderate' as const,
+      recommendations: {
+        va: [
+          { track: 'va' as const, title: 'VA Health Benefits', description: 'Apply for VA healthcare coverage', url: 'https://www.va.gov/health-care/apply/application/introduction', priority: 'high' as const },
+          { track: 'va' as const, title: 'My HealtheVet', description: 'Manage your VA health records online', url: 'https://www.myhealth.va.gov/', priority: 'medium' as const },
+        ],
+        ngo: [
+          { track: 'ngo' as const, title: 'Wounded Warrior Project', description: 'Programs for post-9/11 veterans', url: 'https://www.woundedwarriorproject.org/', phone: '1-888-997-2586', priority: 'high' as const },
+          { track: 'ngo' as const, title: 'Cohen Veterans Network', description: 'Nationwide mental health clinics', url: 'https://www.cohenveteransnetwork.org/', phone: '1-888-523-6936', priority: 'medium' as const },
+        ],
+        state: [
+          { track: 'state' as const, title: 'State Veterans Affairs Office', description: 'Find your state VA office for local benefits', url: 'https://www.va.gov/statedva.htm', priority: 'high' as const },
+        ],
+      },
+    });
   }
 }
