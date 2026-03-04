@@ -1,59 +1,85 @@
+// JUNK FILE REGISTRY — delete manually post-deploy (Zero-Clutter Mandate):
+// - src/app/api/health/symptom-finder/route.ts.new
+// - src/app/api/health/resources/route.ts.fixed
+// - src/app/api/health-resources/route.new.ts
+
 import { NextRequest, NextResponse } from 'next/server';
+import {
+  scoreAndSortResources,
+  buildScoringContext,
+  type ResourceInput,
+} from '@/lib/resources-scoring';
 
 /**
- * POST /api/health/symptom-triage
- * 
+ * POST /api/health/symptom-triage  (v3 — Triage V3, Mar 2026)
+ *
  * Conversational triage wizard powered by Grok AI (xAI).
- * Accepts conversation history + current step data + optional bridge context.
- * Returns: AI severity assessment, triple-track resource recommendations
- * (VA / NGO / State), and crisis-line escalation flag.
- * 
- * Resilient model fallback: grok-4-latest → grok-3-latest → static fallback.
- * ZERO 500 errors allowed — always returns a usable response.
+ * Phase 1 flow: quick_triage (2 questions combined) → assess (scored results).
+ * All resources returned from the assess step are scored and ranked by
+ * resources-scoring.ts before serialization.
+ *
+ * Model: grok-4 (stipulated — do not change without PM approval).
+ * Resilient fallback: grok-4 → grok-3-latest → static.
+ * ZERO 500 errors — always returns a usable response.
  */
 
-// ─── TRIAGE_SYSTEM_PROMPT (v2 — rapid-fire polish, Mar 2 2026) ───────────────
+// ─── Model chain ──────────────────────────────────────────────────────────────
+
+const PRIMARY_MODEL = 'grok-4';
+const FALLBACK_MODEL = 'grok-3-latest';
+
+// ─── Location context (MVP hardcoded — dynamic in Pass 2) ────────────────────
+// TODO Pass 2: pull from Firebase Auth custom claim (user.state) or ask once in chat
+const CARLISLE_PA_CONTEXT = 'Carlisle, PA'; // MVP testing — make dynamic in Pass 2
+
+// ─── System prompt ────────────────────────────────────────────────────────────
+
 const TRIAGE_SYSTEM_PROMPT = `
-You are the Vet1Stop Symptom Triage Navigator — a resource-matching AI ONLY.
-Your mission: Help veterans map symptoms + records to real VA, NGO, and state resources in 3 clicks or less.
+You are the Vet1Stop Symptom Triage Navigator — running on grok-4.
+Your ONLY mission: map veteran symptoms + records to real VA, NGO, and state health resources.
 
-CRITICAL RULES — BREAK THESE AND YOU ARE FIRED:
+CRITICAL RULES (non-negotiable):
 - NEVER diagnose, treat, advise medically, or say "you have X condition."
-- NEVER recommend medication, therapy type, or any clinical action.
+- NEVER recommend specific medication, therapy type, or clinical action.
 - ALWAYS end every response with: "This is not medical advice. Discuss with your VA provider or primary doctor."
-- If crisis flags ("hurt myself", suicidal), immediately output CRISIS PROTOCOL: "Call 988 Press 1 or text 838255 — help is here right now."
-- You are a benefits navigator, NOT a therapist.
+- Crisis trigger ("hurt myself", "suicidal", etc.) → immediately output CRISIS PROTOCOL: "Call 988 Press 1 or text 838255 — help is here right now."
+- You are a benefits/resource navigator, NOT a therapist.
 
-CORE BEHAVIOR (veteran-first):
-- First question after records: "Do you already have a VA claim for this or see the VA regularly? (Yes/No)" — if yes, skip VA-heavy track and focus NGO/State.
-- Ask 2-3 questions MAX at once (e.g., "State? Duration? Daily impact 1-10?"). No therapy small talk.
-- For every NGO: 1-sentence "why this fits you" + 2 alternatives + direct link.
-- Return 5-7 resources per track (VA/NGO/State), ranked by match. 
-- Vary empathy — "I got you" ONLY on first message. After that: "Got it, brother/sister", "Copy that", "Let's fix this".
-- After recs, ask 1 prefs question ("Prefer peer groups, grants, or fitness programs?") to learn likes/dislikes for future (we will store anon prefs only).
-- Hard state = Pennsylvania for now. Pull real MongoDB resources only.
+PHASE 1 QUICK TRIAGE BEHAVIOR:
+- Ask EXACTLY 2 clarifying questions in a single reply — never more.
+  Q1: "Do you already have an active VA claim for this condition, or do you see the VA regularly? (Yes/No)"
+  Q2: "How long has this been affecting you, and on a scale of 1–10 how much does it impact your daily life?"
+- No therapy small talk. No category menus. 2 questions, then assess.
+- Vary empathy: "I got you" ONLY on first message. After that: "Got it", "Copy that", "Let's fix this."
 
-OUTPUT FORMAT:
-- Clean, structured text. DO NOT generate complex markdown tables or draw your own UI cards in the text. Let the Next.js frontend UI components render the actual resource data objects. Keep replies 4-6 sentences max.
+ASSESS STEP OUTPUT (JSON only — no prose wrapper):
+{
+  "severity": "low|moderate|high|crisis",
+  "aiMessage": "1–3 sentence warm summary. End with: 'This is not medical advice. Discuss with your VA provider or primary doctor.'",
+  "vaResources": [{"title":"","description":"","url":"","phone":"","priority":"high|medium|low","tags":[],"isFree":false,"costLevel":"free|low|moderate|high","rating":0}],
+  "ngoResources": [...same shape...],
+  "stateResources": [...same shape...]
+}
+Include 5–7 resources per track ranked by relevance. For State track: ONLY Pennsylvania programs.
+Each description must be exactly 2 sentences.
 `;
 
-// Crisis keywords that trigger immediate escalation
+// ─── Crisis keywords ──────────────────────────────────────────────────────────
+
 const CRISIS_KEYWORDS = [
   'suicide', 'suicidal', 'kill myself', 'end my life', 'want to die',
   'self-harm', 'self harm', 'hurt myself', 'cutting', 'overdose',
   'homicidal', 'kill someone', 'voices telling me', 'hallucinating',
-  'psychosis', 'can\'t go on', 'no reason to live', 'better off dead',
-  'planning to end', 'emergency', 'crisis'
+  'psychosis', "can't go on", 'no reason to live', 'better off dead',
+  'planning to end', 'emergency', 'crisis',
 ];
 
-// Model fallback chain
-const PRIMARY_MODEL = 'grok-4-latest';
-const FALLBACK_MODEL = 'grok-3-latest';
+function detectCrisis(text: string): boolean {
+  const lower = text.toLowerCase();
+  return CRISIS_KEYWORDS.some(kw => lower.includes(kw));
+}
 
-// TODO: Replace with dynamic user.state from auth/profile or geocode fallback. (Next Sprint): Make state dynamic:
-// Pull from user profile (Firebase Auth custom claims — e.g., user.state = "PA").
-// Fallback: Ask once in chat ("Confirm your state?") and store anon in localStorage/session.
-const HARDCODED_USER_STATE = 'PA';
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface TriageMessage {
   role: 'system' | 'user' | 'assistant';
@@ -73,370 +99,337 @@ interface BridgeContext {
 
 interface TriageRequest {
   messages: TriageMessage[];
-  step: 'welcome' | 'category' | 'symptoms' | 'severity' | 'context' | 'assess';
+  step: 'welcome' | 'quick_triage' | 'category' | 'symptoms' | 'severity' | 'context' | 'assess';
   category?: string;
-  symptoms?: string[];
-  severityLevel?: number;
-  duration?: string;
-  currentCare?: string;
-  location?: string;
   userMessage?: string;
   bridgeContext?: BridgeContext;
+  userState?: string;
 }
 
-interface ResourceRecommendation {
-  track: 'va' | 'ngo' | 'state';
-  title: string;
-  description: string;
-  url: string;
-  phone?: string;
-  priority: 'high' | 'medium' | 'low';
-}
+// ─── Grok API helpers ─────────────────────────────────────────────────────────
 
-interface TriageResponse {
-  aiMessage: string;
-  nextStep: string;
-  isCrisis: boolean;
-  severity?: 'low' | 'moderate' | 'high' | 'crisis';
-  recommendations?: {
-    va: ResourceRecommendation[];
-    ngo: ResourceRecommendation[];
-    state: ResourceRecommendation[];
-  };
-  suggestedQuestions?: string[];
-}
-
-// Check for crisis language in any user message
-function detectCrisis(text: string): boolean {
-  const lower = text.toLowerCase();
-  return CRISIS_KEYWORDS.some(keyword => lower.includes(keyword));
-}
-
-// Get the Grok API key from environment
 function getGrokApiKey(): string {
   return process.env.GROK_API_KEY || process.env.NEXT_PUBLIC_GROK_API_KEY || '';
 }
 
-// Call Grok AI with resilient model fallback: grok-4-latest → grok-3-latest
-async function callGrokAI(messages: TriageMessage[], systemPrompt: string): Promise<string> {
-  const apiKey = getGrokApiKey();
-  
-  if (!apiKey) {
-    console.warn('[SymptomTriage] No Grok API key found, using fallback responses');
-    return '';
-  }
-
-  // Try primary model first
-  try {
-    const result = await callGrokModel(apiKey, PRIMARY_MODEL, messages, systemPrompt);
-    if (result) return result;
-  } catch (error) {
-    console.warn(`[SymptomTriage] ${PRIMARY_MODEL} failed, falling back to ${FALLBACK_MODEL}:`, (error as Error).message);
-  }
-
-  // Fallback to secondary model
-  try {
-    const result = await callGrokModel(apiKey, FALLBACK_MODEL, messages, systemPrompt);
-    if (result) return result;
-  } catch (error) {
-    console.warn(`[SymptomTriage] ${FALLBACK_MODEL} also failed:`, (error as Error).message);
-  }
-
-  // Both models failed — return empty string (caller will use static fallback)
-  return '';
-}
-
-// Internal: Call a specific Grok model
-async function callGrokModel(apiKey: string, model: string, messages: TriageMessage[], systemPrompt: string): Promise<string> {
+async function callGrokModel(
+  apiKey: string,
+  model: string,
+  messages: TriageMessage[],
+  systemPrompt: string,
+): Promise<string> {
   const response = await fetch('https://api.x.ai/v1/chat/completions', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${apiKey}`,
+      Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
       model,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        ...messages
-      ],
+      messages: [{ role: 'system', content: systemPrompt }, ...messages],
       temperature: 0.3,
       max_tokens: 2000,
     }),
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Grok API error ${response.status}: ${errorText.slice(0, 200)}`);
+    const err = await response.text();
+    throw new Error(`Grok ${model} error ${response.status}: ${err.slice(0, 200)}`);
   }
 
   const data = await response.json();
   return data.choices?.[0]?.message?.content || '';
 }
 
-// Build the system prompt — uses TRIAGE_SYSTEM_PROMPT as base, adds step-specific + bridge context
-function buildTriageSystemPrompt(step: string, bridgeContext?: BridgeContext): string {
+async function callGrokAI(messages: TriageMessage[], systemPrompt: string): Promise<string> {
+  const apiKey = getGrokApiKey();
+  if (!apiKey) {
+    console.warn('[SymptomTriage] No Grok API key — using static fallback');
+    return '';
+  }
+
+  try {
+    const result = await callGrokModel(apiKey, PRIMARY_MODEL, messages, systemPrompt);
+    if (result) return result;
+  } catch (err) {
+    console.warn(`[SymptomTriage] ${PRIMARY_MODEL} failed:`, (err as Error).message);
+  }
+
+  try {
+    const result = await callGrokModel(apiKey, FALLBACK_MODEL, messages, systemPrompt);
+    if (result) return result;
+  } catch (err) {
+    console.warn(`[SymptomTriage] ${FALLBACK_MODEL} also failed:`, (err as Error).message);
+  }
+
+  return '';
+}
+
+// ─── System prompt builder ────────────────────────────────────────────────────
+
+function buildSystemPrompt(step: string, bridgeContext?: BridgeContext): string {
   let prompt = TRIAGE_SYSTEM_PROMPT;
 
-  // Inject user location context (hardcoded PA for now)
-  prompt += `\n\nUSER LOCATION: The veteran is located in state = "${HARDCODED_USER_STATE}" (Pennsylvania). All State Track resources MUST be Pennsylvania-specific. Do NOT recommend resources from other states.`;
+  // Inject location context
+  prompt += `\n\nUSER LOCATION: Veteran is in ${CARLISLE_PA_CONTEXT}. State Track MUST be Pennsylvania-only.`;
 
-  // Inject bridge context (extracted conditions from Records Recon)
+  // Inject bridge context
   if (bridgeContext?.conditions?.length) {
     const condList = bridgeContext.conditions
       .map(c => `- ${c.condition} (${c.category}, mentioned ${c.mentionCount}x)`)
       .join('\n');
-    prompt += `\n\nRECORDS RECON INTEL — The veteran uploaded medical records and these conditions were extracted:\n${condList}`;
+    prompt += `\n\nRECORDS RECON INTEL — Conditions extracted from uploaded records:\n${condList}`;
     if (bridgeContext.reportSummary) {
-      prompt += `\nReport summary: ${bridgeContext.reportSummary}`;
+      prompt += `\nSummary: ${bridgeContext.reportSummary}`;
     }
-    prompt += `\nUse this data to guide your questions and recommendations. Reference specific conditions by name.`;
+    prompt += `\nReference these conditions by name when asking clarifying questions.`;
   }
 
-  // Step-specific instructions
-  switch (step) {
-    case 'category':
-      prompt += `\n\nCURRENT TASK: Ask a warm follow-up question based on the health category the veteran selected. Ask about specific symptoms they're experiencing. One question only.`;
-      break;
-    case 'symptoms':
-      prompt += `\n\nCURRENT TASK: Based on the symptoms described, ask about duration, frequency, and impact. One question only.`;
-      break;
-    case 'severity':
-      prompt += `\n\nCURRENT TASK: Ask about how much this affects their daily life. Can they work/sleep/function? One question only.`;
-      break;
-    case 'context':
-      prompt += `\n\nCURRENT TASK: Ask about their current care situation. VA enrolled? Seen a provider? One question only.`;
-      break;
-    case 'assess':
-      prompt += `\n\nCURRENT TASK: Based on the FULL conversation, provide a severity assessment and Triple-Track resource recommendations.
-
-You MUST respond in this exact JSON format:
-{
-  "severity": "low|moderate|high|crisis",
-  "summary": "Brief 1-2 sentence summary",
-  "aiMessage": "Warm, empathetic message with assessment. End with: 'This is not medical advice. Discuss with your VA provider or primary doctor.'",
-  "vaResources": [{"title": "Name", "description": "Why relevant", "url": "https://...", "phone": "optional", "priority": "high|medium|low"}],
-  "ngoResources": [{"title": "Name", "description": "Why relevant", "url": "https://...", "phone": "optional", "priority": "high|medium|low"}],
-  "stateResources": [{"title": "Name", "description": "Why relevant", "url": "https://...", "phone": "optional", "priority": "high|medium|low"}]
-}
-
-Include 5-7 resources per track, ranked by match quality. For State resources, use ONLY Pennsylvania programs. Match the veteran's specific conditions.`;
-      break;
+  // Step-specific overrides
+  if (step === 'quick_triage') {
+    prompt += `\n\nCURRENT TASK: Ask your 2 standard clarifying questions in a single reply. Be warm but brief (3–4 sentences max before the questions).`;
+  } else if (step === 'assess') {
+    prompt += `\n\nCURRENT TASK: Based on the full conversation, output the JSON assessment. No prose outside the JSON object.`;
   }
 
   return prompt;
 }
 
-// Fallback responses when AI is unavailable
-function getFallbackResponse(step: string, category?: string): TriageResponse {
-  switch (step) {
-    case 'category':
-      return {
-        aiMessage: `Thank you for reaching out about ${category || 'your health concerns'}. Can you tell me a bit more about what you're experiencing? What specific symptoms are you dealing with?`,
-        nextStep: 'symptoms',
-        isCrisis: false,
-        suggestedQuestions: [
-          'I\'ve been having trouble sleeping',
-          'I\'m dealing with chronic pain',
-          'I\'ve been feeling anxious or depressed',
-          'I have a physical injury or condition'
-        ]
-      };
-    case 'symptoms':
-      return {
-        aiMessage: 'I appreciate you sharing that. How long have you been experiencing these symptoms? Have they been getting better, worse, or staying about the same?',
-        nextStep: 'severity',
-        isCrisis: false,
-        suggestedQuestions: [
-          'Less than a month',
-          'A few months',
-          'More than 6 months',
-          'It comes and goes'
-        ]
-      };
-    case 'severity':
-      return {
-        aiMessage: 'Thank you. On a scale of 1 to 10, how much does this affect your daily life? Can you still work, sleep, and do your normal activities?',
-        nextStep: 'context',
-        isCrisis: false,
-        suggestedQuestions: [
-          'Mild - I can still function normally',
-          'Moderate - It affects some daily activities',
-          'Severe - It significantly limits what I can do',
-          'Very severe - I struggle with basic daily tasks'
-        ]
-      };
-    case 'context':
-      return {
-        aiMessage: 'One last question — are you currently enrolled in VA healthcare? Have you talked to a healthcare provider about this?',
-        nextStep: 'assess',
-        isCrisis: false,
-        suggestedQuestions: [
-          'Yes, I\'m enrolled in VA healthcare',
-          'No, I haven\'t enrolled yet',
-          'I\'ve seen a provider but need more help',
-          'I\'m not sure what I\'m eligible for'
-        ]
-      };
-    default:
-      return {
-        aiMessage: 'Based on what you\'ve shared, here are some resources that may help. Remember, this is for informational purposes only — please consult a healthcare provider for personalized medical advice.',
-        nextStep: 'complete',
-        isCrisis: false,
-        severity: 'moderate',
-        recommendations: {
-          va: [
-            { track: 'va', title: 'VA Health Benefits', description: 'Apply for VA healthcare coverage', url: 'https://www.va.gov/health-care/apply/application/introduction', priority: 'high' },
-            { track: 'va', title: 'VA Mental Health Services', description: 'Counseling, therapy, and support', url: 'https://www.va.gov/health-care/health-needs-conditions/mental-health/', priority: 'medium' },
-            { track: 'va', title: 'My HealtheVet', description: 'Manage your VA health records online', url: 'https://www.myhealth.va.gov/', priority: 'medium' },
-          ],
-          ngo: [
-            { track: 'ngo', title: 'Wounded Warrior Project', description: 'Programs for post-9/11 veterans', url: 'https://www.woundedwarriorproject.org/', phone: '1-888-997-2586', priority: 'high' },
-            { track: 'ngo', title: 'Give An Hour', description: 'Free mental health services', url: 'https://giveanhour.org/', priority: 'medium' },
-            { track: 'ngo', title: 'Cohen Veterans Network', description: 'Nationwide mental health clinics', url: 'https://www.cohenveteransnetwork.org/', phone: '1-888-523-6936', priority: 'medium' },
-          ],
-          state: [
-            { track: 'state', title: 'State Veterans Affairs Office', description: 'Find your state VA office for local benefits', url: 'https://www.va.gov/statedva.htm', priority: 'high' },
-            { track: 'state', title: 'State Health Programs', description: 'State-specific health programs for veterans', url: 'https://www.benefits.gov/categories/Health', priority: 'medium' },
-          ],
-        }
-      };
-  }
+// ─── Resource scorer integration ─────────────────────────────────────────────
+
+interface RawResource {
+  title: string;
+  description: string;
+  url: string;
+  phone?: string;
+  priority: 'high' | 'medium' | 'low';
+  tags?: string[];
+  isFree?: boolean;
+  costLevel?: 'free' | 'low' | 'moderate' | 'high';
+  rating?: number;
+  location?: string;
 }
 
-// Build the crisis response
-function getCrisisResponse(): TriageResponse {
+function applyScoring(
+  vaResources: RawResource[],
+  ngoResources: RawResource[],
+  stateResources: RawResource[],
+  bridgeContext?: BridgeContext,
+): {
+  va: (RawResource & { score?: number; matchPercent?: number; badge?: string | null; whyMatches?: string })[];
+  ngo: (RawResource & { score?: number; matchPercent?: number; badge?: string | null; whyMatches?: string })[];
+  state: (RawResource & { score?: number; matchPercent?: number; badge?: string | null; whyMatches?: string })[];
+  keywords: string[];
+} {
+  const conditions = bridgeContext?.conditions?.map(c => c.condition) ?? [];
+  const scoringContext = buildScoringContext({
+    conditions,
+    hasVaClaim: false, // extracted from conversation in Pass 2
+    preferences: [],
+  });
+
+  const scoreTrack = (resources: RawResource[]) =>
+    scoreAndSortResources(
+      resources.map((r): ResourceInput => ({
+        title: r.title,
+        description: r.description,
+        tags: r.tags,
+        isFree: r.isFree,
+        costLevel: r.costLevel,
+        rating: r.rating,
+        location: r.location ?? CARLISLE_PA_CONTEXT,
+        url: r.url,
+        phone: r.phone,
+      })),
+      scoringContext,
+    ).map((scored, idx) => ({
+      ...resources[idx], // preserve original fields (url, phone, priority, track)
+      ...scored,         // overlay scored fields
+    }));
+
   return {
-    aiMessage: `I hear you, and I want you to know that help is available right now. You don't have to face this alone.\n\n**If you or someone you know is in immediate danger, please call 911.**\n\nThis is for informational purposes only — trained crisis counselors are available 24/7 at the numbers below.`,
+    va:    scoreTrack(vaResources),
+    ngo:   scoreTrack(ngoResources),
+    state: scoreTrack(stateResources.map(r => ({ ...r, location: r.location ?? 'Pennsylvania, PA' }))),
+    keywords: scoringContext.keywords,
+  };
+}
+
+// ─── Static fallbacks ─────────────────────────────────────────────────────────
+
+function getQuickTriageFallback(): object {
+  return {
+    aiMessage: `I got you. To find the right resources for your situation, I just need two quick answers:\n\n**1.** Do you already have an active VA claim for this condition, or see the VA regularly? *(Yes / No)*\n\n**2.** How long has this been affecting you, and on a scale of 1–10 how much does it impact your daily life?\n\nThis is not medical advice. Discuss with your VA provider or primary doctor.`,
+    nextStep: 'awaiting_answers',
+    isCrisis: false,
+    suggestedQuestions: [
+      'Yes, I have a VA claim',
+      "No, I don't have a VA claim yet",
+      "I'm not sure about my claim status",
+    ],
+  };
+}
+
+function getAssessFallback(bridgeContext?: BridgeContext): object {
+  const conditions = bridgeContext?.conditions?.map(c => c.condition) ?? [];
+  const condText = conditions.length > 0 ? conditions.slice(0, 2).join(' and ') : 'your health concerns';
+
+  const rawVa: RawResource[] = [
+    { title: 'VA Health Benefits Enrollment', description: 'Apply for VA healthcare coverage based on your service. Enrollment unlocks all VA medical programs and services.', url: 'https://www.va.gov/health-care/apply/application/introduction', priority: 'high', tags: ['veteran', 'healthcare', 'enrollment'], isFree: true },
+    { title: 'VA Mental Health Services', description: 'Comprehensive counseling, PTSD treatment, and peer support programs. Available at all VA medical centers nationwide.', url: 'https://www.va.gov/health-care/health-needs-conditions/mental-health/', priority: 'high', tags: ['mental health', 'ptsd', 'counseling', 'veteran'], isFree: true },
+    { title: 'VA Whole Health Program', description: 'Integrative health approach combining conventional care with yoga, nutrition, and fitness. Free for enrolled veterans.', url: 'https://www.va.gov/wholehealth/', priority: 'medium', tags: ['wellness', 'fitness', 'yoga', 'veteran', 'free'], isFree: true },
+    { title: 'VA Physical Therapy & Rehab', description: 'Evidence-based physical therapy for musculoskeletal conditions including back pain and chronic injuries. Covered under VA benefits.', url: 'https://www.va.gov/health-care/about-va-health-benefits/dental-care/', priority: 'medium', tags: ['physical therapy', 'back pain', 'rehabilitation', 'veteran'], isFree: true },
+    { title: 'My HealtheVet', description: 'Manage VA prescriptions, appointments, and health records in one secure portal. Accessible 24/7 from any device.', url: 'https://www.myhealth.va.gov/', priority: 'low', tags: ['records', 'portal', 'veteran'], isFree: true },
+    { title: 'VA Caregiver Support Program', description: 'Resources and stipends for veterans needing daily assistance. Includes respite care and mental health support for caregivers.', url: 'https://www.caregiver.va.gov/', priority: 'low', tags: ['caregiver', 'support', 'veteran'], isFree: true },
+    { title: 'VA MOVE! Weight Management', description: 'Evidence-based weight management program offered at VA facilities nationwide. Combines nutrition counseling with fitness planning.', url: 'https://www.move.va.gov/', priority: 'low', tags: ['weight loss', 'fitness', 'nutrition', 'veteran', 'free'], isFree: true },
+  ];
+
+  const rawNgo: RawResource[] = [
+    { title: 'Wounded Warrior Project', description: 'Comprehensive programs for post-9/11 veterans including mental health, career, and physical wellness support. Free for eligible veterans.', url: 'https://www.woundedwarriorproject.org/', phone: '1-888-997-2586', priority: 'high', tags: ['peer support', 'mental health', 'veteran', 'free', 'peer-led'] },
+    { title: 'Give An Hour', description: 'Free mental health services from licensed professionals donated by volunteer clinicians. Specializes in PTSD, anxiety, and military trauma.', url: 'https://giveanhour.org/', priority: 'high', tags: ['mental health', 'ptsd', 'free', 'counseling', 'veteran'], isFree: true },
+    { title: 'Cohen Veterans Network', description: 'Nationwide network of mental health clinics offering sliding-scale services for veterans and military families. Covers PTSD, TBI, and adjustment disorders.', url: 'https://www.cohenveteransnetwork.org/', phone: '1-888-523-6936', priority: 'high', tags: ['mental health', 'ptsd', 'veteran', 'sliding-scale', 'counseling'], costLevel: 'low' },
+    { title: 'Team Red White & Blue', description: 'Physical and social activity programs connecting veterans through sports, fitness, and community events. Peer-led chapters nationwide.', url: 'https://www.teamrwb.org/', priority: 'medium', tags: ['fitness', 'peer-led', 'community', 'veteran', 'adaptive sports'], isFree: true },
+    { title: 'National Alliance on Mental Illness (NAMI)', description: 'Peer-led mental health education and support groups for veterans and families. Free membership and resources available.', url: 'https://www.nami.org/Support-Education/Support-Groups', priority: 'medium', tags: ['mental health', 'peer support', 'peer-led', 'free', 'community'], isFree: true },
+    { title: 'Warrior-Scholar Project', description: 'Academic boot camps and professional development for transitioning veterans. Fully funded scholarships available for qualifying veterans.', url: 'https://warrior-scholar.org/', priority: 'low', tags: ['education', 'grant', 'veteran', 'scholarship', 'free'], isFree: true },
+    { title: 'Stop Soldier Suicide', description: 'Peer support and crisis intervention focused on suicide prevention and mental health. Free hotline and digital mental health tools.', url: 'https://stopsoldiersuicide.org/', phone: '1-800-273-8255', priority: 'medium', tags: ['mental health', 'crisis', 'peer support', 'veteran', 'free'], isFree: true },
+  ];
+
+  const rawState: RawResource[] = [
+    { title: 'Pennsylvania DMVA Veterans Benefits', description: 'PA Department of Military and Veterans Affairs provides state-funded benefits including education, healthcare, and burial assistance. Free to all eligible PA veterans.', url: 'https://www.dmva.pa.gov/veteransbenefits/', priority: 'high', tags: ['veteran', 'benefits', 'pennsylvania', 'grant', 'free'], location: 'Pennsylvania, PA', isFree: true },
+    { title: 'PA Veterans Trust Fund Grants', description: 'Emergency financial assistance grants for Pennsylvania veterans facing hardship. Applications accepted through county directors year-round.', url: 'https://www.dmva.pa.gov/VETERANS/BenefitsAndServices/pages/veterans-trust-fund.aspx', priority: 'high', tags: ['grant', 'financial assistance', 'veteran', 'pennsylvania', 'free'], location: 'Pennsylvania, PA', isFree: true },
+    { title: 'HACC Veterans Resource Center (Carlisle area)', description: 'Harrisburg Area Community College offers veteran-specific academic support, counseling referrals, and peer mentorship. Located in the Carlisle/Camp Hill area.', url: 'https://www.hacc.edu/StudentServices/VeteranServices/', priority: 'high', tags: ['education', 'peer support', 'carlisle', 'veteran', 'free'], location: 'Carlisle, PA', isFree: true },
+    { title: 'PA Veteran Emergency Assistance Program', description: 'Short-term emergency financial aid for Pennsylvania veterans experiencing temporary financial crisis. Includes utility, rent, and medical cost assistance.', url: 'https://www.phfa.org/', priority: 'medium', tags: ['financial assistance', 'grant', 'veteran', 'pennsylvania', 'emergency'], location: 'Pennsylvania, PA' },
+    { title: 'Penn State Hershey VA Community Based Outpatient Clinic', description: 'VA community clinic serving Cumberland County veterans near Carlisle with primary care and mental health services. No travel to main VAMC required.', url: 'https://www.va.gov/central-pennsylvania-health-care/locations/', priority: 'high', tags: ['healthcare', 'mental health', 'carlisle', 'veteran', 'va', 'free'], location: 'Carlisle, PA', isFree: true },
+    { title: 'PA Adaptive Sports & Wellness Program', description: 'State-funded adaptive sports and wellness programs for veterans with service-connected disabilities. Includes yoga, archery, and fitness programs.', url: 'https://www.dmva.pa.gov/', priority: 'medium', tags: ['adaptive sports', 'fitness', 'yoga', 'veteran', 'pennsylvania', 'free'], location: 'Pennsylvania, PA', isFree: true },
+    { title: 'Cumberland County Veterans Affairs Office', description: 'Free claims assistance, benefits counseling, and referrals for veterans in Carlisle and surrounding Cumberland County area. Walk-ins welcome.', url: 'https://www.cumberlandcountypa.gov/departments/veterans-affairs/', priority: 'medium', tags: ['benefits', 'claims', 'carlisle', 'veteran', 'vso', 'free'], location: 'Carlisle, PA', isFree: true },
+  ];
+
+  const scored = applyScoring(rawVa, rawNgo, rawState, bridgeContext);
+
+  return {
+    aiMessage: `Based on what you've shared about ${condText}, here are personalized resources matched to your situation. ${conditions.length > 0 ? `Resources are ranked based on relevance to ${condText}.` : 'Resources are ranked by veteran relevance and accessibility.'} This is not medical advice. Discuss with your VA provider or primary doctor.`,
+    nextStep: 'complete',
+    isCrisis: false,
+    severity: 'moderate',
+    recommendations: {
+      va: scored.va,
+      ngo: scored.ngo,
+      state: scored.state,
+    },
+    keywords: scored.keywords,
+  };
+}
+
+function getCrisisResponse() {
+  return {
+    aiMessage: `I hear you, and help is available right now. You don't have to face this alone.\n\n**If you're in immediate danger, call 911.**\n\nVeterans Crisis Line: Dial **988** then Press **1** — free, confidential, 24/7.\n\nThis is not medical advice. Discuss with your VA provider or primary doctor.`,
     nextStep: 'crisis',
     isCrisis: true,
     severity: 'crisis',
     recommendations: {
       va: [
-        { track: 'va', title: 'Veterans Crisis Line', description: 'Free, confidential support 24/7. Dial 988 then Press 1.', url: 'https://www.veteranscrisisline.net/', phone: '988 (Press 1)', priority: 'high' },
-        { track: 'va', title: 'VA Crisis Text Line', description: 'Text HOME to 838255 for confidential support', url: 'https://www.veteranscrisisline.net/get-help-now/chat', phone: 'Text 838255', priority: 'high' },
-        { track: 'va', title: 'VA Emergency Care', description: 'Go to your nearest VA Emergency Room or call 911', url: 'https://www.va.gov/find-locations/', priority: 'high' },
+        { track: 'va', title: 'Veterans Crisis Line', description: 'Free, confidential support 24/7 for veterans in crisis. Staffed by caring responders who understand military service.', url: 'https://www.veteranscrisisline.net/', phone: '988 (Press 1)', priority: 'high', tags: ['crisis', 'mental health', 'veteran', 'free'], isFree: true },
+        { track: 'va', title: 'VA Crisis Text Line', description: 'Text-based confidential crisis support for veterans. Available 24/7 for those who prefer not to call.', url: 'https://www.veteranscrisisline.net/get-help-now/chat', phone: 'Text 838255', priority: 'high', tags: ['crisis', 'mental health', 'veteran', 'free'], isFree: true },
+        { track: 'va', title: 'VA Emergency Care', description: 'Go to your nearest VA Emergency Room or call 911 for immediate life-threatening emergencies.', url: 'https://www.va.gov/find-locations/', priority: 'high', tags: ['emergency', 'crisis', 'veteran'], isFree: true },
       ],
       ngo: [
-        { track: 'ngo', title: 'Crisis Text Line', description: 'Text HOME to 741741', url: 'https://www.crisistextline.org/', phone: 'Text 741741', priority: 'high' },
-        { track: 'ngo', title: 'SAMHSA National Helpline', description: 'Free, confidential, 24/7 treatment referral', url: 'https://www.samhsa.gov/find-help/national-helpline', phone: '1-800-662-4357', priority: 'high' },
+        { track: 'ngo', title: 'Stop Soldier Suicide', description: 'Peer-led crisis intervention and mental health support for veterans and service members.', url: 'https://stopsoldiersuicide.org/', phone: '1-800-273-8255', priority: 'high', tags: ['crisis', 'peer support', 'veteran', 'free'], isFree: true },
+        { track: 'ngo', title: 'SAMHSA National Helpline', description: 'Free, confidential 24/7 treatment referral and information for mental health and substance use. Connects to local resources.', url: 'https://www.samhsa.gov/find-help/national-helpline', phone: '1-800-662-4357', priority: 'high', tags: ['crisis', 'mental health', 'free', 'substance use'], isFree: true },
       ],
       state: [
-        { track: 'state', title: '911 Emergency Services', description: 'For immediate life-threatening emergencies', url: '', phone: '911', priority: 'high' },
-        { track: 'state', title: 'Local Crisis Centers', description: 'Find crisis services in your area', url: 'https://findtreatment.gov/', priority: 'high' },
+        { track: 'state', title: '911 Emergency Services', description: 'Call 911 for any immediate life-threatening emergency in Pennsylvania or nationwide.', url: '', phone: '911', priority: 'high', tags: ['emergency', 'crisis'], location: 'Pennsylvania, PA' },
+        { track: 'state', title: 'PA Crisis Line', description: 'Pennsylvania statewide mental health crisis line staffed 24/7 by trained counselors. Free for all PA residents.', url: 'https://www.sphs.org/crisis-services/', phone: '1-855-284-2494', priority: 'high', tags: ['crisis', 'mental health', 'pennsylvania', 'free'], location: 'Pennsylvania, PA', isFree: true },
       ],
-    }
+    },
+    keywords: [],
   };
 }
+
+// ─── Route handler ────────────────────────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
   try {
     const body: TriageRequest = await request.json();
-    const { messages = [], step, category, symptoms, userMessage, bridgeContext } = body;
+    const { messages = [], step, category, userMessage, bridgeContext } = body;
 
-    // Check for crisis language in any user message
+    // Crisis check across all user text
     const allUserText = [
-      userMessage || '',
-      ...(messages.filter(m => m.role === 'user').map(m => m.content)),
-      ...(symptoms || [])
+      userMessage ?? '',
+      ...messages.filter(m => m.role === 'user').map(m => m.content),
     ].join(' ');
 
     if (detectCrisis(allUserText)) {
       return NextResponse.json(getCrisisResponse());
     }
 
-    // For assessment step, try AI-powered assessment
+    // Assess step: AI-powered assessment + scoring
     if (step === 'assess') {
-      const systemPrompt = buildTriageSystemPrompt('assess', bridgeContext);
+      const systemPrompt = buildSystemPrompt('assess', bridgeContext);
       const aiResponse = await callGrokAI(messages, systemPrompt);
-      
+
       if (aiResponse) {
         try {
-          // Try to parse JSON from AI response
           const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
           if (jsonMatch) {
             const parsed = JSON.parse(jsonMatch[0]);
-            
-            const response: TriageResponse = {
-              aiMessage: parsed.aiMessage || parsed.summary || aiResponse,
-              nextStep: 'complete',
-              isCrisis: parsed.severity === 'crisis',
-              severity: parsed.severity || 'moderate',
-              recommendations: {
-                va: (parsed.vaResources || []).map((r: any) => ({ ...r, track: 'va' })),
-                ngo: (parsed.ngoResources || []).map((r: any) => ({ ...r, track: 'ngo' })),
-                state: (parsed.stateResources || []).map((r: any) => ({ ...r, track: 'state' })),
-              }
-            };
 
-            // If crisis detected in assessment, override with crisis response
-            if (response.isCrisis) {
+            if (parsed.severity === 'crisis') {
               return NextResponse.json(getCrisisResponse());
             }
 
-            return NextResponse.json(response);
-          }
-        } catch (parseError) {
-          console.warn('[SymptomTriage] Could not parse AI JSON response, using text response');
-        }
+            // Apply scoring to AI-returned resources
+            const scored = applyScoring(
+              parsed.vaResources ?? [],
+              parsed.ngoResources ?? [],
+              parsed.stateResources ?? [],
+              bridgeContext,
+            );
 
-        // If JSON parsing failed, return the text response with fallback recommendations
-        const fallback = getFallbackResponse('assess', category);
-        return NextResponse.json({
-          ...fallback,
-          aiMessage: aiResponse,
-        });
+            return NextResponse.json({
+              aiMessage: parsed.aiMessage ?? aiResponse,
+              nextStep: 'complete',
+              isCrisis: false,
+              severity: parsed.severity ?? 'moderate',
+              recommendations: {
+                va: scored.va,
+                ngo: scored.ngo,
+                state: scored.state,
+              },
+              keywords: scored.keywords,
+            });
+          }
+        } catch (parseErr) {
+          console.warn('[SymptomTriage] JSON parse failed, falling back to static assess:', parseErr);
+        }
       }
 
-      // Fallback if AI unavailable
-      return NextResponse.json(getFallbackResponse('assess', category));
+      // AI unavailable or parse failed → static fallback with scoring
+      return NextResponse.json(getAssessFallback(bridgeContext));
     }
 
-    // For conversation steps, use AI for natural follow-up questions
-    const systemPrompt = buildTriageSystemPrompt(step, bridgeContext);
+    // quick_triage step (and legacy steps): conversational AI or static fallback
+    const systemPrompt = buildSystemPrompt(step ?? 'quick_triage', bridgeContext);
     const aiResponse = await callGrokAI(messages, systemPrompt);
 
     if (aiResponse) {
-      const stepMap: Record<string, string> = {
-        'category': 'symptoms',
-        'symptoms': 'severity',
-        'severity': 'context',
-        'context': 'assess',
-        'welcome': 'category',
-      };
-
       return NextResponse.json({
         aiMessage: aiResponse,
-        nextStep: stepMap[step] || 'assess',
+        nextStep: 'awaiting_answers',
         isCrisis: false,
-        suggestedQuestions: getFallbackResponse(step, category).suggestedQuestions,
+        suggestedQuestions: [
+          'Yes, I have an active VA claim',
+          "No, I don't have a VA claim yet",
+          "I'm not enrolled in VA healthcare",
+        ],
       });
     }
 
-    // Fallback response
-    return NextResponse.json(getFallbackResponse(step, category));
+    // Static quick_triage fallback
+    return NextResponse.json(getQuickTriageFallback());
 
   } catch (error) {
     // ZERO 500 errors — always return a usable response
     console.error('[SymptomTriage] Unhandled error:', error);
-    return NextResponse.json({
-      aiMessage: 'I hit a snag connecting to our resource engine. Don\'t worry — here are some core resources to get you started. This is not medical advice. Discuss with your VA provider or primary doctor.',
-      nextStep: 'complete',
-      isCrisis: false,
-      severity: 'moderate' as const,
-      recommendations: {
-        va: [
-          { track: 'va' as const, title: 'VA Health Benefits', description: 'Apply for VA healthcare coverage', url: 'https://www.va.gov/health-care/apply/application/introduction', priority: 'high' as const },
-          { track: 'va' as const, title: 'My HealtheVet', description: 'Manage your VA health records online', url: 'https://www.myhealth.va.gov/', priority: 'medium' as const },
-        ],
-        ngo: [
-          { track: 'ngo' as const, title: 'Wounded Warrior Project', description: 'Programs for post-9/11 veterans', url: 'https://www.woundedwarriorproject.org/', phone: '1-888-997-2586', priority: 'high' as const },
-          { track: 'ngo' as const, title: 'Cohen Veterans Network', description: 'Nationwide mental health clinics', url: 'https://www.cohenveteransnetwork.org/', phone: '1-888-523-6936', priority: 'medium' as const },
-        ],
-        state: [
-          { track: 'state' as const, title: 'State Veterans Affairs Office', description: 'Find your state VA office for local benefits', url: 'https://www.va.gov/statedva.htm', priority: 'high' as const },
-        ],
-      },
-    });
+    return NextResponse.json(getAssessFallback());
   }
 }
