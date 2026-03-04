@@ -25,6 +25,11 @@ import {
   MapPinIcon,
   UserGroupIcon,
   ArrowRightIcon,
+  FireIcon,
+  MagnifyingGlassIcon,
+  MapIcon,
+  FunnelIcon,
+  TrashIcon,
 } from '@heroicons/react/24/outline';
 import {
   CheckCircleIcon as CheckCircleSolid,
@@ -37,8 +42,10 @@ import {
 } from '@/lib/resources-scoring';
 
 // ─── localStorage keys ────────────────────────────────────────────────────────
-const SEA_BAG_KEY      = 'vet1stop_sea_bag';
+const SEA_BAG_KEY         = 'vet1stop_sea_bag';
 const SYMPTOM_PROFILE_KEY = 'vet1stop_symptom_profile';
+// Saved filters key — ONLY used for browse-mode filter presets. NEVER touches sea_bag.
+const SAVED_FILTERS_KEY   = 'vet1stop_saved_filters';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -183,6 +190,50 @@ const DEFAULT_PATHWAY_STEPS: PathwayStep[] = [
     cta: { label: 'VA Whole Health →', href: 'https://www.va.gov/wholehealth/' },
   },
 ];
+
+// ─── Trending resources (hardcoded, browse mode only) ────────────────────────
+
+/**
+ * Exactly 3 hardcoded top resources shown as a "Trending This Week" row
+ * at the top of the Full Browse grid. Source-of-truth is here; no DB call.
+ */
+const TRENDING_RESOURCES = [
+  {
+    title: 'VA Whole Health Program',
+    track: 'va' as const,
+    description: 'Integrative health combining yoga, nutrition, and fitness — free for all enrolled veterans.',
+    url: 'https://www.va.gov/wholehealth/',
+    tags: ['yoga', 'wellness', 'free', 'veteran'],
+  },
+  {
+    title: 'Wounded Warrior Project',
+    track: 'ngo' as const,
+    description: 'Peer-led mental health, career, and physical wellness programs for post-9/11 veterans.',
+    url: 'https://www.woundedwarriorproject.org/',
+    tags: ['peer', 'mental health', 'veteran'],
+  },
+  {
+    title: 'Team Red White & Blue',
+    track: 'ngo' as const,
+    description: 'Physical and social activity programs connecting veterans through fitness events nationwide.',
+    url: 'https://www.teamrwb.org/',
+    tags: ['fitness', 'peer', 'community'],
+  },
+] as const;
+
+// ─── Saved-filter localStorage helpers ───────────────────────────────────────
+
+function loadSavedFilters(): Record<string, BrowseFilter[]> {
+  try {
+    const raw = localStorage.getItem(SAVED_FILTERS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch { return {}; }
+}
+
+function persistSavedFilters(filters: Record<string, BrowseFilter[]>): void {
+  try { localStorage.setItem(SAVED_FILTERS_KEY, JSON.stringify(filters)); }
+  catch { /* no-op */ }
+}
 
 // ─── Refine quick-send buttons (5 total) ─────────────────────────────────────
 
@@ -481,6 +532,18 @@ export default function ResultsPanel({ result, onReset }: ResultsPanelProps) {
   // ─── Pathway modal state ──────────────────────────────────────────────────
   const [pathwayModalLabel, setPathwayModalLabel] = useState<string | null>(null);
 
+  // ─── Browse mode — Feature 1: Saved Filters ───────────────────────────────
+  const [savedFilters, setSavedFilters]           = useState<Record<string, BrowseFilter[]>>({});
+  const [savedFilterName, setSavedFilterName]     = useState('');
+  const [showSavedFiltersMenu, setShowSavedFiltersMenu] = useState(false);
+  const savedFiltersRef = useRef<HTMLDivElement>(null);
+
+  // ─── Browse mode — Feature 3: Autocomplete search ─────────────────────────
+  const [browseSearch, setBrowseSearch]           = useState('');
+
+  // ─── Browse mode — Feature 4: Map View teaser ─────────────────────────────
+  const [showMapTeaser, setShowMapTeaser]         = useState(false);
+
   // ─── Refine mini-chat state ───────────────────────────────────────────────
   const [refineOpen, setRefineOpen]       = useState(false);
   const [refineMessages, setRefineMessages] = useState<RefineMessage[]>([]);
@@ -494,6 +557,28 @@ export default function ResultsPanel({ result, onReset }: ResultsPanelProps) {
 
   // Hydrate Sea Bag on mount
   useEffect(() => { setSavedTitles(loadSeaBag()); }, []);
+
+  // Hydrate Saved Filters on mount (Feature 1)
+  useEffect(() => { setSavedFilters(loadSavedFilters()); }, []);
+
+  // Close Saved Filters dropdown on outside click (Feature 1)
+  useEffect(() => {
+    if (!showSavedFiltersMenu) return;
+    const handler = (e: MouseEvent) => {
+      if (savedFiltersRef.current && !savedFiltersRef.current.contains(e.target as Node)) {
+        setShowSavedFiltersMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showSavedFiltersMenu]);
+
+  // Map teaser toast auto-dismiss after 5 s (Feature 4)
+  useEffect(() => {
+    if (!showMapTeaser) return;
+    const t = setTimeout(() => setShowMapTeaser(false), 5000);
+    return () => clearTimeout(t);
+  }, [showMapTeaser]);
 
   // Auto-scroll refine chat
   useEffect(() => {
@@ -550,6 +635,32 @@ export default function ResultsPanel({ result, onReset }: ResultsPanelProps) {
       prev.includes(filter) ? prev.filter(f => f !== filter) : [...prev, filter],
     );
   };
+
+  // Feature 1 — Save current active filters under a user-defined name
+  const handleSaveFilter = useCallback(() => {
+    const name = savedFilterName.trim();
+    if (!name || activeFilters.length === 0) return;
+    const next = { ...savedFilters, [name]: [...activeFilters] };
+    setSavedFilters(next);
+    persistSavedFilters(next);
+    setSavedFilterName('');
+    setShowSavedFiltersMenu(false);
+  }, [savedFilterName, activeFilters, savedFilters]);
+
+  // Feature 1 — Load a previously saved filter set
+  const handleLoadFilter = useCallback((name: string) => {
+    setActiveFilters(savedFilters[name] ?? []);
+    setBrowseSearch('');
+    setShowSavedFiltersMenu(false);
+  }, [savedFilters]);
+
+  // Feature 1 — Delete a saved filter set
+  const handleDeleteFilter = useCallback((name: string) => {
+    const next = { ...savedFilters };
+    delete next[name];
+    setSavedFilters(next);
+    persistSavedFilters(next);
+  }, [savedFilters]);
 
   // ─── Pathway banner ───────────────────────────────────────────────────────
 
@@ -661,12 +772,19 @@ export default function ResultsPanel({ result, onReset }: ResultsPanelProps) {
 
   const allResources = [...liveRecs.va, ...liveRecs.ngo, ...liveRecs.state];
 
+  const searchTerm = browseSearch.trim().toLowerCase();
+
   const filteredResources = browseMode
     ? allResources
         .filter(r => {
-          if (activeFilters.length === 0) return true;
           const h = [r.title, r.description, ...(r.tags ?? [])].join(' ').toLowerCase();
-          return activeFilters.some(f => FILTER_TAG_MAP[f].some(tag => h.includes(tag)));
+          // Feature 3: autocomplete search — filters by title or any tag
+          const searchMatch = !searchTerm || h.includes(searchTerm);
+          // Existing tag-filter logic
+          const filterMatch =
+            activeFilters.length === 0 ||
+            activeFilters.some(f => FILTER_TAG_MAP[f].some(tag => h.includes(tag)));
+          return searchMatch && filterMatch;
         })
         .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
     : [];
@@ -700,6 +818,34 @@ export default function ResultsPanel({ result, onReset }: ResultsPanelProps) {
             <div className="flex items-center gap-2 bg-[#1A2C5B] text-white text-sm font-semibold px-4 py-2.5 rounded-full shadow-xl">
               <CheckCircleSolid className="h-4 w-4 text-[#EAB308]" />
               Match refreshed!
+            </div>
+          </div>
+        )}
+
+        {/* ─── Feature 4: Map View teaser toast ───────────────────────────────
+            Uses the same absolute-positioned toast slot as "Match refreshed!" but
+            styled as a dismissible info card — distinct from the success toast.
+            Auto-dismisses after 5 s (see useEffect above).
+            ─────────────────────────────────────────────────────────────────── */}
+        {showMapTeaser && (
+          <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-40 w-72 animate-in fade-in slide-in-from-bottom-4 duration-300">
+            <div className="flex items-start gap-3 bg-white border border-blue-200 rounded-xl shadow-xl p-4">
+              <MapIcon className="h-5 w-5 text-[#1A2C5B] flex-shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-bold text-[#1A2C5B] mb-1">Map View — Coming Soon</p>
+                <p className="text-[11px] text-gray-600 leading-relaxed">
+                  Interactive Map View is deploying soon with the{' '}
+                  <strong>Local VOB (Veteran-Owned Business) Network</strong>.
+                  Find fitness, yoga, and peer programs on the map near Carlisle, PA.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowMapTeaser(false)}
+                className="flex-shrink-0 p-0.5 text-gray-400 hover:text-gray-700 transition-colors focus:outline-none focus:ring-1 focus:ring-blue-300 rounded"
+                aria-label="Dismiss map teaser"
+              >
+                <XMarkIcon className="h-4 w-4" />
+              </button>
             </div>
           </div>
         )}
@@ -756,43 +902,244 @@ export default function ResultsPanel({ result, onReset }: ResultsPanelProps) {
               </div>
             )}
 
-            <button
-              onClick={() => { setBrowseMode(m => !m); setActiveFilters([]); }}
-              className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg border transition-colors flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-blue-200 ${
-                browseMode
-                  ? 'bg-[#1A2C5B] text-white border-[#1A2C5B]'
-                  : 'bg-white text-[#1A2C5B] border-[#1A2C5B] hover:bg-blue-50'
-              }`}
-              aria-pressed={browseMode}
-            >
-              <AdjustmentsHorizontalIcon className="h-3.5 w-3.5" />
-              {browseMode ? 'Exit Browse' : 'Browse All'}
-            </button>
+            {/* Feature 4 toggle + existing Browse All button */}
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {/* Feature 4 — Map View teaser button (visually distinct / inactive) */}
+              <button
+                onClick={() => setShowMapTeaser(true)}
+                className="flex items-center gap-1 text-xs font-medium px-2.5 py-2 rounded-lg border border-dashed border-gray-300 text-gray-400 hover:border-[#1A2C5B] hover:text-[#1A2C5B] transition-colors focus:outline-none focus:ring-2 focus:ring-blue-200"
+                title="Map View — coming soon"
+                aria-label="Map View coming soon"
+              >
+                <MapIcon className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Map</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setBrowseMode(m => !m);
+                  setActiveFilters([]);
+                  setBrowseSearch('');
+                  setShowSavedFiltersMenu(false);
+                }}
+                className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg border transition-colors focus:outline-none focus:ring-2 focus:ring-blue-200 ${
+                  browseMode
+                    ? 'bg-[#1A2C5B] text-white border-[#1A2C5B]'
+                    : 'bg-white text-[#1A2C5B] border-[#1A2C5B] hover:bg-blue-50'
+                }`}
+                aria-pressed={browseMode}
+              >
+                <AdjustmentsHorizontalIcon className="h-3.5 w-3.5" />
+                {browseMode ? 'Exit Browse' : 'Browse All'}
+              </button>
+            </div>
           </div>
 
-          {/* ─── Browse filter pills ─── */}
+          {/* ══════════════════════════════════════════════════════════
+              FULL BROWSE MODE FEATURES — injected only when browseMode
+              Mobile constraint: all inside flex-1 overflow-y-auto,
+              no fixed heights here, flows within h-[calc(100dvh-180px)]
+              ══════════════════════════════════════════════════════════ */}
           {browseMode && (
-            <div className="flex flex-wrap gap-2 mb-4">
-              {BROWSE_FILTERS.map(f => (
-                <button
-                  key={f}
-                  onClick={() => handleToggleFilter(f)}
-                  className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors focus:outline-none focus:ring-2 focus:ring-blue-200 ${
-                    activeFilters.includes(f)
-                      ? 'bg-[#1A2C5B] text-white border-[#1A2C5B]'
-                      : 'bg-blue-100 text-[#1A2C5B] border-blue-200 hover:bg-blue-200'
-                  }`}
-                >
-                  {f}
-                </button>
-              ))}
-              {activeFilters.length > 0 && (
-                <button onClick={() => setActiveFilters([])} className="text-xs text-gray-500 hover:text-gray-700 underline ml-1">
-                  Clear
-                </button>
+            <>
+              {/* Feature 1 — Filter pills row + Saved Filters + Map View indicator */}
+              <div className="mb-2">
+                {/* Filter pills */}
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {BROWSE_FILTERS.map(f => (
+                    <button
+                      key={f}
+                      onClick={() => handleToggleFilter(f)}
+                      className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors focus:outline-none focus:ring-2 focus:ring-blue-200 ${
+                        activeFilters.includes(f)
+                          ? 'bg-[#1A2C5B] text-white border-[#1A2C5B]'
+                          : 'bg-blue-100 text-[#1A2C5B] border-blue-200 hover:bg-blue-200'
+                      }`}
+                    >
+                      {f}
+                    </button>
+                  ))}
+                  {activeFilters.length > 0 && (
+                    <button
+                      onClick={() => setActiveFilters([])}
+                      className="text-xs text-gray-500 hover:text-gray-700 underline ml-1 self-center"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+
+                {/* Feature 1 — Saved Filters dropdown + score label row */}
+                <div className="flex items-center justify-between">
+                  <div className="relative" ref={savedFiltersRef}>
+                    <button
+                      onClick={() => setShowSavedFiltersMenu(o => !o)}
+                      className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border transition-colors focus:outline-none focus:ring-2 focus:ring-blue-200 ${
+                        showSavedFiltersMenu
+                          ? 'bg-blue-50 border-[#1A2C5B] text-[#1A2C5B]'
+                          : 'bg-white border-gray-200 text-gray-600 hover:border-[#1A2C5B] hover:text-[#1A2C5B]'
+                      }`}
+                      aria-expanded={showSavedFiltersMenu}
+                    >
+                      <FunnelIcon className="h-3.5 w-3.5" />
+                      Saved Filters
+                      {Object.keys(savedFilters).length > 0 && (
+                        <span className="bg-[#1A2C5B] text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">
+                          {Object.keys(savedFilters).length}
+                        </span>
+                      )}
+                      <ChevronDownIcon className={`h-3 w-3 transition-transform duration-200 ${showSavedFiltersMenu ? 'rotate-180' : ''}`} />
+                    </button>
+
+                    {/* Dropdown panel */}
+                    {showSavedFiltersMenu && (
+                      <div className="absolute left-0 top-full mt-1 w-56 bg-white border border-gray-200 rounded-xl shadow-xl z-20 overflow-hidden">
+                        {/* Save current filters */}
+                        <div className="p-2 border-b border-gray-100">
+                          <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wide mb-1.5 px-1">
+                            Save current filters
+                          </p>
+                          <div className="flex gap-1.5">
+                            <input
+                              type="text"
+                              value={savedFilterName}
+                              onChange={e => setSavedFilterName(e.target.value)}
+                              onKeyDown={e => { if (e.key === 'Enter') handleSaveFilter(); }}
+                              placeholder={activeFilters.length > 0 ? 'Name this preset...' : 'Select filters first'}
+                              disabled={activeFilters.length === 0}
+                              className="flex-1 text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 focus:border-[#1A2C5B] focus:ring-1 focus:ring-blue-200 focus:outline-none disabled:bg-gray-50 disabled:text-gray-400"
+                            />
+                            <button
+                              onClick={handleSaveFilter}
+                              disabled={!savedFilterName.trim() || activeFilters.length === 0}
+                              className="text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-[#1A2C5B] text-white disabled:opacity-40 hover:bg-[#0F1D3D] transition-colors focus:outline-none"
+                            >
+                              Save
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Saved presets list */}
+                        {Object.keys(savedFilters).length > 0 ? (
+                          <div className="p-2 max-h-40 overflow-y-auto overscroll-contain">
+                            <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wide mb-1.5 px-1">
+                              Load preset
+                            </p>
+                            {Object.entries(savedFilters).map(([name, filters]) => (
+                              <div key={name} className="flex items-center justify-between gap-1 px-1 py-1.5 rounded-lg hover:bg-blue-50 group">
+                                <button
+                                  onClick={() => handleLoadFilter(name)}
+                                  className="flex-1 text-left text-xs text-[#1A2C5B] font-medium truncate"
+                                >
+                                  {name}
+                                  <span className="text-gray-400 font-normal ml-1">
+                                    ({filters.join(', ')})
+                                  </span>
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteFilter(name)}
+                                  className="flex-shrink-0 p-1 text-gray-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+                                  aria-label={`Delete saved filter: ${name}`}
+                                >
+                                  <TrashIcon className="h-3 w-3" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-[10px] text-gray-400 text-center py-3 px-2">
+                            No saved presets yet — select filters above and save.
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <span className="text-xs text-gray-400">Score ↓</span>
+                </div>
+              </div>
+
+              {/* Feature 3 — Autocomplete search input */}
+              <div className="relative mb-3">
+                <MagnifyingGlassIcon className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                <input
+                  type="text"
+                  value={browseSearch}
+                  onChange={e => setBrowseSearch(e.target.value)}
+                  placeholder="Search by resource name or tag…"
+                  className="w-full pl-9 pr-8 py-2 text-sm border border-gray-200 rounded-xl focus:border-[#1A2C5B] focus:ring-1 focus:ring-blue-200 focus:outline-none bg-white shadow-sm"
+                  aria-label="Search resources in browse mode"
+                />
+                {browseSearch && (
+                  <button
+                    onClick={() => setBrowseSearch('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 transition-colors"
+                    aria-label="Clear search"
+                  >
+                    <XMarkIcon className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Feature 2 — "Trending This Week" horizontal card row */}
+              {/* Only shown when no active search/filter so it doesn't compete with results */}
+              {!searchTerm && activeFilters.length === 0 && (
+                <div className="mb-4">
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <FireIcon className="h-4 w-4 text-amber-500" />
+                    <span className="text-xs font-bold text-amber-700 uppercase tracking-wide">
+                      Trending This Week
+                    </span>
+                  </div>
+                  {/* Horizontal scroll — overscroll-contain keeps it from capturing page scroll */}
+                  <div className="flex gap-3 overflow-x-auto overscroll-contain pb-2 -mx-0.5 px-0.5">
+                    {TRENDING_RESOURCES.map(t => (
+                      <a
+                        key={t.title}
+                        href={t.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-shrink-0 w-44 sm:w-52 bg-amber-50 border border-amber-200 rounded-xl p-3 hover:shadow-md hover:border-amber-400 transition-all focus:outline-none focus:ring-2 focus:ring-amber-300"
+                      >
+                        {/* Badge */}
+                        <div className="flex items-center gap-1 mb-1.5">
+                          <FireIcon className="h-3 w-3 text-amber-500 flex-shrink-0" />
+                          <span className="text-[9px] font-bold text-amber-700 uppercase tracking-wider">
+                            Trending
+                          </span>
+                          <span className={`ml-auto text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
+                            t.track === 'va'
+                              ? 'bg-blue-100 text-blue-700'
+                              : 'bg-purple-100 text-purple-700'
+                          }`}>
+                            {t.track.toUpperCase()}
+                          </span>
+                        </div>
+                        {/* Title */}
+                        <p className="font-semibold text-[#1A2C5B] text-xs leading-snug mb-1 line-clamp-2">
+                          {t.title}
+                        </p>
+                        {/* Description */}
+                        <p className="text-[10px] text-gray-500 leading-relaxed line-clamp-2 mb-1.5">
+                          {t.description}
+                        </p>
+                        {/* Tags */}
+                        <div className="flex flex-wrap gap-1">
+                          {t.tags.slice(0, 2).map(tag => (
+                            <span
+                              key={tag}
+                              className="bg-amber-100 text-amber-800 text-[9px] px-1.5 py-0.5 rounded-full border border-amber-200"
+                            >
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      </a>
+                    ))}
+                  </div>
+                </div>
               )}
-              <span className="ml-auto text-xs text-gray-400 self-center">Score ↓</span>
-            </div>
+            </>
           )}
 
           {/* ─── Save All Recommended — one-tap bulk save ─── */}
@@ -821,10 +1168,25 @@ export default function ResultsPanel({ result, onReset }: ResultsPanelProps) {
                 <div className="text-center py-10 text-gray-500">
                   <ExclamationTriangleIcon className="h-8 w-8 mx-auto mb-2 text-gray-300" />
                   <p className="text-sm">No resources found for this selection.</p>
-                  {browseMode && activeFilters.length > 0 && (
-                    <button onClick={() => setActiveFilters([])} className="mt-2 text-sm text-[#1A2C5B] underline">
-                      Clear filters
-                    </button>
+                  {browseMode && (activeFilters.length > 0 || searchTerm) && (
+                    <div className="flex flex-col items-center gap-2 mt-2">
+                      {searchTerm && (
+                        <button
+                          onClick={() => setBrowseSearch('')}
+                          className="text-sm text-[#1A2C5B] underline"
+                        >
+                          Clear search &ldquo;{browseSearch}&rdquo;
+                        </button>
+                      )}
+                      {activeFilters.length > 0 && (
+                        <button
+                          onClick={() => setActiveFilters([])}
+                          className="text-sm text-[#1A2C5B] underline"
+                        >
+                          Clear filters
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
               )
