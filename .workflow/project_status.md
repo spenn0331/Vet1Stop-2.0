@@ -1,28 +1,56 @@
-# Vet1Stop Project Status — February 2026
+# Vet1Stop Project Status — March 2026
 
 ## Quick Reference
 - **Repo**: [github.com/spenn0331/Vet1Stop-2.0](https://github.com/spenn0331/Vet1Stop-2.0) (branch: `main`)
 - **Local Path**: `c:\Users\penny\Desktop\Vet1Stop`
 - **Primary Goal**: MVP Launch (Q2 2026)
-- **Current Phase**: Strategic Foundation & Smart Bridge Ecosystem Implementation
+- **Current Phase**: Phase 1 Health MVP — Symptom Finder Triage V3 Complete
 - **Dev Server**: `npm run dev` → http://localhost:3000
-- **Last Active Development**: Mar 2, 2026
+- **Last Active Development**: Mar 3, 2026
 - **Recovery Date**: Feb 14, 2026 (restored from git commit `863a42cd`)
+- **Latest Commits**: `ff37f44e` (Pass 3 mobile polish), `1483b15b` (refine chat), `38beebf4` (Triage V3)
 
 ---
 
-## 🎯 Current Status: Active Development — Smart Bridge V2 Complete + Symptom Finder Overhauled
-**As of Mar 2, 2026:** The **Smart Bridge Ecosystem V2** is fully operational. The receiver node (`/health/symptom-finder`) is live, the `SymptomFinderWizard` has been overhauled into a premium AI chat interface, and the triage API has been upgraded with resilient model fallback (`grok-4-latest` → `grok-3-latest`). The "Map My Needs" button in Records Recon now successfully routes conditions to the Symptom Finder, which auto-generates a proactive first message listing extracted conditions.
+## 🎯 Current Status: Symptom Finder Triage V3 + Refine Chat Complete (3 Passes)
+**As of Mar 3, 2026:** The **Symptom Finder** has been fully rebuilt as a production-grade Phase 1 feature. The triage flow is now strict 2-question → ResultsPanel handoff. A pure-TS scoring engine (`resources-scoring.ts`) ranks all resources before delivery. The `ResultsPanel` is a standalone component with live refine mini-chat, `PathwayModal`, Full Browse Mode, Sea Bag, and "Save All Recommended." Three passes were shipped and pushed to `main` in a single session.
 
-### ✅ Recently Completed
+### ✅ Recently Completed (Mar 3, 2026) — Symptom Finder Triage V3
+
+**Pass 1 — Core Triage + Scoring Engine (commit `38beebf4`)**
+- **`src/lib/resources-scoring.ts`** (NEW): Pure TS scoring engine — 5 factors (keyword relevance 50pts, veteran-centric 20pts, free/accessible 15pts, PA/Carlisle geo-bonus 10pts, static rating 5pts). Returns `Recommended`/`Good Match` badges, `matchPercent`, `whyMatches` ≤15 words, and `getSuggestedPathway()` for compound keyword pairs.
+- **`src/app/health/components/symptom-finder/ResultsPanel.tsx`** (NEW): Standalone results component (`flex-1 overflow-auto`). Sticky VA | NGO | State tabs (7 resources each), card grid (title + badge + match% + desc + tags + `whyMatches` + "Visit Website →" + "Save to Sea Bag"), Full Browse Mode with Fitness | Peer | Grants | Yoga | Adaptive | Solo filters sorted by score, Sea Bag (`vet1stop_sea_bag` localStorage), Suggested Pathway banner (score >80 + compound keyword), Refine mini-chat `h-0` placeholder.
+- **`SymptomFinderWizard.tsx`** (OVERWRITE): Layout `flex flex-col h-[calc(100vh-180px)]`. Triage flow collapsed to `idle → chat (2 questions) → results`. Chat shrinks to `h-16` minimized bar (`transition-all duration-300`) post-handoff. "Skip Chat & Generate My Resources" (patriotic yellow) reads `vet1stop_symptom_profile` localStorage fallback. Writes symptom profile after Q2.
+- **`symptom-triage/route.ts`** (OVERWRITE): Model = `grok-4` (stipulated in system prompt). New `quick_triage` step asks exactly 2 questions in one reply. `CARLISLE_PA_CONTEXT = 'Carlisle, PA'` hardcoded (TODO Pass 2: dynamic). All AI resources scored via `resources-scoring.ts` before serialization. 7 pre-scored PA-specific static fallback resources per track. Zero 500 errors guaranteed.
+- **Deleted 3 junk files** (Zero-Clutter Mandate): `route.ts.new`, `route.ts.fixed`, `route.new.ts`.
+
+**Pass 2 — Refine Mini-Chat + Live Re-Scoring (commit `1483b15b`)**
+- Always-visible slim blue trigger bar "Need better matches? Chat with Grok-4 →" expands to `384px` via CSS `maxHeight` transition.
+- Chat bubbles matching `SymptomFinderWizard` style (SparklesIcon avatar, bounce typing indicator, error fallback).
+- On send: `POST /api/health/symptom-triage` with `{ mode:'refine', step:'quick_triage', profile: localStorage(vet1stop_symptom_profile) }`.
+- **Client-side keyword extraction** (`extractRefinementKeywords`): parses 20+ trigger terms from user message, appends new keywords to `liveKeywords` state — zero extra API dependency for re-scoring.
+- **`rescoreWithKeywords()`**: calls `scoreAndSortResources` + `buildScoringContext` on all 3 tracks with updated keyword set. Merges scores back onto original recs → card grid re-renders live.
+- "Match refreshed!" toast (fixed bottom-center, 2.8s auto-dismiss).
+- 3 quick-send buttons: "More solo grants", "Show local Carlisle options", "Explain top match".
+- `liveRecs` state replaces `result.recommendations` throughout so all UI elements reflect re-scored state.
+
+**Pass 3 — Pathways Wired + Final Mobile Polish (commit `ff37f44e`)**
+- **`PathwayModal` component**: In-page bottom-sheet (mobile) / centered modal (sm+). 4-step guide with step icon, body text in "Many veterans find this helps with motivation" language only. No clinical advice. Hardcoded steps for "Back Pain to Shape" + "Sleep & Recovery Track"; `DEFAULT_PATHWAY_STEPS` fallback for other labels. Closes on Escape or backdrop click.
+- **`handleViewPathway`** now opens `PathwayModal(suggestedPathway)` — wired, not a no-op. TODO Pass 4: replace with `PathwayNavigator` context.
+- **2 new refine quick-send buttons** (5 total): "Military-to-VA Transition Guide" and "Back Pain to Shape".
+- **"Save All Recommended"** one-tap button: saves all `badge=Recommended` resources across all 3 tracks to Sea Bag in a single click. Only visible when ≥1 exists.
+- **Mobile layout fix**: scrollable content area (`flex-1 overflow-y-auto overscroll-contain`) is now separate from refine panel. Refine panel is `flex-shrink-0` outside the scroll div — always anchored at bottom, never scrolled away. No card/refine overlap on mobile.
+- **Tab bar**: `sticky top-0 bg-white/95` inside scroll area — stays visible while cards scroll.
+- **SymptomFinderWizard**: `h-[calc(100dvh-180px)]` using dynamic viewport height for iOS Safari/Chrome mobile. `overflow-y-auto` on idle screen. Responsive message list heights. `overscroll-contain` prevents iOS scroll chaining.
+
+### ✅ Previously Completed
 * **Smart Bridge V2 + Symptom Finder Overhaul (Mar 2, 2026):**
-  - **Receiver Page:** Created `src/app/health/symptom-finder/page.tsx` — `"use client"` with `useEffect` to safely read localStorage bridge payload. Privacy-first: data is wiped from localStorage after single read. Includes "Simulate Bridge" dev button for testing.
-  - **Wizard Overhaul:** Complete rewrite of `SymptomFinderWizard.tsx` — premium chat UI with gradient bubbles, AI/user avatars, timestamps, typing indicators, error retry toast, persistent "Not Medical Advice" disclaimer + red 988 Crisis Line button. Accepts optional `bridgeData` prop for Smart Bridge handoff.
-  - **Auto-Trigger:** When bridge data is present, wizard skips welcome/category steps and generates first message: "I see you've pulled your records showing [conditions]. Let's map what you're feeling to the right VA, NGO, and state resources."
-  - **Verbatim TRIAGE_SYSTEM_PROMPT:** Hardcoded in both wizard and API route — Grok-authored prompt enforcing benefits-navigator-only behavior with Triple-Track recommendations.
-  - **API Upgrade:** `symptom-triage/route.ts` upgraded to `grok-4-latest` with resilient fallback to `grok-3-latest`. Bridge context (extracted conditions) injected into system prompt. Zero 500 errors — always returns usable response.
+  - **Receiver Page:** `src/app/health/symptom-finder/page.tsx` — bridge payload receiver with privacy wipe, Intel Brief banner, dev simulation tools.
+  - **Wizard Overhaul:** Premium chat UI with gradient bubbles, AI/user avatars, timestamps, typing indicators, error retry toast, persistent "Not Medical Advice" disclaimer + 988 Crisis Line button.
+  - **Auto-Trigger:** When bridge data is present, wizard skips welcome/category steps and opens with 2 clarifying questions pre-contextualized on extracted conditions.
+  - **API Upgrade:** `symptom-triage/route.ts` upgraded to `grok-4` with resilient fallback to `grok-3-latest`. Bridge context injected into system prompt. Zero 500 errors.
   - **Clutter Cleanup:** Deleted 8 junk files (`.fixed`, `.new`, `.temp`, `.old`) from health directory.
-  - **AI Command Center:** Created `.workflow/ai-command-center.md` — permanent team memory with Dream Team matrix, Golden Rules, and operational protocol.
+  - **AI Command Center:** Created `.workflow/ai-command-center.md`.
 * **Records Recon Production Polish + Smart Bridge V1 (Feb 28, 2026):** Massive 4-phase refactor moving Records Recon from functional to production-ready MVP. See detailed section below.
 * **Records Recon v4.8 (Feb 23, 2026):** Three key improvements over v4.7:
   1. **VSO Briefing Pack PDF fix:** Download button now opens a print-ready preview in a new browser window and auto-triggers the print dialog. Users can "Save as PDF" natively from the browser print dialog instead of getting raw HTML code in VS Code.
@@ -37,11 +65,15 @@
 * **Symptom Finder (Health Page):** Fully operational — conversational triage wizard uses `grok-4-latest` model, produces personalized VA/NGO/State resource recommendations with crisis detection.
 * **Model Upgrades:** Updated all AI endpoints from older Grok models to `grok-4` (text/NLP via `XAI_API_KEY`) and `grok-2-vision-1212` (image analysis).
 
-### 🚧 In Progress
-* ~~**Smart Bridge Receiver Node (Symptom Finder):**~~ ✅ **COMPLETE (Mar 2, 2026)** — Receiver page live at `/health/symptom-finder`, wizard overhauled, auto-trigger working, privacy wipe on localStorage read.
-* **Records Recon thorough testing:** Architecture is complete and production-polished. Needs real-world validation with VA Blue Button PDFs and mock records to verify extraction quality, structuring accuracy, and timeline correctness.
-* **Symptom Finder end-to-end testing:** Wizard overhaul needs live testing with Grok API to validate auto-trigger flow, Triple-Track recommendations, and crisis detection.
-* **Living Master Strategy alignment:** Need to verify `.workflow/master-strategy.md` matches the living Google Doc strategy.
+### 🚧 In Progress / Next Up
+* ~~**Smart Bridge Receiver Node (Symptom Finder):**~~ ✅ **COMPLETE (Mar 2, 2026)**
+* ~~**Symptom Finder Triage V3:**~~ ✅ **COMPLETE (Mar 3, 2026)** — 3 passes shipped. Scoring engine, ResultsPanel, refine chat, pathway modal, mobile polish. See above.
+* **Symptom Finder end-to-end testing:** Test with real back pain + PTSD query, verify grok-4 API response shapes match scoring engine input, refine chat re-score flow, pathway banner trigger conditions.
+* **Pass 4 — Pathway Navigator wiring:** Replace `PathwayModal` placeholder with real `PathwayNavigator` + `PathwayContext` integration. Add dynamic pathway slugs for "military-to-va-transition" and "adaptive-fitness-track".
+* **Pass 4 — Dynamic user state:** Replace `CARLISLE_PA_CONTEXT` hardcode with Firebase Auth custom claim (`user.state`) + localStorage fallback. Add "Confirm your state?" single-ask in chat.
+* **Records Recon thorough testing:** Needs real-world validation with VA Blue Button PDFs.
+* **Local VOB Directory (Phase 1 next priority):** Leaflet map + real estate teaser. Section III.8 pathway cards already tease this.
+* **Living Master Strategy alignment:** Verify `.workflow/master-strategy.md` matches living Google Doc.
 * **Legal Setup:** LLC formation in PA (Pending).
 
 ### ✅ Records Recon v4.7 (Feb 23, 2026) — Legal-Safe Refactor Complete
@@ -300,7 +332,7 @@ Vet1Stop is a centralized platform for U.S. veterans to access resources (Educat
 - **Resource Finder Section**: Advanced filtering by category, state, branch, era, veteran type, eligibility
 - **State-specific resources**: Location-aware resource filtering
 - **NGO Resources Section**: 133+ health NGOs with filtering, pagination, detail views
-- **Symptom Finder** ✅: AI-powered conversational triage wizard — category selection → symptom chat → severity assessment → personalized triple-track (VA/NGO/State) resource recommendations. Uses `grok-4-latest` with crisis detection and fallback responses.
+- **Symptom Finder** ✅ **(Triage V3 — Mar 3, 2026)**: Full production rebuild — strict 2-question triage → `ResultsPanel` handoff. `resources-scoring.ts` (5-factor pure TS engine), `ResultsPanel.tsx` (sticky VA/NGO/State tabs, scored card grid, Full Browse Mode, Sea Bag, live refine mini-chat with Grok-4, PathwayModal, "Save All Recommended"), `SymptomFinderWizard.tsx` (mobile-first, `h-16` chat collapse, `dvh` viewport), `symptom-triage/route.ts` (grok-4, `quick_triage` step, `CARLISLE_PA_CONTEXT`). 3 localStorage keys: `vet1stop_symptom_profile`, `vet1stop_sea_bag`, `vet1stop_recon_bridge_data`.
 - **Records Recon** ✅ (v4.7): Upload VA medical records (PDF) → AI extracts and organizes conditions into structured timeline, conditions index, and keyword frequency chart → generates downloadable VSO Briefing Pack. Tactical command-center UI with dark theme, tabbed dashboard, MVP PDF viewer split-pane with jump-to-page. **Legally safe — zero claims advice language.** Uses `grok-4-1-fast-non-reasoning` (extraction) + `grok-4-1-fast-reasoning` (structuring).
 - **Crisis Banner**: Always-visible Veterans Crisis Line info with crisis detection
 - **VA Healthcare Benefits Section**: Accordion-based benefit explanations
@@ -423,7 +455,7 @@ Vet1Stop is a centralized platform for U.S. veterans to access resources (Educat
 1. **Layout metadata**: `src/app/layout.tsx` is marked `"use client"` which prevents Next.js metadata export. Metadata is commented out. Needs refactoring to separate server/client concerns.
 2. **Peer dependency warnings**: `@tanstack/react-query@4.x` has peer dep conflicts with React 19. Works but shows warnings.
 3. **Duplicate hook files**: Both `useAuth.ts` and `useAuth.tsx` exist — should consolidate.
-4. **`.fixed` and `.new` files scattered**: Several files like `route.ts.fixed`, `route.ts.new`, `ngo-data.ts.fixed` exist alongside originals — need cleanup.
+4. ~~**`.fixed` and `.new` files scattered**~~ — ✅ **Resolved (Mar 3, 2026)**: All flagged junk files in the health/API directories deleted. `_backup/` folder and any `ngo-data.ts.fixed` variants in `src/utils/` may still exist — verify and clean if present.
 5. **Health page complexity**: 84 files in the health directory; some may be redundant (`simplified-page.tsx`, `page.tsx.new`).
 6. **Vercel deployment**: Previously had issues with large files and build errors. Not currently deployed.
 7. **Testing gaps**: Most tests are pending; only basic component import tests pass.
@@ -486,54 +518,58 @@ Vet1Stop/
 |---------|--------|---------|
 | **Firebase** | ✅ Configured | Auth (email + Google), project: `vet1stop-21f83` |
 | **MongoDB Atlas** | ✅ Configured | Cluster: `cluster0.hpghrbe.mongodb.net`, DB: `vet1stop` |
-| **Grok AI (xAI)** | ✅ Configured | Both `GROK_API_KEY` (server) and `NEXT_PUBLIC_GROK_API_KEY` (client) set. Models: `grok-4-latest` (text), `grok-2-vision-1206` (vision). Features: chat, voice, recommendations, summarization, symptom triage, medical detective |
+| **Grok AI (xAI)** | ✅ Configured | Both `GROK_API_KEY` (server) and `NEXT_PUBLIC_GROK_API_KEY` (client) set. Active model: `grok-4` (stipulated in system prompt, fallback `grok-3-latest`). Features: symptom triage (quick_triage + assess + refine modes), records recon extraction/structuring, chat, voice, recommendations, summarization |
 | **Vercel** | ❌ Not deployed | Had build/large-file issues previously |
-| **Stripe** | ❌ Not integrated | Planned for Shop page payment processing |
-| **Google Maps** | ❌ Not integrated | Planned for Local page |
+| **Stripe** | ❌ Not integrated | Planned for Shop/premium gating |
+| **Leaflet** | ❌ Not integrated | Planned for Local VOB Directory |
 
 ---
 
-## 7. The .workflow Documentation Library (51 files)
+## 7. The .workflow Documentation Library
 
 Key documents to reference:
+- **`master-strategy.md`** — Living Master Strategy (constitution — read first)
+- **`project_status.md`** — This file — current sprint + history
+- **`ai-command-center.md`** — Dream Team matrix, Golden Rules, operational protocol
 - **`PRD.md`** — Full product requirements
 - **`development-roadmap.md`** — Phase-by-phase development plan
 - **`technical-architecture.md`** — System architecture blueprint
 - **`project-overview.md`** — Mission, vision, objectives
 - **`monetization-strategy.md`** — Freemium model details
-- **`business-plan-monetization.md`** — Full business plan (38KB)
+- **`business-plan-monetization.md`** — Full business plan
 - **`grok-ai-integration-progress.md`** — AI feature implementation status
-- **`health-page-*.md`** — Multiple docs covering health page architecture
-- **`pages-*.md`** — Individual page specifications (careers, education, health, life-leisure, local, shop, social)
+- **`grf-enhancement-ideas.md`** — General Resource Finder UX/AI enhancement backlog (Firebase Analytics, smart search, GRF vs SRF differentiation)
+- **`health-page-*.md`** — Health page architecture docs
+- **`pages-*.md`** — Individual page specs (careers, education, health, life-leisure, local, shop, social)
 - **`style-theme-and-vision.md`** — Design system and patriotic theme
 - **`firebase-integration.md`** — Auth integration details
 - **`mongodb-resource-integration.md`** — Database integration details
-- **`phase-2-plan.md`** — Needs-based navigation and advanced filtering
 
 ---
 
 ## 8. Where We're Going — Recommended Next Steps
 
-### Immediate Priorities (Get MVP Presentable)
-1. **Fix the layout.tsx server/client split** — Restore SEO metadata by separating server and client components
-2. **Clean up duplicate/temp files** — Remove `.bak`, `.fixed`, `.new`, `.old` files cluttering the codebase
-3. **Build Life & Leisure page** — Follow the Health/Education pattern
-4. **Get Vercel deployment working** — Critical for investor demos
-5. **Test and fix existing pages** — Ensure Health, Education, Careers all render properly end-to-end
+### Immediate Priorities (Phase 1 Health MVP Completion)
+1. **Symptom Finder E2E test** — Run real back pain + PTSD query through full stack: bridge handoff → 2-question triage → grok-4 assess → scored ResultsPanel → refine "more yoga" → PathwayModal click. Verify all localStorage keys write/read correctly.
+2. **Pass 4 — Dynamic state + PathwayNavigator wiring** — Replace `CARLISLE_PA_CONTEXT` with user profile state. Wire `handleViewPathway` to existing `/health/pathways/[id]` + `PathwayContext`.
+3. **Local VOB Directory MVP** — Phase 1 next priority per master-strategy Section III. Leaflet map, real estate teaser, RESPA disclaimers.
+4. **Fix the layout.tsx server/client split** — Restore SEO metadata.
+5. **Get Vercel deployment working** — Critical for investor demos.
 
 ### Short-Term (Complete MVP)
-6. **Build Local page** — Map-based veteran business directory (Google Maps API)
-7. **Build Shop page** — Product catalog with seller onboarding
-8. **Build Social page** — Basic community features (events, groups)
-9. **Implement premium feature indicators** — Visual gates showing future paid features
-10. **Create pricing page** — Clean tier comparison
+6. **PCS Commander + Smart Bridge integration** — Phase 1 priority #3 per master-strategy.
+7. **Auto-Fill shared component** — Phase 1 priority #4, "not official VA claims assistance" disclaimer required.
+8. **Build Life & Leisure page** — Follow Health/Education pattern.
+9. **Implement premium feature indicators** — Visual gates showing future paid features.
+10. **Create pricing page** — Clean tier comparison.
 
 ### Medium-Term (Post-MVP / Post-Funding)
-11. **Payment processing** (Stripe)
-12. **Military verification** (ID.me)
-13. **Advanced analytics**
-14. **Mobile app** (React Native)
-15. **Comprehensive testing suite**
+11. **Build Local page** — Map-based veteran business directory (Leaflet + real Google Places API).
+12. **Build Shop page** — Product catalog, seller onboarding, Stripe.
+13. **Build Social page** — Basic community features (events, groups).
+14. **Payment processing** (Stripe).
+15. **Military verification** (ID.me).
+16. **Mobile app** (React Native — long-term).
 
 ---
 
@@ -552,7 +588,10 @@ Key documents to reference:
 | **Feb 14, 2026** | Full recovery from git history, pushed to GitHub |
 | **Feb 15, 2026** | Strategic pivot to Bootstrapped/Solo-Founder model; paused feature dev for business foundation |
 | **Feb 18, 2026** | Fixed Grok API integration (missing server-side key), upgraded to `grok-4-latest`, Symptom Finder + Medical Detective fully operational |
-| **Feb 19-20, 2026** | Medical Detective v4.1→v4.3: two-phase pipeline, smart pre-filter, AbortSignal timeout, interim report, cached retry, sorted input, section guarantee. Phase 2 (Grok-4) still hangs — v5.0 production plan created (streaming API + two-phase UX) |
+| **Feb 19-20, 2026** | Medical Detective v4.1→v4.3: two-phase pipeline, smart pre-filter, AbortSignal timeout, interim report, cached retry. Phase 2 (Grok-4) still hangs — v5.0 production plan created |
+| **Feb 23, 2026** | Records Recon v4.7-v4.8: legal-safe refactor (zero claims language), patriotic UI theme, Blue Button date extraction fixes, VSO Briefing Pack PDF print dialog |
+| **Mar 2, 2026** | Smart Bridge V2 complete. Symptom Finder receiver page live. SymptomFinderWizard overhauled to premium chat UI. `grok-4` model chain active. |
+| **Mar 3, 2026** | **Symptom Finder Triage V3 — 3 passes, 5 files, pushed to `main`**: `resources-scoring.ts` (scoring engine), `ResultsPanel.tsx` (card grid, refine chat, pathway modal, mobile layout), `SymptomFinderWizard.tsx` (2Q flow, dvh, h-16 collapse), `symptom-triage/route.ts` (grok-4, quick_triage, scoring integrated). Commits: `38beebf4`, `1483b15b`, `ff37f44e`. |
 
 ---
 
