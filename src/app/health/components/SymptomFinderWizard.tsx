@@ -1,11 +1,8 @@
+// Fixed per Living Master Strategy MD Section 2 Phase 1 ★ — Grok + Gemini merged god-tier polish March 2026
 'use client';
 
-// All previously flagged junk files have been deleted:
-// - src/app/api/health/symptom-finder/route.ts.new  ✓ DELETED
-// - src/app/api/health/resources/route.ts.fixed      ✓ DELETED
-// - src/app/api/health-resources/route.new.ts        ✓ DELETED
-
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import ReactMarkdown from 'react-markdown';
 import {
   ExclamationTriangleIcon,
   SparklesIcon,
@@ -13,12 +10,15 @@ import {
   ArrowPathIcon,
   ChatBubbleLeftRightIcon,
   ChevronDownIcon,
+  ChevronUpIcon,
+  ShieldCheckIcon,
+  HeartIcon,
+  MapPinIcon,
 } from '@heroicons/react/24/outline';
 import { PhoneIcon as PhoneIconSolid } from '@heroicons/react/24/solid';
 import type { BridgeData, ConditionPayload } from '@/types/records-recon';
 import ResultsPanel, { type TriageResult, type ResourceRecommendation } from './symptom-finder/ResultsPanel';
 
-// ─── localStorage keys ────────────────────────────────────────────────────────
 const SYMPTOM_PROFILE_KEY = 'vet1stop_symptom_profile';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -27,6 +27,9 @@ interface TriageMessage {
   role: 'system' | 'user' | 'assistant';
   content: string;
   timestamp?: number;
+  /** When true the message content is suppressed from the chat UI —
+   *  the payload was already piped to ResultsPanel. */
+  isResourcePayload?: boolean;
 }
 
 interface RawTriageResponse {
@@ -43,14 +46,81 @@ interface RawTriageResponse {
   keywords?: string[];
 }
 
-/** Wizard steps — streamlined to 2-question flow */
 type WizardStep = 'idle' | 'chat' | 'loading' | 'results' | 'crisis';
 
 interface SymptomFinderWizardProps {
   bridgeData?: BridgeData | null;
 }
 
-// ─── Build opening context message from bridge data ───────────────────────────
+// ─── JSON intercept: detect raw resource arrays in AI text ────────────────────
+
+/**
+ * Fix 1: If Grok returns raw JSON in the aiMessage text (e.g. a stringified
+ * array or object with vaResources/ngoResources), parse it and return the
+ * resource payload. Returns null when message is normal prose.
+ */
+function tryExtractResourceJson(text: string): {
+  va: ResourceRecommendation[];
+  ngo: ResourceRecommendation[];
+  state: ResourceRecommendation[];
+} | null {
+  if (!text) return null;
+
+  const trimmed = text.trim();
+
+  // Fast guard: only attempt parse when text looks like JSON
+  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return null;
+
+  try {
+    const parsed = JSON.parse(trimmed);
+
+    // Shape 1: { vaResources: [...], ngoResources: [...], stateResources: [...] }
+    if (parsed.vaResources || parsed.ngoResources || parsed.stateResources) {
+      return {
+        va:    (parsed.vaResources ?? []).map((r: Record<string, unknown>) => ({ ...r, track: 'va' })),
+        ngo:   (parsed.ngoResources ?? []).map((r: Record<string, unknown>) => ({ ...r, track: 'ngo' })),
+        state: (parsed.stateResources ?? []).map((r: Record<string, unknown>) => ({ ...r, track: 'state' })),
+      };
+    }
+
+    // Shape 2: Raw array of resources with track field
+    if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].title) {
+      const va:    ResourceRecommendation[] = [];
+      const ngo:   ResourceRecommendation[] = [];
+      const state: ResourceRecommendation[] = [];
+      for (const r of parsed) {
+        const track = (r.track ?? 'ngo') as string;
+        if (track === 'va') va.push({ ...r, track: 'va' });
+        else if (track === 'state') state.push({ ...r, track: 'state' });
+        else ngo.push({ ...r, track: 'ngo' });
+      }
+      return { va, ngo, state };
+    }
+  } catch {
+    // Not JSON — fall through to null
+  }
+
+  // Shape 3: JSON is embedded inside prose (e.g. "Here are resources: {...}")
+  const jsonMatch = text.match(/\{[\s\S]*"vaResources"[\s\S]*\}/);
+  if (jsonMatch) {
+    try {
+      const parsed = JSON.parse(jsonMatch[0]);
+      if (parsed.vaResources || parsed.ngoResources || parsed.stateResources) {
+        return {
+          va:    (parsed.vaResources ?? []).map((r: Record<string, unknown>) => ({ ...r, track: 'va' })),
+          ngo:   (parsed.ngoResources ?? []).map((r: Record<string, unknown>) => ({ ...r, track: 'ngo' })),
+          state: (parsed.stateResources ?? []).map((r: Record<string, unknown>) => ({ ...r, track: 'state' })),
+        };
+      }
+    } catch {
+      // Embedded JSON malformed — ignore
+    }
+  }
+
+  return null;
+}
+
+// ─── Bridge context builder ───────────────────────────────────────────────────
 
 function buildBridgeContext(conditions: ConditionPayload[]): string {
   const names = conditions.map(c => c.condition);
@@ -77,22 +147,19 @@ export default function SymptomFinderWizard({ bridgeData = null }: SymptomFinder
   const chatEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // Auto-scroll on new messages
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
 
-  // Focus input when chat is active
   useEffect(() => {
     if (step === 'chat' && !isHandedOff) {
       setTimeout(() => inputRef.current?.focus(), 100);
     }
   }, [step, isHandedOff]);
 
-  // Auto-start with bridge data on mount
+  // Auto-start with bridge data
   useEffect(() => {
     if (bridgeData && bridgeData.conditions.length > 0 && step === 'idle') {
-      const contextMsg = buildBridgeContext(bridgeData.conditions);
       const openingMsg: TriageMessage = {
         role: 'assistant',
         content: `I got you — I can see your records show **${bridgeData.conditions.map(c => c.condition).slice(0, 3).join(', ')}${bridgeData.conditions.length > 3 ? ` and ${bridgeData.conditions.length - 3} more` : ''}**.\n\nTo find the best resources for you, I just need two quick answers:\n\n**1.** Do you already have an active VA claim for any of these conditions? *(Yes / No)*\n\n**2.** How long has this been affecting your daily life, and on a scale of 1–10 how much does it impact you? *(e.g., "8 years, impact 7/10")*\n\n_This is not medical advice. Discuss with your VA provider or primary doctor._`,
@@ -158,7 +225,44 @@ export default function SymptomFinderWizard({ bridgeData = null }: SymptomFinder
         return;
       }
 
-      // Add assistant reply to chat
+      // ── Fix 1: JSON intercept — detect raw resource JSON in aiMessage ──
+      // If Grok returned a JSON blob instead of prose, suppress the chat
+      // bubble and pipe it directly into ResultsPanel via triageResult.
+      const interceptedResources = tryExtractResourceJson(data.aiMessage);
+
+      if (interceptedResources) {
+        const mergedRecs = {
+          va:    [...(data.recommendations?.va ?? []), ...interceptedResources.va],
+          ngo:   [...(data.recommendations?.ngo ?? []), ...interceptedResources.ngo],
+          state: [...(data.recommendations?.state ?? []), ...interceptedResources.state],
+        };
+
+        // Mark the message as a resource payload so ChatBubble never renders it
+        setMessages(prev => [
+          ...prev,
+          { role: 'assistant', content: data.aiMessage, timestamp: Date.now(), isResourcePayload: true },
+        ]);
+
+        setTriageResult({
+          aiMessage: 'Here are your matched resources — sorted by relevance to your situation. This is not medical advice. Discuss with your VA provider or primary doctor.',
+          severity: data.severity,
+          recommendations: mergedRecs,
+          keywords: data.keywords ?? [],
+        });
+        setIsHandedOff(true);
+        setStep('results');
+
+        try {
+          localStorage.setItem(SYMPTOM_PROFILE_KEY, JSON.stringify({
+            conditions: bridgeData?.conditions?.map(c => c.condition) ?? [],
+            hasVaClaim: userMessage.toLowerCase().includes('yes'),
+            timestamp: Date.now(),
+          }));
+        } catch { /* non-fatal */ }
+        return;
+      }
+
+      // Normal prose response — add to chat
       if (data.aiMessage) {
         setMessages(prev => [
           ...prev,
@@ -170,17 +274,13 @@ export default function SymptomFinderWizard({ bridgeData = null }: SymptomFinder
 
       // Hand-off to results
       if (data.nextStep === 'complete' || triageStep === 'assess') {
-        // Write profile to localStorage for future Skip Chat fallback
         try {
-          const profilePayload = {
+          localStorage.setItem(SYMPTOM_PROFILE_KEY, JSON.stringify({
             conditions: bridgeData?.conditions?.map(c => c.condition) ?? [],
             hasVaClaim: userMessage.toLowerCase().includes('yes') || userMessage.toLowerCase().includes('claim'),
             timestamp: Date.now(),
-          };
-          localStorage.setItem(SYMPTOM_PROFILE_KEY, JSON.stringify(profilePayload));
-        } catch {
-          // localStorage write failed — non-fatal
-        }
+          }));
+        } catch { /* non-fatal */ }
 
         setTriageResult({
           aiMessage: data.aiMessage,
@@ -208,8 +308,6 @@ export default function SymptomFinderWizard({ bridgeData = null }: SymptomFinder
     }
   }, [bridgeData]);
 
-  // ─── Send user message ────────────────────────────────────────────────────
-
   const handleSendMessage = useCallback(() => {
     const text = userInput.trim();
     if (!text || isLoading) return;
@@ -218,14 +316,9 @@ export default function SymptomFinderWizard({ bridgeData = null }: SymptomFinder
     setMessages(newMessages);
     setUserInput('');
     setSuggestedQuestions([]);
-
-    // After 2 user turns (answers to both clarifying questions), trigger assess
     const userTurns = newMessages.filter(m => m.role === 'user').length;
-    const triageStep = userTurns >= 2 ? 'assess' : 'quick_triage';
-    callTriageApi(newMessages, triageStep, text);
+    callTriageApi(newMessages, userTurns >= 2 ? 'assess' : 'quick_triage', text);
   }, [userInput, isLoading, messages, callTriageApi]);
-
-  // ─── Suggested question click ─────────────────────────────────────────────
 
   const handleSuggestedQuestion = useCallback((q: string) => {
     const userMsg: TriageMessage = { role: 'user', content: q, timestamp: Date.now() };
@@ -233,37 +326,21 @@ export default function SymptomFinderWizard({ bridgeData = null }: SymptomFinder
     setMessages(newMessages);
     setSuggestedQuestions([]);
     const userTurns = newMessages.filter(m => m.role === 'user').length;
-    const triageStep = userTurns >= 2 ? 'assess' : 'quick_triage';
-    callTriageApi(newMessages, triageStep, q);
+    callTriageApi(newMessages, userTurns >= 2 ? 'assess' : 'quick_triage', q);
   }, [messages, callTriageApi]);
-
-  // ─── Skip Chat — direct assess using profile fallback ────────────────────
 
   const handleSkipChat = useCallback(() => {
     setStep('chat');
     setIsLoading(true);
-
-    let profileContext: { conditions: string[]; hasVaClaim: boolean } = {
-      conditions: bridgeData?.conditions?.map(c => c.condition) ?? [],
-      hasVaClaim: false,
-    };
-
+    let profileContext = { conditions: bridgeData?.conditions?.map(c => c.condition) ?? [] as string[], hasVaClaim: false };
     try {
       const raw = localStorage.getItem(SYMPTOM_PROFILE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed.conditions?.length > 0) {
-          profileContext = parsed;
-        }
-      }
-    } catch {
-      // Parse failed — use bridge data fallback
-    }
-
+      if (raw) { const p = JSON.parse(raw); if (p.conditions?.length > 0) profileContext = p; }
+    } catch { /* fallback */ }
     const skipMsg: TriageMessage = {
       role: 'user',
       content: profileContext.conditions.length > 0
-        ? `Skip triage — please generate my resources directly. Conditions: ${profileContext.conditions.join(', ')}. VA claim: ${profileContext.hasVaClaim ? 'Yes' : 'No'}.`
+        ? `Skip triage — generate my resources. Conditions: ${profileContext.conditions.join(', ')}. VA claim: ${profileContext.hasVaClaim ? 'Yes' : 'No'}.`
         : 'Skip triage — generate general veteran health resources for Pennsylvania.',
       timestamp: Date.now(),
     };
@@ -273,8 +350,6 @@ export default function SymptomFinderWizard({ bridgeData = null }: SymptomFinder
     callTriageApi(newMessages, 'assess', skipMsg.content);
   }, [bridgeData, messages, callTriageApi]);
 
-  // ─── Retry last failed message ────────────────────────────────────────────
-
   const handleRetry = useCallback(() => {
     const lastUser = [...messages].reverse().find(m => m.role === 'user');
     if (lastUser) {
@@ -283,8 +358,6 @@ export default function SymptomFinderWizard({ bridgeData = null }: SymptomFinder
       callTriageApi(messages, userTurns >= 2 ? 'assess' : 'quick_triage', lastUser.content);
     }
   }, [messages, callTriageApi]);
-
-  // ─── Reset ────────────────────────────────────────────────────────────────
 
   const handleReset = useCallback(() => {
     setStep('idle');
@@ -297,8 +370,6 @@ export default function SymptomFinderWizard({ bridgeData = null }: SymptomFinder
     setErrorMsg(null);
   }, []);
 
-  // ─── Start chat (no bridge data path) ────────────────────────────────────
-
   const handleStartChat = useCallback(() => {
     const openingMsg: TriageMessage = {
       role: 'assistant',
@@ -307,25 +378,24 @@ export default function SymptomFinderWizard({ bridgeData = null }: SymptomFinder
     };
     setMessages([openingMsg]);
     setStep('chat');
-    setSuggestedQuestions([
-      'Yes, I have a VA claim',
-      'No, I don\'t have a VA claim',
-      'I\'m not enrolled in VA healthcare yet',
-    ]);
+    setSuggestedQuestions(['Yes, I have a VA claim', 'No, I don\'t have a VA claim', 'I\'m not enrolled in VA healthcare yet']);
   }, []);
 
-  // ─── Render: Persistent Top Bar ──────────────────────────────────────────
-  // sticky top-0 z-30 — stays pinned on ALL screen sizes, never scrolls away.
-  // This ensures 988 crisis line is always reachable on mobile.
+  // Visible (non-suppressed) messages for rendering
+  const visibleMessages = useMemo(
+    () => messages.filter(m => !m.isResourcePayload),
+    [messages],
+  );
+
+  // ─── TopBar (crisis line sticky on ALL screens) ───────────────────────────
 
   const TopBar = () => (
     <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-sm border-b border-gray-200 shadow-sm flex-shrink-0">
       <div className="flex items-center justify-between px-3 sm:px-4 py-2 sm:py-2.5">
         <div className="flex items-center gap-1.5 sm:gap-2 text-amber-700 text-xs sm:text-sm min-w-0">
           <ExclamationTriangleIcon className="h-4 w-4 flex-shrink-0" />
-          <span className="truncate"><strong>Not medical advice.</strong> <span className="hidden xs:inline">Resource navigation only.</span></span>
+          <span className="truncate"><strong>Not medical advice.</strong> <span className="hidden sm:inline">Resource navigation only.</span></span>
         </div>
-        {/* 988 button — always fully visible, never truncated */}
         <a
           href="tel:988"
           className="flex items-center gap-1 sm:gap-1.5 bg-[#B22234] text-white px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold hover:bg-red-700 transition-colors flex-shrink-0 shadow-md shadow-red-500/20 ml-2"
@@ -338,7 +408,7 @@ export default function SymptomFinderWizard({ bridgeData = null }: SymptomFinder
     </div>
   );
 
-  // ─── Render: Chat bubble ──────────────────────────────────────────────────
+  // ─── Fix 4: ChatBubble with react-markdown + prose styling ────────────────
 
   const ChatBubble = ({ msg }: { msg: TriageMessage }) => {
     const isUser = msg.role === 'user';
@@ -350,13 +420,19 @@ export default function SymptomFinderWizard({ bridgeData = null }: SymptomFinder
           </div>
         )}
         <div
-          className={`max-w-[85%] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed whitespace-pre-line ${
+          className={`max-w-[85%] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed ${
             isUser
               ? 'bg-gradient-to-br from-[#1A2C5B] to-[#0F1D3D] text-white rounded-br-md shadow-md shadow-blue-900/20 ml-auto'
               : 'bg-white border border-gray-200 text-gray-800 rounded-bl-md shadow-sm'
           }`}
         >
-          {msg.content}
+          {isUser ? (
+            <span className="whitespace-pre-line">{msg.content}</span>
+          ) : (
+            <div className="prose prose-sm max-w-none prose-headings:text-[#1A2C5B] prose-headings:font-semibold prose-headings:text-sm prose-p:my-1 prose-ul:my-1 prose-li:my-0.5 prose-strong:text-[#1A2C5B] prose-em:text-gray-500 prose-a:text-[#1A2C5B] prose-a:font-semibold prose-a:no-underline hover:prose-a:underline">
+              <ReactMarkdown>{msg.content}</ReactMarkdown>
+            </div>
+          )}
         </div>
         {isUser && (
           <div className="flex-shrink-0 w-7 h-7 rounded-full bg-gradient-to-br from-[#EAB308] to-[#CA8A04] flex items-center justify-center ml-2 mt-0.5 shadow-sm">
@@ -366,8 +442,6 @@ export default function SymptomFinderWizard({ bridgeData = null }: SymptomFinder
       </div>
     );
   };
-
-  // ─── Render: Typing indicator ─────────────────────────────────────────────
 
   const TypingIndicator = () => (
     <div className="flex justify-start mb-3">
@@ -386,19 +460,16 @@ export default function SymptomFinderWizard({ bridgeData = null }: SymptomFinder
   );
 
   // ─── Main render ──────────────────────────────────────────────────────────
+  // Fix 3: Desktop viewport isolation — mobile uses dvh constraint,
+  //   desktop restores natural h-auto with min-height and no clipping.
 
   return (
-    // h-[calc(100dvh-180px)] uses dynamic viewport height on mobile (accounts for
-    // browser chrome resize). Falls back to 100vh on browsers that don't support dvh.
-    // relative positioning needed for the toast inside ResultsPanel.
-    <div className="flex flex-col h-[calc(100dvh-180px)] max-w-4xl mx-auto relative"
-      style={{ height: 'calc(100dvh - 180px)' }}>
+    <div className="flex flex-col max-md:h-[calc(100dvh-180px)] md:min-h-[calc(100vh-100px)] md:h-auto max-w-4xl md:max-w-7xl mx-auto relative px-0 md:px-4">
 
       <TopBar />
 
       {/* ─── Idle / Welcome ─── */}
       {step === 'idle' && (
-        // overflow-y-auto on idle so very short screens can still scroll to both buttons
         <div className="flex-1 overflow-y-auto flex flex-col items-center justify-center text-center px-4 py-6 sm:py-8">
           <div className="bg-gradient-to-br from-blue-50 to-white p-4 sm:p-5 rounded-full inline-block mb-4 sm:mb-5 shadow-inner">
             <ChatBubbleLeftRightIcon className="h-12 w-12 sm:h-14 sm:w-14 text-[#1A2C5B]" />
@@ -410,8 +481,6 @@ export default function SymptomFinderWizard({ bridgeData = null }: SymptomFinder
           <p className="text-xs text-gray-400 mb-6 sm:mb-8 max-w-sm">
             2 questions → AI maps your needs → Scored VA, NGO &amp; State resources.
           </p>
-
-          {/* Skip Chat — big patriotic-yellow CTA */}
           <button
             onClick={handleSkipChat}
             className="w-full max-w-sm mb-3 inline-flex items-center justify-center gap-2 px-5 sm:px-6 py-3.5 sm:py-4 rounded-xl bg-gradient-to-r from-[#EAB308] to-[#CA8A04] text-[#1A2C5B] font-bold text-sm sm:text-base hover:from-[#FACC15] hover:to-[#EAB308] transition-all focus:outline-none focus:ring-4 focus:ring-yellow-200 shadow-lg shadow-yellow-500/25"
@@ -419,8 +488,6 @@ export default function SymptomFinderWizard({ bridgeData = null }: SymptomFinder
             <SparklesIcon className="h-5 w-5" />
             Skip Chat &amp; Generate My Resources
           </button>
-
-          {/* Start Chat */}
           <button
             onClick={handleStartChat}
             className="w-full max-w-sm inline-flex items-center justify-center gap-2 px-5 sm:px-6 py-3 sm:py-3.5 rounded-xl border-2 border-[#1A2C5B] text-[#1A2C5B] font-semibold text-sm sm:text-base hover:bg-blue-50 transition-all focus:outline-none focus:ring-4 focus:ring-blue-200"
@@ -431,16 +498,15 @@ export default function SymptomFinderWizard({ bridgeData = null }: SymptomFinder
         </div>
       )}
 
-      {/* ─── Chat Pane (2-question triage) ─── */}
+      {/* ─── Chat + Results ─── */}
       {(step === 'chat' || step === 'results' || step === 'loading') && (
         <>
-          {/* Chat container — shrinks to h-16 minimized bar after handoff */}
+          {/* Chat container — h-16 minimized bar post-handoff, h-auto active */}
           <div
             className={`transition-all duration-300 overflow-hidden flex-shrink-0 ${
               isHandedOff && !chatExpanded ? 'h-16' : 'h-auto'
             }`}
           >
-            {/* Minimized bar (shown when handed off + not expanded) */}
             {isHandedOff && !chatExpanded && (
               <button
                 onClick={() => setChatExpanded(true)}
@@ -450,44 +516,36 @@ export default function SymptomFinderWizard({ bridgeData = null }: SymptomFinder
                 <div className="flex items-center gap-2 min-w-0">
                   <SparklesIcon className="h-4 w-4 flex-shrink-0 text-[#1A2C5B]" />
                   <span className="truncate font-medium text-xs">
-                    {messages[messages.length - 1]?.content?.slice(0, 60) ?? 'Chat complete'}…
+                    {visibleMessages[visibleMessages.length - 1]?.content?.slice(0, 60) ?? 'Chat complete'}…
                   </span>
                 </div>
                 <ChevronDownIcon className="h-4 w-4 flex-shrink-0 ml-2 text-gray-400" />
               </button>
             )}
 
-            {/* Full chat (idle/active or expanded after handoff) */}
             {(!isHandedOff || chatExpanded) && (
               <div className="flex flex-col">
-                {/* Message list */}
-                {/* Message list — max-height responsive: shorter on mobile so cards have room */}
+                {/* Message list — desktop gets more room, mobile constrained */}
                 <div
                   className="bg-gradient-to-b from-gray-50 to-white border-b border-gray-200 p-3 sm:p-4 overflow-y-auto overscroll-contain shadow-inner"
-                  style={{ maxHeight: isHandedOff ? '160px' : '280px', minHeight: '120px' }}
+                  style={{ maxHeight: isHandedOff ? '160px' : '340px', minHeight: '120px' }}
                 >
-                  {messages.map((msg, idx) => (
+                  {visibleMessages.map((msg, idx) => (
                     <ChatBubble key={idx} msg={msg} />
                   ))}
                   {isLoading && <TypingIndicator />}
                   <div ref={chatEndRef} />
                 </div>
 
-                {/* Error toast */}
                 {errorMsg && (
                   <div className="flex items-center justify-between bg-red-50 border-b border-red-200 px-4 py-2.5 animate-in fade-in">
                     <span className="text-sm text-red-700">{errorMsg}</span>
-                    <button
-                      onClick={handleRetry}
-                      className="flex items-center gap-1 text-sm font-medium text-red-700 hover:text-red-900 ml-3"
-                    >
-                      <ArrowPathIcon className="h-3.5 w-3.5" />
-                      Retry
+                    <button onClick={handleRetry} className="flex items-center gap-1 text-sm font-medium text-red-700 hover:text-red-900 ml-3">
+                      <ArrowPathIcon className="h-3.5 w-3.5" /> Retry
                     </button>
                   </div>
                 )}
 
-                {/* Suggested questions */}
                 {suggestedQuestions.length > 0 && !isLoading && !isHandedOff && (
                   <div className="flex flex-wrap gap-2 px-4 py-2 bg-white border-b border-gray-100">
                     {suggestedQuestions.map((q, idx) => (
@@ -502,7 +560,6 @@ export default function SymptomFinderWizard({ bridgeData = null }: SymptomFinder
                   </div>
                 )}
 
-                {/* Input row (hidden once handed off) */}
                 {!isHandedOff && (
                   <div className="flex gap-2 items-end p-3 bg-white border-b border-gray-200">
                     <textarea
@@ -510,12 +567,7 @@ export default function SymptomFinderWizard({ bridgeData = null }: SymptomFinder
                       rows={1}
                       value={userInput}
                       onChange={e => setUserInput(e.target.value)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter' && !e.shiftKey) {
-                          e.preventDefault();
-                          handleSendMessage();
-                        }
-                      }}
+                      onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } }}
                       placeholder="Type your answer..."
                       disabled={isLoading}
                       className="flex-1 px-3.5 py-2.5 rounded-xl border border-gray-300 focus:border-[#1A2C5B] focus:ring-2 focus:ring-blue-200 focus:outline-none text-sm disabled:opacity-50 shadow-sm resize-none"
@@ -528,20 +580,14 @@ export default function SymptomFinderWizard({ bridgeData = null }: SymptomFinder
                       className="p-2.5 rounded-xl bg-gradient-to-r from-[#1A2C5B] to-[#2563EB] text-white hover:from-[#0F1D3D] hover:to-[#1A2C5B] transition-all disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus:ring-4 focus:ring-blue-200 shadow-md flex-shrink-0"
                       aria-label="Send"
                     >
-                      <PaperAirplaneIcon className="h-4.5 w-4.5" style={{ height: '18px', width: '18px' }} />
+                      <PaperAirplaneIcon style={{ height: '18px', width: '18px' }} />
                     </button>
                   </div>
                 )}
 
-                {/* Action bar (Skip Chat always visible when not yet handed off) */}
                 {!isHandedOff && (
                   <div className="flex items-center justify-between px-4 py-2 bg-white">
-                    <button
-                      onClick={handleReset}
-                      className="text-xs text-gray-400 hover:text-[#1A2C5B] transition-colors"
-                    >
-                      Start Over
-                    </button>
+                    <button onClick={handleReset} className="text-xs text-gray-400 hover:text-[#1A2C5B] transition-colors">Start Over</button>
                     <button
                       onClick={handleSkipChat}
                       disabled={isLoading}
@@ -553,20 +599,18 @@ export default function SymptomFinderWizard({ bridgeData = null }: SymptomFinder
                   </div>
                 )}
 
-                {/* Collapse button (when expanded after handoff) */}
                 {isHandedOff && chatExpanded && (
                   <button
                     onClick={() => setChatExpanded(false)}
-                    className="w-full py-1.5 text-xs text-gray-400 hover:text-[#1A2C5B] bg-gray-50 border-b border-gray-100 transition-colors"
+                    className="w-full py-1.5 text-xs text-gray-400 hover:text-[#1A2C5B] bg-gray-50 border-b border-gray-100 transition-colors flex items-center justify-center gap-1"
                   >
-                    Collapse chat ↑
+                    <ChevronUpIcon className="h-3 w-3" /> Collapse chat
                   </button>
                 )}
               </div>
             )}
           </div>
 
-          {/* ─── Loading state ─── */}
           {step === 'loading' && (
             <div className="flex-1 flex flex-col items-center justify-center py-12">
               <div className="relative inline-block mb-4">
@@ -578,14 +622,13 @@ export default function SymptomFinderWizard({ bridgeData = null }: SymptomFinder
             </div>
           )}
 
-          {/* ─── Results Panel ─── */}
           {step === 'results' && triageResult && (
             <ResultsPanel result={triageResult} onReset={handleReset} />
           )}
         </>
       )}
 
-      {/* ─── Crisis Response ─── */}
+      {/* ─── Crisis ─── */}
       {step === 'crisis' && triageResult && (
         <div className="flex-1 overflow-auto p-4">
           <div className="bg-gradient-to-br from-[#B22234] to-[#8B1A2B] text-white rounded-xl p-6 mb-6 shadow-lg">
@@ -595,23 +638,14 @@ export default function SymptomFinderWizard({ bridgeData = null }: SymptomFinder
             </div>
             <p className="text-base mb-6 leading-relaxed">{triageResult.aiMessage}</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <a
-                href="tel:988"
-                className="flex items-center justify-center gap-3 bg-white text-[#B22234] px-5 py-3.5 rounded-xl font-bold text-base hover:bg-gray-100 transition-colors focus:outline-none focus:ring-4 focus:ring-white/50"
-              >
-                <PhoneIconSolid className="h-5 w-5" />
-                Dial 988 (Press 1)
+              <a href="tel:988" className="flex items-center justify-center gap-3 bg-white text-[#B22234] px-5 py-3.5 rounded-xl font-bold text-base hover:bg-gray-100 transition-colors focus:outline-none focus:ring-4 focus:ring-white/50">
+                <PhoneIconSolid className="h-5 w-5" /> Dial 988 (Press 1)
               </a>
-              <a
-                href="sms:838255&body=HOME"
-                className="flex items-center justify-center gap-3 bg-white text-[#B22234] px-5 py-3.5 rounded-xl font-bold text-base hover:bg-gray-100 transition-colors focus:outline-none focus:ring-4 focus:ring-white/50"
-              >
-                <ChatBubbleLeftRightIcon className="h-5 w-5" />
-                Text 838255
+              <a href="sms:838255&body=HOME" className="flex items-center justify-center gap-3 bg-white text-[#B22234] px-5 py-3.5 rounded-xl font-bold text-base hover:bg-gray-100 transition-colors focus:outline-none focus:ring-4 focus:ring-white/50">
+                <ChatBubbleLeftRightIcon className="h-5 w-5" /> Text 838255
               </a>
             </div>
           </div>
-
           {triageResult.recommendations && (
             <ResultsPanel result={triageResult} onReset={handleReset} />
           )}

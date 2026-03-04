@@ -1,3 +1,4 @@
+// Fixed per Living Master Strategy MD Section 2 Phase 1 ★ — Grok + Gemini merged god-tier polish March 2026
 'use client';
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
@@ -250,6 +251,9 @@ export default function RecordsReconPanel() {
   // Packages extracted conditions into a standardized payload and stores
   // it in localStorage for the Symptom Finder (Receiver Node) to consume.
 
+  // Fixed per Living Master Strategy MD Section 2 Phase 1 ★ — Bridge UX explicit transition
+  const [bridgeToast, setBridgeToast] = useState(false);
+
   const handleBridgeHandoff = () => {
     if (!report || report.conditionsIndex.length === 0) return;
 
@@ -270,7 +274,13 @@ export default function RecordsReconPanel() {
     };
 
     localStorage.setItem(BRIDGE_STORAGE_KEY, JSON.stringify(bridgeData));
-    router.push('/health/symptom-finder');
+
+    // Show explicit syncing toast so the transition isn't silent
+    setBridgeToast(true);
+    setTimeout(() => {
+      setBridgeToast(false);
+      router.push('/health/symptom-finder');
+    }, 1200);
   };
 
   // ─── Sample Record Demo ─────────────────────────────────────────────────
@@ -813,12 +823,12 @@ export default function RecordsReconPanel() {
                   </div>
                 </div>
 
-                {/* ─── Smart Bridge: Intel Brief CTA ──────────────────────── */}
+                {/* ─── Smart Bridge: Intel Brief CTA (inline card) ──────────── */}
                 {report.conditionsIndex.length > 0 && (
                   <div className="bg-gradient-to-r from-[#1A2C5B] to-[#2563EB] rounded-lg p-5 text-white shadow-lg">
                     <h4 className="font-bold text-lg mb-1">Next Step: Intel Brief</h4>
                     <p className="text-blue-100 text-sm mb-4">
-                      We found <span className="font-bold text-[#EAB308]">{report.conditionsIndex.length}</span> potential condition{report.conditionsIndex.length !== 1 ? 's' : ''} in your records. Would you like to map these to potential VA pathways?
+                      We found <span className="font-bold text-[#EAB308]">{report.conditionsIndex.length}</span> potential condition{report.conditionsIndex.length !== 1 ? 's' : ''} in your records. Map them to real VA, NGO, and state resources.
                     </p>
                     <button
                       onClick={handleBridgeHandoff}
@@ -828,6 +838,35 @@ export default function RecordsReconPanel() {
                       Map My Needs
                       <ArrowRightIcon className="h-4 w-4" />
                     </button>
+                  </div>
+                )}
+
+                {/* ─── Sticky floating "Map My Needs" CTA (desktop — below fold fix) ── */}
+                {report.conditionsIndex.length > 0 && (
+                  <div className="hidden md:block md:sticky md:bottom-6 md:z-50 mt-4">
+                    <div className="bg-white/80 backdrop-blur-md border border-[#1A2C5B]/20 rounded-xl p-3 shadow-xl flex items-center justify-between gap-3">
+                      <p className="text-xs text-[#1A2C5B] font-medium">
+                        <span className="font-bold">{report.conditionsIndex.length} conditions</span> ready — auto-bridged to Symptom Finder
+                      </p>
+                      <button
+                        onClick={handleBridgeHandoff}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-[#EAB308] text-[#1A2C5B] font-bold text-sm rounded-lg hover:bg-[#FACC15] transition-colors shadow-md flex-shrink-0"
+                        title="Auto-bridged to Symptom Finder — click to refine your resources"
+                      >
+                        Map My Needs
+                        <ArrowRightIcon className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Bridge syncing toast */}
+                {bridgeToast && (
+                  <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[60] animate-in fade-in slide-in-from-bottom-4 duration-300">
+                    <div className="flex items-center gap-2.5 bg-[#1A2C5B] text-white text-sm font-semibold px-5 py-3 rounded-full shadow-xl">
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-[#EAB308] rounded-full animate-spin" />
+                      Syncing Blue Button Intel to Symptom Finder...
+                    </div>
                   </div>
                 )}
               </div>

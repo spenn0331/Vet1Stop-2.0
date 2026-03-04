@@ -1,3 +1,4 @@
+// Fixed per Living Master Strategy MD Section 2 Phase 1 ★ — Grok + Gemini merged god-tier polish March 2026
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -95,10 +96,11 @@ export default function SymptomFinderPage() {
       </div>
 
       {/* ─── Page Content ─── */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      {/* Fix 3: Desktop gets max-w-7xl with generous padding; mobile stays tight */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 py-4 md:py-6 flex-1">
         {/* Bridge Intel Brief */}
         {bridgeData && (
-          <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 flex items-center justify-between">
+          <div className="mb-4 md:mb-6 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 flex items-center justify-between">
             <p className="text-sm text-[#1A2C5B]">
               <span className="font-bold">Intel Brief:</span> {bridgeData.conditions.length} condition{bridgeData.conditions.length !== 1 ? 's' : ''} loaded from Records Recon —{' '}
               {bridgeData.conditions.slice(0, 3).map(c => c.condition).join(', ')}
