@@ -1,10 +1,5 @@
-// Fixed per Living Master Strategy MD Section 2 Phase 1 ★ — Grok + Gemini merged god-tier polish March 2026
+// Fixed per Living Master MD Section 2 Phase 1 ★ — Windsurf Architecture Refactor March 2026
 'use client';
-
-// All previously flagged junk files have been deleted:
-// - src/app/api/health/symptom-finder/route.ts.new  ✓ DELETED
-// - src/app/api/health/resources/route.ts.fixed      ✓ DELETED
-// - src/app/api/health-resources/route.new.ts        ✓ DELETED
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
@@ -455,8 +450,32 @@ function ResourceCard({ rec, isSaved, onToggleSave }: ResourceCardProps) {
         </button>
       </div>
 
-      {/* Description */}
-      <p className="text-sm text-gray-600 mb-2 leading-relaxed">{rec.description}</p>
+      {/* Priority badge + Cost/Free tag row */}
+      <div className="flex flex-wrap items-center gap-1.5 mb-2">
+        {rec.priority && (
+          <span className={`inline-flex items-center text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full ${
+            rec.priority === 'high'
+              ? 'bg-red-100 text-red-700 border border-red-200'
+              : rec.priority === 'medium'
+              ? 'bg-amber-100 text-amber-700 border border-amber-200'
+              : 'bg-gray-100 text-gray-600 border border-gray-200'
+          }`}>
+            {rec.priority} priority
+          </span>
+        )}
+        <span className={`inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-full ${
+          rec.isFree || rec.costLevel === 'free'
+            ? 'bg-green-100 text-green-700 border border-green-200'
+            : rec.costLevel === 'low'
+            ? 'bg-blue-50 text-blue-700 border border-blue-200'
+            : 'bg-gray-100 text-gray-600 border border-gray-200'
+        }`}>
+          {rec.isFree || rec.costLevel === 'free' ? 'Free' : rec.costLevel ? rec.costLevel.charAt(0).toUpperCase() + rec.costLevel.slice(1) + ' Cost' : 'Free'}
+        </span>
+      </div>
+
+      {/* Description — clamped to 2 lines per spec */}
+      <p className="text-sm text-gray-600 mb-2 leading-relaxed line-clamp-2">{rec.description}</p>
 
       {/* Tags */}
       {rec.tags && rec.tags.length > 0 && (
@@ -622,7 +641,7 @@ export default function ResultsPanel({ result, onReset }: ResultsPanelProps) {
     if (recommended.length === 0) return;
 
     setSavedTitles(prev => {
-      const next = [...new Set([...prev, ...recommended])];
+      const next = Array.from(new Set([...prev, ...recommended]));
       saveSeaBag(next);
       return next;
     });

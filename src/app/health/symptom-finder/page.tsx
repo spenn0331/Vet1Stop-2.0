@@ -1,4 +1,4 @@
-// Fixed per Living Master Strategy MD Section 2 Phase 1 ★ — Grok + Gemini merged god-tier polish March 2026
+// Fixed per Living Master MD Section 2 Phase 1 ★ — Windsurf Architecture Refactor March 2026
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';

@@ -1,4 +1,4 @@
-// Fixed per Living Master Strategy MD Section 2 Phase 1 ★ — Grok + Gemini merged god-tier polish March 2026
+// Fixed per Living Master MD Section 2 Phase 1 ★ — Windsurf Architecture Refactor March 2026
 'use client';
 
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
@@ -52,12 +52,15 @@ interface SymptomFinderWizardProps {
   bridgeData?: BridgeData | null;
 }
 
-// ─── JSON intercept: detect raw resource arrays in AI text ────────────────────
+// ─── JSON intercept: detect raw resource arrays in AI text (safety net) ─────
 
 /**
- * Fix 1: If Grok returns raw JSON in the aiMessage text (e.g. a stringified
- * array or object with vaResources/ngoResources), parse it and return the
- * resource payload. Returns null when message is normal prose.
+ * Safety net: If the backend sanitizer missed embedded JSON in the aiMessage,
+ * try to extract the resource payload client-side. Handles 3 shapes:
+ *   1. Pure JSON object starting with { ... vaResources ... }
+ *   2. Raw array of resource objects
+ *   3. JSON embedded inside prose text (the primary bug shape)
+ * Returns null when message is normal prose.
  */
 function tryExtractResourceJson(text: string): {
   va: ResourceRecommendation[];
@@ -68,39 +71,40 @@ function tryExtractResourceJson(text: string): {
 
   const trimmed = text.trim();
 
-  // Fast guard: only attempt parse when text looks like JSON
-  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return null;
+  // Shape 1 & 2: text starts with { or [ — attempt full parse
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(trimmed);
 
-  try {
-    const parsed = JSON.parse(trimmed);
-
-    // Shape 1: { vaResources: [...], ngoResources: [...], stateResources: [...] }
-    if (parsed.vaResources || parsed.ngoResources || parsed.stateResources) {
-      return {
-        va:    (parsed.vaResources ?? []).map((r: Record<string, unknown>) => ({ ...r, track: 'va' })),
-        ngo:   (parsed.ngoResources ?? []).map((r: Record<string, unknown>) => ({ ...r, track: 'ngo' })),
-        state: (parsed.stateResources ?? []).map((r: Record<string, unknown>) => ({ ...r, track: 'state' })),
-      };
-    }
-
-    // Shape 2: Raw array of resources with track field
-    if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].title) {
-      const va:    ResourceRecommendation[] = [];
-      const ngo:   ResourceRecommendation[] = [];
-      const state: ResourceRecommendation[] = [];
-      for (const r of parsed) {
-        const track = (r.track ?? 'ngo') as string;
-        if (track === 'va') va.push({ ...r, track: 'va' });
-        else if (track === 'state') state.push({ ...r, track: 'state' });
-        else ngo.push({ ...r, track: 'ngo' });
+      // Shape 1: { vaResources: [...], ngoResources: [...], stateResources: [...] }
+      if (parsed.vaResources || parsed.ngoResources || parsed.stateResources) {
+        return {
+          va:    (parsed.vaResources ?? []).map((r: Record<string, unknown>) => ({ ...r, track: 'va' })),
+          ngo:   (parsed.ngoResources ?? []).map((r: Record<string, unknown>) => ({ ...r, track: 'ngo' })),
+          state: (parsed.stateResources ?? []).map((r: Record<string, unknown>) => ({ ...r, track: 'state' })),
+        };
       }
-      return { va, ngo, state };
+
+      // Shape 2: Raw array of resources with track field
+      if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].title) {
+        const va:    ResourceRecommendation[] = [];
+        const ngo:   ResourceRecommendation[] = [];
+        const state: ResourceRecommendation[] = [];
+        for (const r of parsed) {
+          const track = (r.track ?? 'ngo') as string;
+          if (track === 'va') va.push({ ...r, track: 'va' });
+          else if (track === 'state') state.push({ ...r, track: 'state' });
+          else ngo.push({ ...r, track: 'ngo' });
+        }
+        return { va, ngo, state };
+      }
+    } catch {
+      // Not valid JSON — fall through to Shape 3
     }
-  } catch {
-    // Not JSON — fall through to null
   }
 
-  // Shape 3: JSON is embedded inside prose (e.g. "Here are resources: {...}")
+  // Shape 3: JSON embedded inside prose (e.g. "Here are resources: {...}")
+  // This is the PRIMARY BUG SHAPE — AI starts with prose then dumps JSON.
   const jsonMatch = text.match(/\{[\s\S]*"vaResources"[\s\S]*\}/);
   if (jsonMatch) {
     try {
@@ -114,6 +118,29 @@ function tryExtractResourceJson(text: string): {
       }
     } catch {
       // Embedded JSON malformed — ignore
+    }
+  }
+
+  // Shape 4: Check for any raw resource array pattern embedded in text
+  // Catches: ..."title":"VA Chronic Pain"... without vaResources wrapper
+  const arrayMatch = text.match(/\[\s*\{[\s\S]*"title"[\s\S]*"description"[\s\S]*\}\s*\]/);
+  if (arrayMatch) {
+    try {
+      const parsed = JSON.parse(arrayMatch[0]);
+      if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].title) {
+        const va:    ResourceRecommendation[] = [];
+        const ngo:   ResourceRecommendation[] = [];
+        const state: ResourceRecommendation[] = [];
+        for (const r of parsed) {
+          const track = (r.track ?? 'ngo') as string;
+          if (track === 'va') va.push({ ...r, track: 'va' });
+          else if (track === 'state') state.push({ ...r, track: 'state' });
+          else ngo.push({ ...r, track: 'ngo' });
+        }
+        return { va, ngo, state };
+      }
+    } catch {
+      // Array JSON malformed — ignore
     }
   }
 
@@ -225,28 +252,60 @@ export default function SymptomFinderWizard({ bridgeData = null }: SymptomFinder
         return;
       }
 
-      // ── Fix 1: JSON intercept — detect raw resource JSON in aiMessage ──
-      // If Grok returned a JSON blob instead of prose, suppress the chat
-      // bubble and pipe it directly into ResultsPanel via triageResult.
+      // ── CRITICAL: Determine if we have structured resources from the backend ──
+      const backendRecs = data.recommendations ?? { va: [], ngo: [], state: [] };
+      const backendHasResources =
+        (backendRecs.va?.length ?? 0) +
+        (backendRecs.ngo?.length ?? 0) +
+        (backendRecs.state?.length ?? 0) > 0;
+
+      // Safety net: check if raw JSON leaked into aiMessage despite backend sanitizer
       const interceptedResources = tryExtractResourceJson(data.aiMessage);
 
-      if (interceptedResources) {
-        const mergedRecs = {
-          va:    [...(data.recommendations?.va ?? []), ...interceptedResources.va],
-          ngo:   [...(data.recommendations?.ngo ?? []), ...interceptedResources.ngo],
-          state: [...(data.recommendations?.state ?? []), ...interceptedResources.state],
+      // ── Assess handoff: if backend returned resources OR we intercepted JSON ──
+      // This is the PRIMARY fix: when the backend gives us structured data,
+      // ALWAYS hand off to ResultsPanel — never dump raw text into chat.
+      if (backendHasResources || interceptedResources || data.nextStep === 'complete' || triageStep === 'assess') {
+        // Merge: prefer backend-scored resources, add any intercepted ones as fallback
+        const finalRecs = {
+          va:    [...(backendRecs.va ?? []), ...(interceptedResources?.va ?? [])],
+          ngo:   [...(backendRecs.ngo ?? []), ...(interceptedResources?.ngo ?? [])],
+          state: [...(backendRecs.state ?? []), ...(interceptedResources?.state ?? [])],
         };
 
-        // Mark the message as a resource payload so ChatBubble never renders it
+        // Deduplicate by title within each track
+        const dedup = (arr: ResourceRecommendation[]) => {
+          const seen = new Set<string>();
+          return arr.filter(r => {
+            if (seen.has(r.title)) return false;
+            seen.add(r.title);
+            return true;
+          });
+        };
+        finalRecs.va = dedup(finalRecs.va);
+        finalRecs.ngo = dedup(finalRecs.ngo);
+        finalRecs.state = dedup(finalRecs.state);
+
+        // Suppress raw JSON from chat: mark it as a resource payload
         setMessages(prev => [
           ...prev,
           { role: 'assistant', content: data.aiMessage, timestamp: Date.now(), isResourcePayload: true },
         ]);
 
+        // Build a clean prose summary for the ResultsPanel header
+        const hasJsonInMessage = interceptedResources !== null ||
+          data.aiMessage.includes('"vaResources"') ||
+          data.aiMessage.includes('"title"') ||
+          data.aiMessage.includes('"description"');
+
+        const cleanAiMessage = hasJsonInMessage
+          ? 'Here are your top matched resources based on your records. This is not medical advice. Discuss with your VA provider or primary doctor.'
+          : data.aiMessage;
+
         setTriageResult({
-          aiMessage: 'Here are your matched resources — sorted by relevance to your situation. This is not medical advice. Discuss with your VA provider or primary doctor.',
+          aiMessage: cleanAiMessage,
           severity: data.severity,
-          recommendations: mergedRecs,
+          recommendations: finalRecs,
           keywords: data.keywords ?? [],
         });
         setIsHandedOff(true);
@@ -255,14 +314,14 @@ export default function SymptomFinderWizard({ bridgeData = null }: SymptomFinder
         try {
           localStorage.setItem(SYMPTOM_PROFILE_KEY, JSON.stringify({
             conditions: bridgeData?.conditions?.map(c => c.condition) ?? [],
-            hasVaClaim: userMessage.toLowerCase().includes('yes'),
+            hasVaClaim: userMessage.toLowerCase().includes('yes') || userMessage.toLowerCase().includes('claim'),
             timestamp: Date.now(),
           }));
         } catch { /* non-fatal */ }
         return;
       }
 
-      // Normal prose response — add to chat
+      // Normal prose response (quick_triage conversational phase) — add to chat
       if (data.aiMessage) {
         setMessages(prev => [
           ...prev,
@@ -271,27 +330,6 @@ export default function SymptomFinderWizard({ bridgeData = null }: SymptomFinder
       }
 
       setSuggestedQuestions(data.suggestedQuestions ?? []);
-
-      // Hand-off to results
-      if (data.nextStep === 'complete' || triageStep === 'assess') {
-        try {
-          localStorage.setItem(SYMPTOM_PROFILE_KEY, JSON.stringify({
-            conditions: bridgeData?.conditions?.map(c => c.condition) ?? [],
-            hasVaClaim: userMessage.toLowerCase().includes('yes') || userMessage.toLowerCase().includes('claim'),
-            timestamp: Date.now(),
-          }));
-        } catch { /* non-fatal */ }
-
-        setTriageResult({
-          aiMessage: data.aiMessage,
-          severity: data.severity,
-          recommendations: data.recommendations ?? { va: [], ngo: [], state: [] },
-          keywords: data.keywords ?? [],
-        });
-        setIsHandedOff(true);
-        setStep('results');
-        return;
-      }
     } catch (err) {
       console.error('[SymptomFinderWizard] API error:', err);
       setErrorMsg('Connection issue — please try again.');

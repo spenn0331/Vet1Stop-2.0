@@ -1,7 +1,4 @@
-// JUNK FILE REGISTRY — delete manually post-deploy (Zero-Clutter Mandate):
-// - src/app/api/health/symptom-finder/route.ts.new
-// - src/app/api/health/resources/route.ts.fixed
-// - src/app/api/health-resources/route.new.ts
+// Fixed per Living Master MD Section 2 Phase 1 ★ — Windsurf Architecture Refactor March 2026
 
 import { NextRequest, NextResponse } from 'next/server';
 import {
@@ -210,15 +207,23 @@ interface RawResource {
   location?: string;
 }
 
+interface ScoredRawResource extends RawResource {
+  score?: number;
+  matchPercent?: number;
+  badge?: string | null;
+  whyMatches?: string;
+  track?: string;
+}
+
 function applyScoring(
   vaResources: RawResource[],
   ngoResources: RawResource[],
   stateResources: RawResource[],
   bridgeContext?: BridgeContext,
 ): {
-  va: (RawResource & { score?: number; matchPercent?: number; badge?: string | null; whyMatches?: string })[];
-  ngo: (RawResource & { score?: number; matchPercent?: number; badge?: string | null; whyMatches?: string })[];
-  state: (RawResource & { score?: number; matchPercent?: number; badge?: string | null; whyMatches?: string })[];
+  va: ScoredRawResource[];
+  ngo: ScoredRawResource[];
+  state: ScoredRawResource[];
   keywords: string[];
 } {
   const conditions = bridgeContext?.conditions?.map(c => c.condition) ?? [];
@@ -242,9 +247,10 @@ function applyScoring(
         phone: r.phone,
       })),
       scoringContext,
-    ).map((scored, idx) => ({
+    ).map((scored, idx): ScoredRawResource => ({
       ...resources[idx], // preserve original fields (url, phone, priority, track)
       ...scored,         // overlay scored fields
+      location: typeof scored.location === 'object' ? undefined : scored.location,
     }));
 
   return {
@@ -345,6 +351,37 @@ function getCrisisResponse() {
   };
 }
 
+// ─── Prose sanitizer ─────────────────────────────────────────────────────────
+// CRITICAL: Strips any raw JSON blobs that Grok accidentally embeds in the
+// conversational aiMessage field. Resources MUST travel via the structured
+// `recommendations` object — never inside the chat text.
+
+function sanitizeAiMessage(raw: string): string {
+  if (!raw) return '';
+
+  // Strip standalone JSON objects/arrays (greedy but effective)
+  let cleaned = raw
+    .replace(/\{[\s\S]*"vaResources"[\s\S]*\}/g, '')
+    .replace(/\{[\s\S]*"ngoResources"[\s\S]*\}/g, '')
+    .replace(/\{[\s\S]*"stateResources"[\s\S]*\}/g, '')
+    .replace(/\[[\s\S]*"title"[\s\S]*"description"[\s\S]*\]/g, '')
+    .trim();
+
+  // If the entire message was JSON and nothing useful remains, return a
+  // hardcoded friendly summary so the chat bubble is never empty.
+  if (!cleaned || cleaned.length < 20) {
+    cleaned = 'Here are your top matched resources based on your records. '
+            + 'This is not medical advice. Discuss with your VA provider or primary doctor.';
+  }
+
+  // Guarantee the medical disclaimer is always present
+  if (!cleaned.includes('not medical advice')) {
+    cleaned += ' This is not medical advice. Discuss with your VA provider or primary doctor.';
+  }
+
+  return cleaned;
+}
+
 // ─── Route handler ────────────────────────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
@@ -369,6 +406,8 @@ export async function POST(request: NextRequest) {
 
       if (aiResponse) {
         try {
+          // Grok is instructed to return pure JSON, but sometimes wraps it in
+          // prose or markdown. Extract the outermost JSON object.
           const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
           if (jsonMatch) {
             const parsed = JSON.parse(jsonMatch[0]);
@@ -377,23 +416,30 @@ export async function POST(request: NextRequest) {
               return NextResponse.json(getCrisisResponse());
             }
 
+            // Extract resource arrays from the parsed JSON
+            const rawVa    = parsed.vaResources    ?? [];
+            const rawNgo   = parsed.ngoResources   ?? [];
+            const rawState = parsed.stateResources ?? [];
+            const hasResources = rawVa.length + rawNgo.length + rawState.length > 0;
+
             // Apply scoring to AI-returned resources
-            const scored = applyScoring(
-              parsed.vaResources ?? [],
-              parsed.ngoResources ?? [],
-              parsed.stateResources ?? [],
-              bridgeContext,
-            );
+            const scored = hasResources
+              ? applyScoring(rawVa, rawNgo, rawState, bridgeContext)
+              : applyScoring([], [], [], bridgeContext);
+
+            // CRITICAL: Always sanitize aiMessage to remove any raw JSON.
+            // Resources travel ONLY via the structured recommendations object.
+            const cleanMessage = sanitizeAiMessage(parsed.aiMessage ?? aiResponse);
 
             return NextResponse.json({
-              aiMessage: parsed.aiMessage ?? aiResponse,
+              aiMessage: cleanMessage,
               nextStep: 'complete',
               isCrisis: false,
               severity: parsed.severity ?? 'moderate',
               recommendations: {
-                va: scored.va,
-                ngo: scored.ngo,
-                state: scored.state,
+                va: scored.va.map((r) => ({ ...r, track: 'va' as const })),
+                ngo: scored.ngo.map((r) => ({ ...r, track: 'ngo' as const })),
+                state: scored.state.map((r) => ({ ...r, track: 'state' as const })),
               },
               keywords: scored.keywords,
             });
@@ -412,8 +458,12 @@ export async function POST(request: NextRequest) {
     const aiResponse = await callGrokAI(messages, systemPrompt);
 
     if (aiResponse) {
+      // Sanitize quick_triage responses too — Grok sometimes jumps ahead
+      // and dumps resource JSON even during the conversational phase.
+      const cleanMessage = sanitizeAiMessage(aiResponse);
+
       return NextResponse.json({
-        aiMessage: aiResponse,
+        aiMessage: cleanMessage,
         nextStep: 'awaiting_answers',
         isCrisis: false,
         suggestedQuestions: [

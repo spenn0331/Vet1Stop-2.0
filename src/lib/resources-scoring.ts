@@ -1,7 +1,4 @@
-// JUNK FILE REGISTRY — delete manually post-deploy (Zero-Clutter Mandate):
-// - src/app/api/health/symptom-finder/route.ts.new
-// - src/app/api/health/resources/route.ts.fixed
-// - src/app/api/health-resources/route.new.ts
+// Fixed per Living Master MD Section 2 Phase 1 ★ — Windsurf Architecture Refactor March 2026
 
 /**
  * resources-scoring.ts
