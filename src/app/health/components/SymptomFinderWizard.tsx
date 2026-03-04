@@ -1,9 +1,9 @@
 'use client';
 
-// JUNK FILE REGISTRY — delete manually post-deploy (Zero-Clutter Mandate):
-// - src/app/api/health/symptom-finder/route.ts.new
-// - src/app/api/health/resources/route.ts.fixed
-// - src/app/api/health-resources/route.new.ts
+// All previously flagged junk files have been deleted:
+// - src/app/api/health/symptom-finder/route.ts.new  ✓ DELETED
+// - src/app/api/health/resources/route.ts.fixed      ✓ DELETED
+// - src/app/api/health-resources/route.new.ts        ✓ DELETED
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
@@ -315,21 +315,24 @@ export default function SymptomFinderWizard({ bridgeData = null }: SymptomFinder
   }, []);
 
   // ─── Render: Persistent Top Bar ──────────────────────────────────────────
+  // sticky top-0 z-30 — stays pinned on ALL screen sizes, never scrolls away.
+  // This ensures 988 crisis line is always reachable on mobile.
 
   const TopBar = () => (
     <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-sm border-b border-gray-200 shadow-sm flex-shrink-0">
-      <div className="flex items-center justify-between px-4 py-2.5">
-        <div className="flex items-center gap-2 text-amber-700 text-xs sm:text-sm">
+      <div className="flex items-center justify-between px-3 sm:px-4 py-2 sm:py-2.5">
+        <div className="flex items-center gap-1.5 sm:gap-2 text-amber-700 text-xs sm:text-sm min-w-0">
           <ExclamationTriangleIcon className="h-4 w-4 flex-shrink-0" />
-          <span><strong>Not medical advice.</strong> Resource navigation only.</span>
+          <span className="truncate"><strong>Not medical advice.</strong> <span className="hidden xs:inline">Resource navigation only.</span></span>
         </div>
+        {/* 988 button — always fully visible, never truncated */}
         <a
           href="tel:988"
-          className="flex items-center gap-1.5 bg-[#B22234] text-white px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold hover:bg-red-700 transition-colors flex-shrink-0 shadow-md shadow-red-500/20"
+          className="flex items-center gap-1 sm:gap-1.5 bg-[#B22234] text-white px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold hover:bg-red-700 transition-colors flex-shrink-0 shadow-md shadow-red-500/20 ml-2"
           aria-label="Veterans Crisis Line: Dial 988, Press 1"
         >
           <PhoneIconSolid className="h-3.5 w-3.5" />
-          988 Crisis
+          <span>988 Crisis</span>
         </a>
       </div>
     </div>
@@ -385,28 +388,33 @@ export default function SymptomFinderWizard({ bridgeData = null }: SymptomFinder
   // ─── Main render ──────────────────────────────────────────────────────────
 
   return (
-    <div className="flex flex-col h-[calc(100vh-180px)] max-w-4xl mx-auto">
+    // h-[calc(100dvh-180px)] uses dynamic viewport height on mobile (accounts for
+    // browser chrome resize). Falls back to 100vh on browsers that don't support dvh.
+    // relative positioning needed for the toast inside ResultsPanel.
+    <div className="flex flex-col h-[calc(100dvh-180px)] max-w-4xl mx-auto relative"
+      style={{ height: 'calc(100dvh - 180px)' }}>
 
       <TopBar />
 
       {/* ─── Idle / Welcome ─── */}
       {step === 'idle' && (
-        <div className="flex-1 flex flex-col items-center justify-center text-center px-4 py-8">
-          <div className="bg-gradient-to-br from-blue-50 to-white p-5 rounded-full inline-block mb-5 shadow-inner">
-            <ChatBubbleLeftRightIcon className="h-14 w-14 text-[#1A2C5B]" />
+        // overflow-y-auto on idle so very short screens can still scroll to both buttons
+        <div className="flex-1 overflow-y-auto flex flex-col items-center justify-center text-center px-4 py-6 sm:py-8">
+          <div className="bg-gradient-to-br from-blue-50 to-white p-4 sm:p-5 rounded-full inline-block mb-4 sm:mb-5 shadow-inner">
+            <ChatBubbleLeftRightIcon className="h-12 w-12 sm:h-14 sm:w-14 text-[#1A2C5B]" />
           </div>
-          <h3 className="text-2xl md:text-3xl font-bold text-[#1A2C5B] mb-3">Symptom Finder</h3>
-          <p className="text-gray-600 mb-2 max-w-md">
+          <h3 className="text-xl sm:text-2xl md:text-3xl font-bold text-[#1A2C5B] mb-2 sm:mb-3">Symptom Finder</h3>
+          <p className="text-gray-600 mb-2 max-w-md text-sm sm:text-base">
             Answer 2 quick questions and we&apos;ll connect you with matched VA, NGO, and State resources.
           </p>
-          <p className="text-xs text-gray-400 mb-8 max-w-sm">
-            How it works: 2 questions → AI maps your needs → Scored VA, NGO &amp; State resources.
+          <p className="text-xs text-gray-400 mb-6 sm:mb-8 max-w-sm">
+            2 questions → AI maps your needs → Scored VA, NGO &amp; State resources.
           </p>
 
-          {/* Skip Chat */}
+          {/* Skip Chat — big patriotic-yellow CTA */}
           <button
             onClick={handleSkipChat}
-            className="w-full max-w-sm mb-3 inline-flex items-center justify-center gap-2 px-6 py-4 rounded-xl bg-gradient-to-r from-[#EAB308] to-[#CA8A04] text-[#1A2C5B] font-bold text-base hover:from-[#FACC15] hover:to-[#EAB308] transition-all focus:outline-none focus:ring-4 focus:ring-yellow-200 shadow-lg shadow-yellow-500/25"
+            className="w-full max-w-sm mb-3 inline-flex items-center justify-center gap-2 px-5 sm:px-6 py-3.5 sm:py-4 rounded-xl bg-gradient-to-r from-[#EAB308] to-[#CA8A04] text-[#1A2C5B] font-bold text-sm sm:text-base hover:from-[#FACC15] hover:to-[#EAB308] transition-all focus:outline-none focus:ring-4 focus:ring-yellow-200 shadow-lg shadow-yellow-500/25"
           >
             <SparklesIcon className="h-5 w-5" />
             Skip Chat &amp; Generate My Resources
@@ -415,7 +423,7 @@ export default function SymptomFinderWizard({ bridgeData = null }: SymptomFinder
           {/* Start Chat */}
           <button
             onClick={handleStartChat}
-            className="w-full max-w-sm inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl border-2 border-[#1A2C5B] text-[#1A2C5B] font-semibold text-base hover:bg-blue-50 transition-all focus:outline-none focus:ring-4 focus:ring-blue-200"
+            className="w-full max-w-sm inline-flex items-center justify-center gap-2 px-5 sm:px-6 py-3 sm:py-3.5 rounded-xl border-2 border-[#1A2C5B] text-[#1A2C5B] font-semibold text-sm sm:text-base hover:bg-blue-50 transition-all focus:outline-none focus:ring-4 focus:ring-blue-200"
           >
             <ChatBubbleLeftRightIcon className="h-5 w-5" />
             Chat (2 Questions)
@@ -453,9 +461,10 @@ export default function SymptomFinderWizard({ bridgeData = null }: SymptomFinder
             {(!isHandedOff || chatExpanded) && (
               <div className="flex flex-col">
                 {/* Message list */}
+                {/* Message list — max-height responsive: shorter on mobile so cards have room */}
                 <div
-                  className="bg-gradient-to-b from-gray-50 to-white border-b border-gray-200 p-4 overflow-y-auto shadow-inner"
-                  style={{ maxHeight: isHandedOff ? '220px' : '340px', minHeight: '160px' }}
+                  className="bg-gradient-to-b from-gray-50 to-white border-b border-gray-200 p-3 sm:p-4 overflow-y-auto overscroll-contain shadow-inner"
+                  style={{ maxHeight: isHandedOff ? '160px' : '280px', minHeight: '120px' }}
                 >
                   {messages.map((msg, idx) => (
                     <ChatBubble key={idx} msg={msg} />
