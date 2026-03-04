@@ -18,30 +18,29 @@ import {
 import { PhoneIcon as PhoneIconSolid } from '@heroicons/react/24/solid';
 import type { BridgeData, ConditionPayload } from '@/types/records-recon';
 
-// ─── Verbatim TRIAGE_SYSTEM_PROMPT (Grok-authored — DO NOT MODIFY) ───────────
+// ─── TRIAGE_SYSTEM_PROMPT (v2 — rapid-fire polish, Mar 2 2026) ───────────────
 const TRIAGE_SYSTEM_PROMPT = `
-You are the Vet1Stop Symptom Triage Navigator — a resource-matching AI ONLY. 
-Your mission: Help veterans connect their symptoms + uploaded records to real benefits and support programs. 
+You are the Vet1Stop Symptom Triage Navigator — a resource-matching AI ONLY.
+Your mission: Help veterans map symptoms + records to real VA, NGO, and state resources in 3 clicks or less.
 
 CRITICAL RULES — BREAK THESE AND YOU ARE FIRED:
 - NEVER diagnose, treat, advise medically, or say "you have X condition."
 - NEVER recommend medication, therapy type, or any clinical action.
-- NEVER use words like "you should see a doctor for..." — instead always end with: "This is not medical advice. Discuss with your VA provider or primary doctor."
-- If they say "I want to hurt myself" or display crisis flags, immediately output the CRISIS PROTOCOL (Call 988, Press 1).
-- You are a benefits navigator, not a doctor.
+- ALWAYS end every response with: "This is not medical advice. Discuss with your VA provider or primary doctor."
+- If crisis flags ("hurt myself", suicidal), immediately output CRISIS PROTOCOL: "Call 988 Press 1 or text 838255 — help is here right now."
+- You are a benefits navigator, NOT a therapist.
 
-CORE BEHAVIOR:
-- Be conversational, one question at a time, short veteran-friendly replies (3-5 sentences max).
-- Start by acknowledging the uploaded records: "I see you've pulled your records — let's map what you're feeling to the right VA, NGO, and state resources."
-- Ask clarifying symptoms one at a time (e.g., "On a scale of 1-10, how bad is the joint pain in your knee right now?").
-- Once you have enough info + the records payload, immediately switch to Triple-Track recommendations:
-  1. VA Track: Specific benefits/claims (e.g., "File for knee condition under VA Claim #XXXX — here's the direct link").
-  2. NGO Track: Veteran orgs (e.g., "Wounded Warrior Project has free peer support for this — apply here").
-  3. State Track: Local programs (ask state if unknown, then e.g., "Pennsylvania offers X veteran housing grant").
-- Always include direct links or "Click here to start the form" buttons in the UI response.
-- Keep empathy high but no fluff: "I got you, brother/sister — this is what the system owes you."
+CORE BEHAVIOR (veteran-first):
+- First question after records: "Do you already have a VA claim for this or see the VA regularly? (Yes/No)" — if yes, skip VA-heavy track and focus NGO/State.
+- Ask 2-3 questions MAX at once (e.g., "State? Duration? Daily impact 1-10?"). No therapy small talk.
+- For every NGO: 1-sentence "why this fits you" + 2 alternatives + direct link.
+- Return 5-7 resources per track (VA/NGO/State), ranked by match. 
+- Vary empathy — "I got you" ONLY on first message. After that: "Got it, brother/sister", "Copy that", "Let's fix this".
+- After recs, ask 1 prefs question ("Prefer peer groups, grants, or fitness programs?") to learn likes/dislikes for future (we will store anon prefs only).
+- Hard state = Pennsylvania for now. Pull real MongoDB resources only.
 
-Output format: Plain text with markdown for links/buttons. Never break character.
+OUTPUT FORMAT:
+- Clean, structured text. DO NOT generate complex markdown tables or draw your own UI cards in the text. Let the Next.js frontend UI components render the actual resource data objects. Keep replies 4-6 sentences max.
 `;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -184,6 +183,8 @@ export default function SymptomFinderWizard({ bridgeData = null }: SymptomFinder
           category: selectedCategory,
           userMessage,
           bridgeContext,
+          // TODO: Replace with dynamic user.state from auth/profile
+          userState: 'PA',
         }),
       });
 
@@ -424,6 +425,16 @@ export default function SymptomFinderWizard({ bridgeData = null }: SymptomFinder
         {/* ─── Chat Interface (main conversation) ─── */}
         {currentStep === 'chat' && (
           <div className="flex flex-col" style={{ minHeight: '500px' }}>
+            {/* Skip Chat — always visible, massive CTA */}
+            <button
+              onClick={handleRequestAssessment}
+              disabled={isLoading}
+              className="w-full mb-4 inline-flex items-center justify-center gap-2 px-6 py-4 rounded-xl bg-gradient-to-r from-[#EAB308] to-[#CA8A04] text-[#1A2C5B] font-bold text-base sm:text-lg hover:from-[#FACC15] hover:to-[#EAB308] transition-all disabled:opacity-50 focus:outline-none focus:ring-4 focus:ring-yellow-200 shadow-lg shadow-yellow-500/25"
+            >
+              <SparklesIcon className="h-5 w-5 sm:h-6 sm:w-6" />
+              Skip Chat &amp; Generate My Resources
+            </button>
+
             {/* Chat Messages Container */}
             <div className="flex-1 bg-gradient-to-b from-gray-50 to-white rounded-xl border border-gray-200 p-4 mb-4 overflow-y-auto shadow-inner" style={{ maxHeight: '450px', minHeight: '300px' }}>
               {messages.map((msg, idx) => (
@@ -493,16 +504,14 @@ export default function SymptomFinderWizard({ bridgeData = null }: SymptomFinder
               >
                 Start Over
               </button>
-              {messages.filter(m => m.role === 'user').length >= 2 && (
-                <button
-                  onClick={handleRequestAssessment}
-                  disabled={isLoading}
-                  className="inline-flex items-center px-4 py-2 rounded-lg bg-[#EAB308] text-[#1A2C5B] font-semibold text-sm hover:bg-[#FACC15] transition-colors disabled:opacity-50 focus:outline-none focus:ring-4 focus:ring-yellow-200 shadow-md shadow-yellow-500/20"
-                >
-                  Get My Resources
-                  <SparklesIcon className="ml-1.5 h-4 w-4" />
-                </button>
-              )}
+              <button
+                onClick={handleRequestAssessment}
+                disabled={isLoading}
+                className="inline-flex items-center px-4 py-2.5 rounded-lg bg-[#EAB308] text-[#1A2C5B] font-bold text-sm hover:bg-[#FACC15] transition-colors disabled:opacity-50 focus:outline-none focus:ring-4 focus:ring-yellow-200 shadow-md shadow-yellow-500/20"
+              >
+                Get My Resources
+                <SparklesIcon className="ml-1.5 h-4 w-4" />
+              </button>
             </div>
           </div>
         )}

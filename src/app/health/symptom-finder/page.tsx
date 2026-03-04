@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { ChevronRightIcon, ArrowPathIcon, BeakerIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { useRouter } from 'next/navigation';
+import { ChevronRightIcon, ArrowPathIcon, BeakerIcon, TrashIcon, ArrowLeftIcon } from '@heroicons/react/24/outline';
 import { BRIDGE_STORAGE_KEY } from '@/types/records-recon';
 import type { BridgeData } from '@/types/records-recon';
 import SymptomFinderWizard from '../components/SymptomFinderWizard';
@@ -22,6 +23,7 @@ const SAMPLE_BRIDGE_DATA: BridgeData = {
 };
 
 export default function SymptomFinderPage() {
+  const router = useRouter();
   const [bridgeData, setBridgeData] = useState<BridgeData | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
   const [wizardKey, setWizardKey] = useState(0);
@@ -81,8 +83,19 @@ export default function SymptomFinderPage() {
         </div>
       </div>
 
+      {/* ─── Back to Records Scan ─── */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-0">
+        <button
+          onClick={() => router.push('/health/records-recon')}
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-white border border-gray-300 text-[#1A2C5B] font-semibold text-sm hover:bg-blue-50 hover:border-[#1A2C5B] transition-all focus:outline-none focus:ring-4 focus:ring-blue-200 shadow-sm"
+        >
+          <ArrowLeftIcon className="h-4 w-4" />
+          Back to Records Scan
+        </button>
+      </div>
+
       {/* ─── Page Content ─── */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {/* Bridge Intel Brief */}
         {bridgeData && (
           <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 flex items-center justify-between">
