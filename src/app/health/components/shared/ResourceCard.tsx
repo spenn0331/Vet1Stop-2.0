@@ -1,9 +1,11 @@
+// Phase 1 + 1.5 feedback framework skeleton — data-ready Day 1 per Living Master MD Section 2 ★ — Strike 2 March 2026
 "use client";
 
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import { HeartIcon } from '@heroicons/react/24/outline';
 import { HeartIcon as HeartIconSolid } from '@heroicons/react/24/solid';
-import { StarIcon, CheckBadgeIcon, MapPinIcon, CalendarIcon } from '@heroicons/react/24/outline';
+import { StarIcon, CheckBadgeIcon, MapPinIcon, CalendarIcon, HandThumbUpIcon, HandThumbDownIcon } from '@heroicons/react/24/outline';
+import { HandThumbUpIcon as HandThumbUpSolid, HandThumbDownIcon as HandThumbDownSolid } from '@heroicons/react/24/solid';
 import { HealthResource } from '../../types/HealthResourceTypes';
 import { formatDate } from '../../utils/health-utils';
 
@@ -30,6 +32,45 @@ const ResourceCard: React.FC<ResourceCardProps> = ({
   onViewDetails,
   featured = false
 }) => {
+  // ─── Feedback state (Strike 2 skeleton) ──────────────────────────────────
+  const [thumbsState, setThumbsState] = useState<'up' | 'down' | null>(null);
+  const [userRating, setUserRating] = useState<number | null>(null);
+  const [feedbackToast, setFeedbackToast] = useState(false);
+
+  const submitFeedback = useCallback(async (
+    thumbs: 'up' | 'down' | null,
+    rating: number | null
+  ) => {
+    try {
+      await fetch('/api/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          resourceId: resource.id || resource.title,
+          thumbs,
+          rating,
+          track: resource.categories?.[0] ?? 'unknown',
+          source: 'health',
+        }),
+      });
+    } catch {
+      // Feedback should never block UX
+    }
+    setFeedbackToast(true);
+    setTimeout(() => setFeedbackToast(false), 2500);
+  }, [resource.id, resource.title, resource.categories]);
+
+  const handleThumb = (direction: 'up' | 'down') => {
+    const next = thumbsState === direction ? null : direction;
+    setThumbsState(next);
+    if (next) submitFeedback(next, userRating);
+  };
+
+  const handleStarClick = (star: number) => {
+    const next = userRating === star ? null : star;
+    setUserRating(next);
+    if (next) submitFeedback(thumbsState, next);
+  };
   // Get resource type badge color
   const getResourceTypeColor = (type: string) => {
     const types: Record<string, string> = {
@@ -178,6 +219,68 @@ const ResourceCard: React.FC<ResourceCardProps> = ({
           )}
         </div>
         
+        {/* ─── Feedback: Thumbs + User Star Rating (Strike 2 skeleton) ─── */}
+        <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
+          <div className="flex items-center gap-1">
+            <button
+              onClick={(e) => { e.stopPropagation(); handleThumb('up'); }}
+              className={`p-1 rounded transition-colors ${
+                thumbsState === 'up'
+                  ? 'text-green-600 bg-green-50'
+                  : 'text-gray-400 hover:text-green-600 hover:bg-green-50'
+              }`}
+              aria-label="Thumbs up — this resource was helpful"
+              title="Helpful"
+            >
+              {thumbsState === 'up'
+                ? <HandThumbUpSolid className="h-4 w-4" />
+                : <HandThumbUpIcon className="h-4 w-4" />
+              }
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); handleThumb('down'); }}
+              className={`p-1 rounded transition-colors ${
+                thumbsState === 'down'
+                  ? 'text-red-500 bg-red-50'
+                  : 'text-gray-400 hover:text-red-500 hover:bg-red-50'
+              }`}
+              aria-label="Thumbs down — this resource was not helpful"
+              title="Not helpful"
+            >
+              {thumbsState === 'down'
+                ? <HandThumbDownSolid className="h-4 w-4" />
+                : <HandThumbDownIcon className="h-4 w-4" />
+              }
+            </button>
+          </div>
+          <div className="flex items-center gap-0.5">
+            {[1, 2, 3, 4, 5].map((star) => (
+              <button
+                key={`user-rate-${star}`}
+                onClick={(e) => { e.stopPropagation(); handleStarClick(star); }}
+                className="p-0 transition-colors"
+                aria-label={`Rate ${star} star${star > 1 ? 's' : ''}`}
+                title={`${star} star${star > 1 ? 's' : ''}`}
+              >
+                <StarIcon
+                  className={`h-4 w-4 ${
+                    userRating && star <= userRating
+                      ? 'text-yellow-400 fill-current'
+                      : 'text-gray-300 hover:text-yellow-400'
+                  }`}
+                />
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Toast */}
+        {feedbackToast && (
+          <div className="mt-2 text-xs text-center text-green-700 bg-green-50 rounded py-1 animate-pulse">
+            Thank you — this helps us improve
+          </div>
+        )}
+
         <button
           onClick={() => onViewDetails(resource)}
           className="mt-4 w-full py-2 bg-[#1A2C5B] hover:bg-[#1A2C5B]/90 text-white rounded-md text-sm font-medium transition-colors"

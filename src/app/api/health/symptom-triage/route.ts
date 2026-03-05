@@ -1,4 +1,4 @@
-// Fixed per Living Master MD Section 2 Phase 1 ★ — Windsurf Architecture Refactor March 2026
+// Fixed per Living Master MD Section 2 Phase 1 ★ — Strike 1 API Stabilization March 2026
 
 import { NextRequest, NextResponse } from 'next/server';
 import {
@@ -11,7 +11,7 @@ import {
  * POST /api/health/symptom-triage  (v3 — Triage V3, Mar 2026)
  *
  * Conversational triage wizard powered by Grok AI (xAI).
- * Phase 1 flow: quick_triage (2 questions combined) → assess (scored results).
+ * Phase 1 flow: quick_triage (3 questions combined) → assess (scored results).
  * All resources returned from the assess step are scored and ranked by
  * resources-scoring.ts before serialization.
  *
@@ -42,11 +42,21 @@ CRITICAL RULES (non-negotiable):
 - Crisis trigger ("hurt myself", "suicidal", etc.) → immediately output CRISIS PROTOCOL: "Call 988 Press 1 or text 838255 — help is here right now."
 - You are a benefits/resource navigator, NOT a therapist.
 
+CRITICAL RULE — STRUCTURED OUTPUT ENFORCEMENT:
+When providing resource recommendations in the assess phase, you MUST return ONLY valid JSON matching the exact schema required by the tool call. Do not output raw JSON as standard conversational text. Do not wrap the JSON in markdown blocks (e.g., no \`\`\`json). Do not add introductory or concluding text. The output must be parsable immediately.
+
+DOMAIN CONSTRAINT RULE:
+- NEVER recommend education-focused NGOs (like Warrior-Scholar Project) or career NGOs unless the user explicitly mentions school, GI Bill, or employment.
+- Strictly prioritize health, mental health, and physical wellness NGOs for all symptom-related queries.
+- If the conversation is about symptoms, pain, PTSD, sleep, or any health concern, resources MUST be health/wellness focused.
+
 PHASE 1 QUICK TRIAGE BEHAVIOR:
-- Ask EXACTLY 2 clarifying questions in a single reply — never more.
-  Q1: "Do you already have an active VA claim for this condition, or do you see the VA regularly? (Yes/No)"
-  Q2: "How long has this been affecting you, and on a scale of 1–10 how much does it impact your daily life?"
-- No therapy small talk. No category menus. 2 questions, then assess.
+- Ask EXACTLY 3 clarifying questions in a single reply — never more.
+  Q1: "Do you already have an active VA claim for any of these conditions?"
+  Q2: "Are you currently receiving care at the VA, and are you satisfied with it?"
+  Q3: A brief, friendly, open-ended prompt: "Is there anything else about your situation you'd like to share before I find your resources?"
+- Close with a warm, professional offer to hear more before moving to assessment.
+- No therapy small talk. No category menus. 3 questions, then assess.
 - Vary empathy: "I got you" ONLY on first message. After that: "Got it", "Copy that", "Let's fix this."
 
 ASSESS STEP OUTPUT (JSON only — no prose wrapper):
@@ -184,7 +194,7 @@ function buildSystemPrompt(step: string, bridgeContext?: BridgeContext): string 
 
   // Step-specific overrides
   if (step === 'quick_triage') {
-    prompt += `\n\nCURRENT TASK: Ask your 2 standard clarifying questions in a single reply. Be warm but brief (3–4 sentences max before the questions).`;
+    prompt += `\n\nCURRENT TASK: Ask your 3 standard clarifying questions in a single reply. Be warm but brief (3–4 sentences max before the questions). Close with a friendly, professional offer to hear more.`;
   } else if (step === 'assess') {
     prompt += `\n\nCURRENT TASK: Based on the full conversation, output the JSON assessment. No prose outside the JSON object.`;
   }
@@ -265,12 +275,13 @@ function applyScoring(
 
 function getQuickTriageFallback(): object {
   return {
-    aiMessage: `I got you. To find the right resources for your situation, I just need two quick answers:\n\n**1.** Do you already have an active VA claim for this condition, or see the VA regularly? *(Yes / No)*\n\n**2.** How long has this been affecting you, and on a scale of 1–10 how much does it impact your daily life?\n\nThis is not medical advice. Discuss with your VA provider or primary doctor.`,
+    aiMessage: `I got you. To find the right resources for your situation, I just need a few quick answers:\n\n**1.** Do you already have an active VA claim for any of these conditions?\n\n**2.** Are you currently receiving care at the VA, and are you satisfied with it?\n\n**3.** Is there anything else about your situation you'd like to share before I find your resources?\n\nTake your time — I'm here to listen. This is not medical advice. Discuss with your VA provider or primary doctor.`,
     nextStep: 'awaiting_answers',
     isCrisis: false,
     suggestedQuestions: [
-      'Yes, I have a VA claim',
+      'Yes, I have an active VA claim',
       "No, I don't have a VA claim yet",
+      "I'm receiving VA care but not satisfied",
       "I'm not sure about my claim status",
     ],
   };
@@ -296,7 +307,7 @@ function getAssessFallback(bridgeContext?: BridgeContext): object {
     { title: 'Cohen Veterans Network', description: 'Nationwide network of mental health clinics offering sliding-scale services for veterans and military families. Covers PTSD, TBI, and adjustment disorders.', url: 'https://www.cohenveteransnetwork.org/', phone: '1-888-523-6936', priority: 'high', tags: ['mental health', 'ptsd', 'veteran', 'sliding-scale', 'counseling'], costLevel: 'low' },
     { title: 'Team Red White & Blue', description: 'Physical and social activity programs connecting veterans through sports, fitness, and community events. Peer-led chapters nationwide.', url: 'https://www.teamrwb.org/', priority: 'medium', tags: ['fitness', 'peer-led', 'community', 'veteran', 'adaptive sports'], isFree: true },
     { title: 'National Alliance on Mental Illness (NAMI)', description: 'Peer-led mental health education and support groups for veterans and families. Free membership and resources available.', url: 'https://www.nami.org/Support-Education/Support-Groups', priority: 'medium', tags: ['mental health', 'peer support', 'peer-led', 'free', 'community'], isFree: true },
-    { title: 'Warrior-Scholar Project', description: 'Academic boot camps and professional development for transitioning veterans. Fully funded scholarships available for qualifying veterans.', url: 'https://warrior-scholar.org/', priority: 'low', tags: ['education', 'grant', 'veteran', 'scholarship', 'free'], isFree: true },
+    { title: 'Headstrong Project', description: 'Free, confidential mental health treatment for post-9/11 veterans through a nationwide network of licensed therapists. Covers PTSD, anxiety, depression, and military trauma with zero cost and zero bureaucracy.', url: 'https://getheadstrong.org/', priority: 'high', tags: ['mental health', 'ptsd', 'free', 'counseling', 'veteran', 'therapy'], isFree: true },
     { title: 'Stop Soldier Suicide', description: 'Peer support and crisis intervention focused on suicide prevention and mental health. Free hotline and digital mental health tools.', url: 'https://stopsoldiersuicide.org/', phone: '1-800-273-8255', priority: 'medium', tags: ['mental health', 'crisis', 'peer support', 'veteran', 'free'], isFree: true },
   ];
 

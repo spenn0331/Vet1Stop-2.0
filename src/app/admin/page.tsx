@@ -1,3 +1,4 @@
+// Phase 1 + 1.5 feedback framework skeleton — data-ready Day 1 per Living Master MD Section 2 ★ — Strike 2 March 2026
 import React from 'react';
 import Link from 'next/link';
 
@@ -82,6 +83,45 @@ export default function AdminDashboard() {
               <p className="text-2xl font-semibold text-gray-900">15</p>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Ratings Inbox — Strike 2 Feedback Skeleton */}
+      <div className="bg-white shadow sm:rounded-lg">
+        <div className="px-4 py-5 sm:p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-medium text-gray-900">Ratings Inbox</h3>
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+              Phase 1.5 Skeleton
+            </span>
+          </div>
+          <p className="text-sm text-gray-500 mb-4">
+            Anonymized veteran feedback (thumbs + star ratings) from Health resource cards.
+            Collection: <code className="text-xs bg-gray-100 px-1 py-0.5 rounded">ratings</code> in MongoDB.
+          </p>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Resource</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Track</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Thumbs</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rating</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Timestamp</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                <tr>
+                  <td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-400 italic">
+                    Data will flow here Day 1 — ready for post-launch team
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-3 text-xs text-gray-400">
+            Zero PII stored. All userId fields are SHA-256 hashed. Extend with aggregation pipelines, export, and RAG feedback loops post-launch.
+          </p>
         </div>
       </div>
     </div>

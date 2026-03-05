@@ -4,18 +4,37 @@
 - **Repo**: [github.com/spenn0331/Vet1Stop-2.0](https://github.com/spenn0331/Vet1Stop-2.0) (branch: `main`)
 - **Local Path**: `c:\Users\penny\Desktop\Vet1Stop`
 - **Primary Goal**: MVP Launch (Q2 2026)
-- **Current Phase**: Phase 1 Health MVP — Symptom Finder Triage V3 Complete
+- **Current Phase**: Phase 1 Health MVP — Strike 1 + 2 API Stabilization & Feedback Skeleton Complete
 - **Dev Server**: `npm run dev` → http://localhost:3000
-- **Last Active Development**: Mar 3, 2026
+- **Last Active Development**: Mar 5, 2026
 - **Recovery Date**: Feb 14, 2026 (restored from git commit `863a42cd`)
 - **Latest Commits**: `ff37f44e` (Pass 3 mobile polish), `1483b15b` (refine chat), `38beebf4` (Triage V3)
+- **Pending Commit**: Strike 1 + Strike 2 changes (Mar 5, 2026) — not yet tested or committed
 
 ---
 
-## 🎯 Current Status: Symptom Finder Triage V3 + Refine Chat Complete (3 Passes)
-**As of Mar 3, 2026:** The **Symptom Finder** has been fully rebuilt as a production-grade Phase 1 feature. The triage flow is now strict 2-question → ResultsPanel handoff. A pure-TS scoring engine (`resources-scoring.ts`) ranks all resources before delivery. The `ResultsPanel` is a standalone component with live refine mini-chat, `PathwayModal`, Full Browse Mode, Sea Bag, and "Save All Recommended." Three passes were shipped and pushed to `main` in a single session.
+## 🎯 Current Status: Strike 1 + 2 Complete — API Stabilized & Feedback Skeleton Live
+**As of Mar 5, 2026:** Two surgical strikes shipped on top of Triage V3. **Strike 1** hardened the LLM pipeline in `symptom-triage/route.ts` (structured output enforcement, 3-question intake, domain constraints, fallback cleanup). **Strike 2** built the Phase 1.5 feedback framework skeleton (MongoDB ratings schema, `/api/feedback` endpoint, thumbs/stars on ResourceCard, admin Ratings Inbox stub). Both strikes are code-complete but **not yet tested or committed** — pending developer verification.
 
-### ✅ Recently Completed (Mar 3, 2026) — Symptom Finder Triage V3
+### ✅ Recently Completed (Mar 5, 2026) — Strike 1 + Strike 2
+
+**Strike 1 — API Stabilization (Mar 5, 2026)**
+Target file: `src/app/api/health/symptom-triage/route.ts`
+- **JSON Leak Fix**: Added `CRITICAL RULE — STRUCTURED OUTPUT ENFORCEMENT` directive to `TRIAGE_SYSTEM_PROMPT`. Instructs Grok to return raw parsable JSON only during assess phase — no markdown fences, no prose wrapper.
+- **Intake & Tone Upgrade**: Phase 1 triage now asks **3 questions** (was 2): Q1 "Active VA claim?", Q2 "Receiving VA care — satisfied?", Q3 open-ended "Anything else to share?". Warm professional close. Updated in system prompt, `buildSystemPrompt()`, and `getQuickTriageFallback()`.
+- **Domain Constraint Rule**: Added `DOMAIN CONSTRAINT RULE` block forbidding education/career NGOs on symptom queries. Explicitly names Warrior-Scholar Project as negative example.
+- **Fallback Fix**: Removed `Warrior-Scholar Project` (education NGO) from `getAssessFallback()` NGO array. Replaced with **Headstrong Project** (free PTSD/mental health therapy, `https://getheadstrong.org/`, priority: high).
+- All disclaimers, crisis detection, scoring pipeline, model chain (grok-4 → grok-3-latest → static), and GRF combo preserved.
+
+**Strike 2 — Feedback Framework Skeleton (Mar 5, 2026)**
+Phase 1 + 1.5 data-harvesting skeleton — ratings flow Day 1, post-launch team extends.
+- **`src/lib/feedback/ratingsSchema.ts`** (NEW): MongoDB `ratings` collection schema — `RatingDocument` interface, `RATINGS_COLLECTION` constant, JSON Schema validator for `createCollection`, index recommendations. Fields: `resourceId`, `rating` (1–5), `thumbs` (up/down), `timestamp`, `userId` (SHA-256 hashed), `sessionId` (anonymized), `track`, `source`.
+- **`src/app/api/feedback/route.ts`** (NEW): `POST /api/feedback` endpoint — validates payload, SHA-256 hashes userId + sessionId (zero PII stored), writes to MongoDB `ratings` collection, always returns 200 (feedback never blocks UX). No auth required for MVP.
+- **`src/app/health/components/shared/ResourceCard.tsx`** (EDITED): Added thumbs up/down buttons (`HandThumbUpIcon`/`HandThumbDownIcon` from Heroicons) + clickable 1–5 star user rating below each card. On click → POST to `/api/feedback` with resourceId, track, rating. Shows animated "Thank you — this helps us improve" toast for 2.5s. All existing save/heart, rating display, badges, location, and disclaimer logic preserved.
+- **`src/app/admin/page.tsx`** (EDITED): Added "Ratings Inbox" section with empty table stub (Resource, Track, Thumbs, Rating, Timestamp columns). "Phase 1.5 Skeleton" badge. Note: "Data will flow here Day 1 — ready for post-launch team". Zero PII disclaimer.
+- All 4 files carry comment: `// Phase 1 + 1.5 feedback framework skeleton — data-ready Day 1 per Living Master MD Section 2 ★ — Strike 2 March 2026`
+
+### ✅ Previously Completed (Mar 3, 2026) — Symptom Finder Triage V3
 
 **Pass 1 — Core Triage + Scoring Engine (commit `38beebf4`)**
 - **`src/lib/resources-scoring.ts`** (NEW): Pure TS scoring engine — 5 factors (keyword relevance 50pts, veteran-centric 20pts, free/accessible 15pts, PA/Carlisle geo-bonus 10pts, static rating 5pts). Returns `Recommended`/`Good Match` badges, `matchPercent`, `whyMatches` ≤15 words, and `getSuggestedPathway()` for compound keyword pairs.
@@ -67,7 +86,10 @@
 
 ### 🚧 In Progress / Next Up
 * ~~**Smart Bridge Receiver Node (Symptom Finder):**~~ ✅ **COMPLETE (Mar 2, 2026)**
-* ~~**Symptom Finder Triage V3:**~~ ✅ **COMPLETE (Mar 3, 2026)** — 3 passes shipped. Scoring engine, ResultsPanel, refine chat, pathway modal, mobile polish. See above.
+* ~~**Symptom Finder Triage V3:**~~ ✅ **COMPLETE (Mar 3, 2026)** — 3 passes shipped.
+* ~~**Strike 1 — API Stabilization:**~~ ✅ **CODE COMPLETE (Mar 5, 2026)** — JSON leak fix, 3Q intake, domain constraints, Headstrong fallback. **Not yet tested.**
+* ~~**Strike 2 — Feedback Framework Skeleton:**~~ ✅ **CODE COMPLETE (Mar 5, 2026)** — ratingsSchema.ts, /api/feedback, ResourceCard thumbs/stars, admin Ratings Inbox. **Not yet tested.**
+* **🔴 TEST Strike 1 + 2:** Run dev server, test symptom triage with Blue Button report (desktop + mobile). Confirm: no raw JSON in chat, 3 questions asked (incl. VA satisfaction), domain constraints respected, thumbs/stars POST to /api/feedback, toast appears, admin Ratings Inbox renders.
 * **Symptom Finder end-to-end testing:** Test with real back pain + PTSD query, verify grok-4 API response shapes match scoring engine input, refine chat re-score flow, pathway banner trigger conditions.
 * **Pass 4 — Pathway Navigator wiring:** Replace `PathwayModal` placeholder with real `PathwayNavigator` + `PathwayContext` integration. Add dynamic pathway slugs for "military-to-va-transition" and "adaptive-fitness-track".
 * **Pass 4 — Dynamic user state:** Replace `CARLISLE_PA_CONTEXT` hardcode with Firebase Auth custom claim (`user.state`) + localStorage fallback. Add "Confirm your state?" single-ask in chat.
@@ -361,6 +383,7 @@ Vet1Stop is a centralized platform for U.S. veterans to access resources (Educat
 - Resource management dashboard
 - Community Q&A management page
 - Pathways management page
+- **Ratings Inbox** (Phase 1.5 skeleton): Empty table stub with columns (Resource, Track, Thumbs, Rating, Timestamp). "Data will flow here Day 1" placeholder. Zero PII disclaimer.
 
 ### Authentication ✅
 - Firebase integration with AuthContext provider
@@ -409,6 +432,7 @@ Vet1Stop is a centralized platform for U.S. veterans to access resources (Educat
 - **NGOs**: `/api/ngos`, `/api/ngos/featured`, `/api/ngos/month`
 - **Resources**: `/api/resources`, `/api/resources/[id]`, `/api/resources/counts`
 - **Pathways**: `/api/pathways`, `/api/pathways/[id]`, `/api/pathways/progress`
+- **Feedback**: `/api/feedback` (POST — anonymized thumbs + star ratings to MongoDB `ratings` collection)
 - **Other**: `/api/community-qa`, `/api/request-info`, `/api/health-resources`, `/api/health-needs`, `/api/symptom-resources`, `/api/update-resource`
 - **Debug/Test**: `/api/db-test`, `/api/debug-db`, `/api/mongodb-test`, `/api/test`, `/api/quick-count`, `/api/check-resource`, `/api/check-resource-details`
 
@@ -440,7 +464,7 @@ Vet1Stop is a centralized platform for U.S. veterans to access resources (Educat
 - **Payment processing**: Stripe/PayPal integration
 - **Military verification**: ID.me or equivalent
 - **Advanced search**: Cross-page unified resource search
-- **Resource rating/feedback system**
+- ~~**Resource rating/feedback system**~~ — ✅ Phase 1.5 skeleton built (Strike 2, Mar 5, 2026). Full admin UI polish + RAG wiring deferred to post-launch.
 - **User profile management page**
 - **Protected routes middleware** (auth guards)
 - **SEO optimization** (metadata on layout is commented out due to client component)
@@ -564,6 +588,24 @@ Key documents to reference:
 10. **Create pricing page** — Clean tier comparison.
 
 ### Medium-Term (Post-MVP / Post-Funding)
+
+**Phase 1.5 (Immediate after Health MVP):**
+- ~~Implement feedback loop skeleton (thumbs up/down + ratings on cards, anonymized Mongo store)~~ — ✅ **Strike 2 (Mar 5, 2026)**
+- ~~Add Q1 VA satisfaction + "tell me more" end prompt + domain constraints to eliminate irrelevant NGOs~~ — ✅ **Strike 1 (Mar 5, 2026)**
+- Remaining: Full admin data fetching from `ratings` collection, aggregation pipelines, export, RAG feedback loop wiring
+
+**Phase 2 (Post-Launch):**
+Full Admin Dashboard overhaul using Gemini 4-pillar blueprint:
+- **The AI Command Center** (Prompt Version Control, Failure Threshold Log, RAG Knowledge Base Manager)
+- **The Revenue & Referral Engine** (Lead Handoff Tracking, B2B Partner Queue)
+- **Verification & Crisis Ops** (Manual Verification Override, Crisis Trigger Logs)
+- **Community Moderation** (User-Submitted Resource Queue, Flagged Content/Dead Links)
+
+**Phase 3+:**
+- Full RAG + fine-tune on aggregates
+- Sell anonymized insights to VSOs/VA
+
+**Other Medium-Term:**
 11. **Build Local page** — Map-based veteran business directory (Leaflet + real Google Places API).
 12. **Build Shop page** — Product catalog, seller onboarding, Stripe.
 13. **Build Social page** — Basic community features (events, groups).
@@ -592,6 +634,8 @@ Key documents to reference:
 | **Feb 23, 2026** | Records Recon v4.7-v4.8: legal-safe refactor (zero claims language), patriotic UI theme, Blue Button date extraction fixes, VSO Briefing Pack PDF print dialog |
 | **Mar 2, 2026** | Smart Bridge V2 complete. Symptom Finder receiver page live. SymptomFinderWizard overhauled to premium chat UI. `grok-4` model chain active. |
 | **Mar 3, 2026** | **Symptom Finder Triage V3 — 3 passes, 5 files, pushed to `main`**: `resources-scoring.ts` (scoring engine), `ResultsPanel.tsx` (card grid, refine chat, pathway modal, mobile layout), `SymptomFinderWizard.tsx` (2Q flow, dvh, h-16 collapse), `symptom-triage/route.ts` (grok-4, quick_triage, scoring integrated). Commits: `38beebf4`, `1483b15b`, `ff37f44e`. |
+| **Mar 5, 2026** | **Strike 1 — API Stabilization**: `symptom-triage/route.ts` hardened — structured output enforcement (JSON leak fix), 3-question intake (VA claim + VA satisfaction + open-ended), DOMAIN CONSTRAINT RULE (no education/career NGOs on symptom queries), Warrior-Scholar replaced with Headstrong Project in fallback. |
+| **Mar 5, 2026** | **Strike 2 — Feedback Framework Skeleton**: 2 new files (`ratingsSchema.ts`, `api/feedback/route.ts`), 2 edited (`ResourceCard.tsx` thumbs/stars, `admin/page.tsx` Ratings Inbox stub). MongoDB `ratings` collection, zero PII (SHA-256 hashed), POST endpoint always returns 200. Phase 1.5 data-ready Day 1. **Both strikes code-complete but not yet tested.** |
 
 ---
 
