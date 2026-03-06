@@ -302,62 +302,32 @@ async function fetchMongoResources(
     const dbName = process.env.MONGODB_DB || 'vet1stop';
     const { db } = await connectToDatabase(dbName);
 
-    const collections = ['symptomResources', 'resources', 'healthResources'];
-    let docs: Record<string, unknown>[] = [];
+    // healthResources is the single source of truth — 190 docs with subcategory: federal|ngo|state
+    const coll = db.collection('healthResources');
 
     // Merge bridge conditions into keyword pool for richer matching
     const bridgeTerms = bridgeContext?.conditions?.map(c => c.condition.toLowerCase()) ?? [];
     const allTerms    = [...new Set([...keywords, ...bridgeTerms])];
     const searchPat   = allTerms.length > 0 ? allTerms.join('|') : '';
 
-    for (const collName of collections) {
-      try {
-        const coll  = db.collection(collName);
-        const count = await coll.countDocuments({});
-        if (count === 0) { console.log(`[SymptomTriage] ${collName}: empty`); continue; }
-        console.log(`[SymptomTriage] ${collName}: ${count} total docs`);
+    // Keyword filter — title, description, AND tags array ($elemMatch for arrays)
+    const keywordFilter = searchPat ? {
+      $or: [
+        { title:       { $regex: searchPat, $options: 'i' } },
+        { description: { $regex: searchPat, $options: 'i' } },
+        { tags:        { $elemMatch: { $regex: searchPat, $options: 'i' } } },
+      ],
+    } : {};
 
-        // STRING-based $regex only — no JS RegExp objects (strict Server API safe)
-        let found: Record<string, unknown>[] = [];
-        if (searchPat) {
-          found = await coll.find({
-            $or: [
-              { title:       { $regex: searchPat, $options: 'i' } },
-              { description: { $regex: searchPat, $options: 'i' } },
-              { name:        { $regex: searchPat, $options: 'i' } },
-            ],
-          }).sort({ rating: -1 }).limit(21).toArray() as Record<string, unknown>[];
-          console.log(`[SymptomTriage] ${collName}: keyword query → ${found.length} docs`);
-        }
-
-        // Pad with top-rated general docs when keyword query returns < 7
-        if (found.length < 7) {
-          const seen    = new Set(found.map(d => String(d.title ?? d.name ?? '')));
-          const general = await coll.find({}).sort({ rating: -1 }).limit(21)
-            .toArray() as Record<string, unknown>[];
-          for (const d of general) {
-            const key = String(d.title ?? d.name ?? '');
-            if (key && !seen.has(key)) { found.push(d); seen.add(key); }
-          }
-          console.log(`[SymptomTriage] ${collName}: after padding → ${found.length} docs`);
-        }
-
-        if (found.length > 0) { docs = found; break; }
-      } catch (collErr) {
-        console.warn(`[SymptomTriage] ${collName} query error:`, (collErr as Error).message);
-      }
-    }
-
-    if (docs.length === 0) {
-      console.warn('[SymptomTriage] MongoDB: all collections returned 0 docs');
-      return { rawVa: [], rawNgo: [], rawState: [] };
-    }
-
+    // toRaw — fixed: location is a nested object {state, city, address} after Apr 2025 standardization
     const toRaw = (doc: Record<string, unknown>): RawResource => ({
       title:       String(doc.title ?? doc.name ?? ''),
       description: String(doc.description ?? ''),
       url:         String(doc.url ?? doc.website ?? doc.link ?? ''),
-      phone:       doc.phone ? String(doc.phone) : doc.phoneNumber ? String(doc.phoneNumber) : undefined,
+      phone:       doc.phone       ? String(doc.phone)
+                 : doc.phoneNumber ? String(doc.phoneNumber)
+                 : doc.contact     ? String(doc.contact)
+                 : undefined,
       priority:    (['high', 'medium', 'low'].includes(String(doc.priority))
                      ? doc.priority as 'high' | 'medium' | 'low' : 'medium'),
       tags:        Array.isArray(doc.tags) ? (doc.tags as string[]) : [],
@@ -366,51 +336,68 @@ async function fetchMongoResources(
       costLevel:   (['free', 'low', 'moderate', 'high'].includes(String(doc.costLevel))
                      ? doc.costLevel as 'free' | 'low' | 'moderate' | 'high' : 'free'),
       rating:      typeof doc.rating === 'number' ? doc.rating : 0,
-      location:    doc.location ? String(doc.location) : doc.state ? String(doc.state) : undefined,
+      location:    (() => {
+        const loc = doc.location;
+        if (loc && typeof loc === 'object') {
+          const obj   = loc as Record<string, unknown>;
+          const parts = [obj.city, obj.state].filter(Boolean);
+          return parts.length ? (parts.join(', ') as string) : undefined;
+        }
+        return loc ? String(loc) : doc.state ? String(doc.state) : undefined;
+      })(),
     });
 
-    // Broader classifiers — URL, resourceType, org, category
-    const isVaDoc = (d: Record<string, unknown>) => {
-      const rt  = String(d.resourceType ?? '').toLowerCase();
-      const url = String(d.url ?? d.website ?? '').toLowerCase();
-      const org = String(d.organization ?? '').toLowerCase();
-      const cat = String(d.category ?? '').toLowerCase();
-      return rt === 'va' || url.includes('va.gov') || url.includes('veterans.gov') ||
-             org.includes('veterans affairs') || cat.includes('veterans affairs');
-    };
-    const isNgoDoc = (d: Record<string, unknown>) => {
-      const rt  = String(d.resourceType ?? '').toLowerCase();
-      const cat = String(d.category ?? '').toLowerCase();
-      const org = String(d.organization ?? '').toLowerCase();
-      const url = String(d.url ?? d.website ?? '').toLowerCase();
-      return rt === 'ngo' || cat.includes('ngo') || cat.includes('nonprofit') ||
-             org.includes('project') || org.includes('network') || org.includes('foundation') ||
-             org.includes('alliance') || org.includes('association') ||
-             (!url.includes('va.gov') && !url.includes('.pa.gov') && !url.includes('dmva') && rt === 'org');
-    };
-    const isStateDoc = (d: Record<string, unknown>) => {
-      const rt  = String(d.resourceType ?? '').toLowerCase();
-      const loc = String(d.location ?? '').toLowerCase();
-      const ttl = String(d.title ?? d.name ?? '').toLowerCase();
-      const url = String(d.url ?? d.website ?? '').toLowerCase();
-      return rt === 'state' || loc.includes('pennsylvania') || loc.includes(' pa') ||
-             ttl.includes('pennsylvania') || ttl.includes('dmva') || ttl.includes('cumberland') ||
-             url.includes('.pa.gov') || url.includes('dmva.pa');
-    };
+    // ── VA track — subcategory: "federal" ────────────────────────────────────
+    const vaQuery = searchPat
+      ? { $and: [keywordFilter, { subcategory: 'federal' }] }
+      : { subcategory: 'federal' };
+    let vaRaw = await coll.find(vaQuery).sort({ rating: -1 }).limit(7)
+      .toArray() as Record<string, unknown>[];
+    if (vaRaw.length < 3) {
+      // Pad: relax keyword filter, keep subcategory constraint
+      vaRaw = await coll.find({ subcategory: 'federal' }).sort({ rating: -1 }).limit(7)
+        .toArray() as Record<string, unknown>[];
+    }
+    console.log(`[SymptomTriage] healthResources VA → ${vaRaw.length} docs`);
 
-    const rawVa    = docs.filter(isVaDoc).slice(0, 7).map(toRaw);
-    const rawNgo   = docs.filter(isNgoDoc).slice(0, 7).map(toRaw);
-    const rawState = docs.filter(isStateDoc).slice(0, 7).map(toRaw);
+    // ── NGO track — subcategory: "ngo" ────────────────────────────────────────
+    const ngoQuery = searchPat
+      ? { $and: [keywordFilter, { subcategory: 'ngo' }] }
+      : { subcategory: 'ngo' };
+    let ngoRaw = await coll.find(ngoQuery).sort({ rating: -1 }).limit(7)
+      .toArray() as Record<string, unknown>[];
+    if (ngoRaw.length < 3) {
+      ngoRaw = await coll.find({ subcategory: 'ngo' }).sort({ rating: -1 }).limit(7)
+        .toArray() as Record<string, unknown>[];
+    }
+    console.log(`[SymptomTriage] healthResources NGO → ${ngoRaw.length} docs`);
 
-    // Distribute uncategorized docs across empty tracks (non-overlapping)
-    const usedTitles = new Set([...rawVa, ...rawNgo, ...rawState].map(r => r.title));
-    const remaining  = docs
-      .filter(d => !usedTitles.has(String(d.title ?? d.name ?? '')))
-      .map(toRaw);
-    let ri = 0;
-    if (rawVa.length    === 0 && ri < remaining.length) { rawVa.push(...remaining.slice(ri, ri + 7));    ri += 7; }
-    if (rawNgo.length   === 0 && ri < remaining.length) { rawNgo.push(...remaining.slice(ri, ri + 7));   ri += 7; }
-    if (rawState.length === 0 && ri < remaining.length) { rawState.push(...remaining.slice(ri, ri + 7)); }
+    // ── State track — subcategory: "state" + PA location filter ──────────────
+    const paFilter = {
+      $or: [
+        { 'location.state': { $regex: 'Pennsylvania|\\bPA\\b', $options: 'i' } },
+        { 'location.city':  { $regex: 'Carlisle|Harrisburg|Camp Hill|York|Lancaster', $options: 'i' } },
+        { title:            { $regex: 'Pennsylvania|DMVA|Cumberland', $options: 'i' } },
+      ],
+    };
+    const stateQueryStrict = searchPat
+      ? { $and: [keywordFilter, { subcategory: 'state' }, paFilter] }
+      : { $and: [{ subcategory: 'state' }, paFilter] };
+    let stateRaw = await coll.find(stateQueryStrict).sort({ rating: -1 }).limit(7)
+      .toArray() as Record<string, unknown>[];
+    if (stateRaw.length < 3) {
+      // Relax location filter — any state-subcategory resource matching keywords
+      const stateQueryRelaxed = searchPat
+        ? { $and: [keywordFilter, { subcategory: 'state' }] }
+        : { subcategory: 'state' };
+      stateRaw = await coll.find(stateQueryRelaxed).sort({ rating: -1 }).limit(7)
+        .toArray() as Record<string, unknown>[];
+    }
+    console.log(`[SymptomTriage] healthResources State → ${stateRaw.length} docs`);
+
+    const rawVa    = vaRaw.map(toRaw);
+    const rawNgo   = ngoRaw.map(toRaw);
+    const rawState = stateRaw.map(toRaw);
 
     console.log(`[SymptomTriage] MongoDB final → VA=${rawVa.length} NGO=${rawNgo.length} State=${rawState.length}`);
     return { rawVa, rawNgo, rawState };

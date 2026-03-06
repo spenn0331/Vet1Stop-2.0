@@ -609,7 +609,7 @@ _This is not medical advice. Discuss with your VA provider or primary doctor._`,
                   </div>
                 )}
 
-                {!isHandedOff && (
+                {(!isHandedOff || chatExpanded) && (
                   <div className="flex gap-2 items-end p-3 bg-white border-b border-gray-200">
                     <textarea
                       ref={inputRef}
@@ -634,7 +634,7 @@ _This is not medical advice. Discuss with your VA provider or primary doctor._`,
                   </div>
                 )}
 
-                {!isHandedOff && (
+                {(!isHandedOff || chatExpanded) && (
                   <div className="flex items-center justify-between px-4 py-2 bg-white">
                     <button onClick={handleReset} className="text-xs text-gray-400 hover:text-[#1A2C5B] transition-colors">Start Over</button>
                     <button

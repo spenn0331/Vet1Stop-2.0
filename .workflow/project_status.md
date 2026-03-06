@@ -58,9 +58,33 @@ Phase 1 + 1.5 data-harvesting skeleton — ratings flow Day 1, post-launch team 
 - Despite this, the data is **well-structured and complete**: 190 docs in both `healthResources` and `symptomResources`, all with correct `subcategory` classification, rich `tags` arrays (11–32 keywords), `rating`, nested `location` objects, `symptoms` arrays, `approachTypes`, and `qualityScore`.
 - **No database changes needed.** The fix is entirely in `route.ts`: use `subcategory` for track classification, `location.state` for state filtering, query `ngos` collection, and remove the "remaining dump" distributor.
 
-**Fix plan (2 files):**
-1. `src/app/api/health/symptom-triage/route.ts` — Rewrite `fetchMongoResources` to run 3 separate track-specific queries using `subcategory` field + `location.state` dot notation + `ngos` collection for NGO track.
-2. `src/app/health/components/SymptomFinderWizard.tsx` — Keep chat input area visible when `isHandedOff` is true.
+**Fix implemented (Mar 6, 2026) — 2 files:**
+1. `src/app/api/health/symptom-triage/route.ts` — Rewrote `fetchMongoResources`: query `healthResources` ONLY (dropped collection loop + `symptomResources`/`ngos`), 3 separate targeted queries using `subcategory: 'federal'|'ngo'|'state'`, `location.state` dot notation for PA filter, `tags $elemMatch` for keyword matching, pad-fallback per track, removed heuristic classifiers + remaining-dump distributor.
+2. `src/app/health/components/SymptomFinderWizard.tsx` — Fixed chat input: `{!isHandedOff && ...}` → `{(!isHandedOff || chatExpanded) && ...}` on lines 612 + 637. Input now visible when refine panel is expanded post-handoff.
+
+### 📦 Database Roadmap — Phase-by-Phase
+
+**Phase 1 (Current — Q1/Q2 2026) ✅ No DB changes needed**
+- `healthResources` (190 docs): `subcategory: "federal"|"ngo"|"state"` classification is sufficient for all Symptom Finder queries. Source of truth for VA/NGO/State tabs.
+- `ratings` collection: auto-created on first feedback POST (Strike 2 schema). No manual seeding required.
+- `educationResources`, `jobResources`, `lifeLeisureResources`: existing, serving their respective pages, no changes needed for Phase 1 Health MVP.
+- `ngos`, `undefinedResources`: legacy artifacts from Apr 2025 reformulation — not queried, not deleted. Can be cleaned up in a future maintenance pass.
+
+**Phase 1.5 (Q2 2026) — PCS Commander + Local VOB Directory**
+- **`localResources`** (6 docs currently): Expand to full PA/national VOB directory. Add `location.coordinates: {lat, lng}` for Leaflet map rendering. Seed from partner data or verified scraping.
+- **`pcsPlans`** collection (NEW): Stores per-user relocation Gantt data. Schema: `userId` (Firebase UID), `originBase`, `destinationBase`, `timeline[]`, `leadCapture`, `referralAgentId`. Real estate lead routing API writes here.
+
+**Phase 2 (Q3 2026) — Smart Bridge → Persistent Database Profile**
+- **`userProfiles`** collection (NEW): Replaces `localStorage` (`vet1stop_recon_bridge_data`, `vet1stop_symptom_profile`) as the Smart Bridge transport layer. Schema: `firebaseUid`, `branch`, `era`, `state`, `conditions[]`, `seaBag[]`, `bridgeHistory[]`. Enables cross-device persistence + personalized AI recommendations.
+- **`wellnessCheckins`** collection (NEW): For AI Wellness Predictor (Phase 1–2 feature). Schema: `userId`, `date`, `moodScore`, `symptoms[]`, `flags[]`.
+
+**Phase 3 (Q4 2026) — Education + Shop Marketplace**
+- **`educationResources`**: Expand to include GI Bill partner schools with `gigBillApproved`, `veteranGradRate`, `tuitionCap` fields for GI Bill Pathfinder tool and Education Lead Gen revenue stream.
+- **`shopResources`** (19 docs currently): Expand to full marketplace schema — add `sellerId`, `price`, `inventory`, `stripeProductId` for Stripe checkout integration and Vet1Stop Shop launch.
+
+**Phase 5 (Year 3+) — VA Blue Button Direct Integration**
+- Direct VA Blue Button API (`va.gov/blue-button`) integration to pull veteran medical records in real-time, replacing the manual PDF upload flow in Records Recon. Requires HIPAA compliance agreement + VA Digital Experience API partnership.
+- Full `userProfiles` schema expansion to store anonymized health trend data for AI Wellness Predictor and personalized resource matching at scale.
 
 ### ✅ Previously Completed (Mar 3, 2026) — Symptom Finder Triage V3
 
