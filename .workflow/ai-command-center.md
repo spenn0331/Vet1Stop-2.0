@@ -13,7 +13,7 @@
 2. Zero-Clutter Mandate — delete every .fixed/.temp/.new/.old file on sight.
 3. Next.js 15 Safety — localStorage/window ONLY inside useEffect + "use client".
 4. One Driver Rule — never fight Cursor on the same file.
-5. Living Master Fidelity — exact Phase 1 only.
+5. Living Master Strategy — follow `.workflow/master-strategy.md` exactly.
 
 ## How We Operate
 - Gemini/Grok drop God-Tier Prompt → Windsurf outputs plan → audit → "PLAN LOCKED" → Sean says "CODE" → ship.

@@ -34,6 +34,34 @@ Phase 1 + 1.5 data-harvesting skeleton — ratings flow Day 1, post-launch team 
 - **`src/app/admin/page.tsx`** (EDITED): Added "Ratings Inbox" section with empty table stub (Resource, Track, Thumbs, Rating, Timestamp columns). "Phase 1.5 Skeleton" badge. Note: "Data will flow here Day 1 — ready for post-launch team". Zero PII disclaimer.
 - All 4 files carry comment: `// Phase 1 + 1.5 feedback framework skeleton — data-ready Day 1 per Living Master MD Section 2 ★ — Strike 2 March 2026`
 
+### 🔴 Strike 3 — Database Query Fix + Chat Input Bug (Mar 5–6, 2026)
+
+**Status:** Diagnosed, fix pending implementation. Database itself is healthy — code is the problem.
+
+**Problem 1: Resources in wrong tabs (VA resources in State tab, state resources in VA tab, Florida resources showing for PA user)**
+- **Root cause:** `fetchMongoResources()` in `symptom-triage/route.ts` was written without knowledge of the actual database schema. It ran a single keyword query against `symptomResources` (190 docs), then tried to classify results into VA/NGO/State tracks using URL pattern heuristics (`url.includes('va.gov')`, org name matching, location string checks). Three fatal flaws:
+  1. **Schema mismatch:** Every document already has `subcategory: "federal" | "ngo" | "state"` — the correct track classification field — but the code never reads it. Instead it guessed from URLs, catching state VA departments (e.g., "Florida Dept of Veterans' Affairs") as federal VA resources.
+  2. **Broken `location` access:** The `location` field was transformed into a nested object `{state, city, address}` during the Apr 2025 database standardization (Era 3). The code did `String(location)` which returns `"[object Object]"` — never matching any state filter. Fix: use dot notation `location.state`.
+  3. **"Remaining dump" fallback:** Uncategorized docs were randomly assigned to the first empty track via an index offset, putting federal VA resources in the State tab and vice versa.
+
+**Problem 2: Only 2 NGO resources (NMFA + Navy SEAL Foundation — both irrelevant to user)**
+- **Root cause:** The dedicated `ngos` collection (3 docs) was never queried — `fetchMongoResources` only checked `['symptomResources', 'resources', 'healthResources']`. Within `symptomResources`, the NGO classifier depended on `resourceType` (which many docs lack) instead of `subcategory: "ngo"`. Only 2 NGO-type docs happened to match user keywords, and both were branch/caregiver-specific (Navy SEAL Foundation, National Military Family Association) rather than relevant to the user's actual conditions (PTSD, back pain, sleep issues).
+
+**Problem 3: Chat input disappears after resource handoff**
+- **Root cause:** In `SymptomFinderWizard.tsx`, when `isHandedOff` is set to `true`, the text input area + send button are conditionally hidden. The earlier fix (`setChatExpanded(true)`) kept the chat **history** visible but not the **input area**, so users can see past messages but cannot type follow-ups to refine results.
+
+**Problem 4: JSON leaking to chat bubbles (partially fixed in earlier commits)**
+- **Root cause:** Grok "jumps ahead" during `quick_triage` when user answers all 3 questions in one message (`userTurns=1 < 3` → still calls `quick_triage`). Grok returns assess-style JSON instead of conversational text. The `sanitizeAiMessage` regex failed on truncated JSON (no closing `}` when max_tokens hit). Fixed with nuclear keyword-based sanitizer + jump-ahead handler. JSON leak is resolved but resource quality issues (Problems 1–2) remained.
+
+**Database forensic findings (Mar 6, 2026):**
+- The database went through 4 schema eras across multiple AI tools (Era 1: original seed → Era 2: reformulation → Era 3: standardization → Era 4: symptom enhancement). Each layer added fields without fully completing the previous migration.
+- Despite this, the data is **well-structured and complete**: 190 docs in both `healthResources` and `symptomResources`, all with correct `subcategory` classification, rich `tags` arrays (11–32 keywords), `rating`, nested `location` objects, `symptoms` arrays, `approachTypes`, and `qualityScore`.
+- **No database changes needed.** The fix is entirely in `route.ts`: use `subcategory` for track classification, `location.state` for state filtering, query `ngos` collection, and remove the "remaining dump" distributor.
+
+**Fix plan (2 files):**
+1. `src/app/api/health/symptom-triage/route.ts` — Rewrite `fetchMongoResources` to run 3 separate track-specific queries using `subcategory` field + `location.state` dot notation + `ngos` collection for NGO track.
+2. `src/app/health/components/SymptomFinderWizard.tsx` — Keep chat input area visible when `isHandedOff` is true.
+
 ### ✅ Previously Completed (Mar 3, 2026) — Symptom Finder Triage V3
 
 **Pass 1 — Core Triage + Scoring Engine (commit `38beebf4`)**
