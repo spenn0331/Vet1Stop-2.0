@@ -111,7 +111,7 @@ To move data from the current 'test' database to the new structure in 'vet1stop'
 
 1. **Backup Existing Data**:
    - Export all data from the 'test.resources' collection to a JSON file as a backup.
-   - Command: `mongoexport --uri='mongodb+srv://spennyvet1stop:UMGaPUiLTI1cPRMy@cluster0.hpghrbe.mongodb.net/test' --collection=resources --out=backup-resources.json`
+   - Command: `mongoexport --uri= (local saved only)
 
 2. **Create New Collections**:
    - In the 'vet1stop' database, create the new collections (`healthResources`, `educationResources`, etc.).
@@ -123,7 +123,7 @@ To move data from the current 'test' database to the new structure in 'vet1stop'
      const fs = require('fs');
      const { MongoClient } = require('mongodb');
      async function migrateData() {
-       const uri = 'mongodb+srv://spennyvet1stop:UMGaPUiLTI1cPRMy@cluster0.hpghrbe.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
+       const uri = 'mongodb+srv://
        const client = new MongoClient(uri);
        await client.connect();
        const db = client.db('vet1stop');
