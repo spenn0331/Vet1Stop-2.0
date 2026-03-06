@@ -1,6 +1,8 @@
 // Fixed per Living Master MD Section 2 Phase 1 ★ — Strike 1 API Stabilization March 2026
+// Strike 1 + DB Fallback Fix: MongoDB query replaces hardcoded static fallback — March 2026
 
 import { NextRequest, NextResponse } from 'next/server';
+import { connectToDatabase } from '@/lib/mongodb';
 import {
   scoreAndSortResources,
   buildScoringContext,
@@ -271,6 +273,106 @@ function applyScoring(
   };
 }
 
+// ─── Keyword extractor ───────────────────────────────────────────────────────
+
+function extractKeywords(text: string): string[] {
+  const stopWords = new Set([
+    'i', 'me', 'my', 'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to',
+    'for', 'of', 'with', 'have', 'has', 'is', 'are', 'was', 'be', 'been', 'do',
+    'does', 'did', 'not', 'no', 'yes', 'its', 'it', 'this', 'that', 'what', 'how',
+    'about', 'any', 'some', 'get', 'can', 'will', 'would', 'could', 'should', 'just',
+    'also', 'your', 'you', 'we', 'they', 'he', 'she', 'been', 'very', 'more', 'want',
+    'need', 'help', 'find', 'know', 'tell', 'here', 'there', 'when', 'where', 'which',
+  ]);
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter(w => w.length > 3 && !stopWords.has(w))
+    .slice(0, 12);
+}
+
+// ─── MongoDB resource fetcher (replaces static fallback) ─────────────────────
+
+async function fetchMongoResources(
+  keywords: string[],
+  bridgeContext?: BridgeContext,
+): Promise<{ rawVa: RawResource[]; rawNgo: RawResource[]; rawState: RawResource[] }> {
+  try {
+    const dbName = process.env.MONGODB_DB || 'vet1stop';
+    const { db } = await connectToDatabase(dbName);
+
+    const collectionsToTry = ['symptomResources', 'resources', 'healthResources'];
+    let docs: Record<string, unknown>[] = [];
+
+    for (const collName of collectionsToTry) {
+      const coll = db.collection(collName);
+      const count = await coll.countDocuments({});
+      if (count === 0) continue;
+
+      const query = keywords.length > 0
+        ? {
+            $or: [
+              { tags: { $in: keywords.map(k => new RegExp(k, 'i')) } },
+              { title: { $regex: keywords.join('|'), $options: 'i' } },
+              { description: { $regex: keywords.join('|'), $options: 'i' } },
+              { categories: { $in: keywords.map(k => new RegExp(k, 'i')) } },
+            ],
+          }
+        : {};
+
+      docs = await coll.find(query).sort({ rating: -1 }).limit(24).toArray() as Record<string, unknown>[];
+      if (docs.length > 0) {
+        console.log(`[SymptomTriage] MongoDB fallback: ${docs.length} docs from ${collName}`);
+        break;
+      }
+    }
+
+    if (docs.length === 0) return { rawVa: [], rawNgo: [], rawState: [] };
+
+    const toRaw = (doc: Record<string, unknown>): RawResource => ({
+      title: (doc.title as string) || '',
+      description: (doc.description as string) || '',
+      url: (doc.url as string) || (doc.website as string) || '',
+      phone: (doc.phone as string) || (doc.phoneNumber as string) || undefined,
+      priority: (doc.priority as 'high' | 'medium' | 'low') || 'medium',
+      tags: (doc.tags as string[]) || [],
+      isFree: (doc.isFree as boolean) ?? (doc.free as boolean) ?? false,
+      costLevel: (doc.costLevel as 'free' | 'low' | 'moderate' | 'high') || 'free',
+      rating: (doc.rating as number) || 0,
+      location: (doc.location as string) || (doc.state as string) || undefined,
+    });
+
+    const isVa = (d: Record<string, unknown>) =>
+      (d.resourceType as string) === 'va' ||
+      ((d.organization as string) || '').toLowerCase().includes('veterans affairs');
+    const isNgo = (d: Record<string, unknown>) =>
+      (d.resourceType as string) === 'ngo' ||
+      (d.resourceType as string) === 'NGO';
+    const isState = (d: Record<string, unknown>) =>
+      (d.resourceType as string) === 'state' ||
+      ((d.location as string) || '').toLowerCase().includes('pennsylvania');
+
+    const rawVa    = docs.filter(isVa).slice(0, 7).map(toRaw);
+    const rawNgo   = docs.filter(isNgo).slice(0, 7).map(toRaw);
+    const rawState = docs.filter(isState).slice(0, 7).map(toRaw);
+
+    // If any track is empty, fill from uncategorized remaining docs
+    const usedTitles = new Set([...rawVa, ...rawNgo, ...rawState].map(r => r.title));
+    const remaining = docs
+      .filter(d => !usedTitles.has((d.title as string) || ''))
+      .map(toRaw);
+
+    if (rawNgo.length === 0 && remaining.length > 0) rawNgo.push(...remaining.slice(0, 7));
+    if (rawVa.length === 0 && remaining.length > 0) rawVa.push(...remaining.slice(0, 7));
+
+    return { rawVa, rawNgo, rawState };
+  } catch (err) {
+    console.warn('[SymptomTriage] MongoDB fetchMongoResources failed:', err);
+    return { rawVa: [], rawNgo: [], rawState: [] };
+  }
+}
+
 // ─── Static fallbacks ─────────────────────────────────────────────────────────
 
 function getQuickTriageFallback(): object {
@@ -417,9 +519,13 @@ export async function POST(request: NextRequest) {
 
       if (aiResponse) {
         try {
-          // Grok is instructed to return pure JSON, but sometimes wraps it in
-          // prose or markdown. Extract the outermost JSON object.
-          const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
+          // Strip markdown fences before parsing — Grok sometimes wraps JSON in ```json```
+          const strippedResponse = aiResponse
+            .replace(/```json\s*/gi, '')
+            .replace(/```\s*/g, '')
+            .trim();
+          // Extract the outermost JSON object.
+          const jsonMatch = strippedResponse.match(/\{[\s\S]*\}/);
           if (jsonMatch) {
             const parsed = JSON.parse(jsonMatch[0]);
 
@@ -460,7 +566,31 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // AI unavailable or parse failed → static fallback with scoring
+      // AI unavailable or parse failed → query MongoDB for real resources
+      const userTexts = [
+        userMessage ?? '',
+        ...messages.filter(m => m.role === 'user').map(m => m.content),
+      ].join(' ');
+      const kws = extractKeywords(userTexts);
+      const { rawVa, rawNgo, rawState } = await fetchMongoResources(kws, bridgeContext);
+
+      if (rawVa.length + rawNgo.length + rawState.length > 0) {
+        const scored = applyScoring(rawVa, rawNgo, rawState, bridgeContext);
+        return NextResponse.json({
+          aiMessage: `Based on your situation, here are resources matched to your needs. This is not medical advice. Discuss with your VA provider or primary doctor.`,
+          nextStep: 'complete',
+          isCrisis: false,
+          severity: 'moderate' as const,
+          recommendations: {
+            va:    scored.va.map(r    => ({ ...r, track: 'va'    as const })),
+            ngo:   scored.ngo.map(r   => ({ ...r, track: 'ngo'   as const })),
+            state: scored.state.map(r => ({ ...r, track: 'state' as const })),
+          },
+          keywords: scored.keywords,
+        });
+      }
+
+      // MongoDB also empty → final static fallback
       return NextResponse.json(getAssessFallback(bridgeContext));
     }
 

@@ -189,7 +189,17 @@ export default function SymptomFinderWizard({ bridgeData = null }: SymptomFinder
     if (bridgeData && bridgeData.conditions.length > 0 && step === 'idle') {
       const openingMsg: TriageMessage = {
         role: 'assistant',
-        content: `I got you — I can see your records show **${bridgeData.conditions.map(c => c.condition).slice(0, 3).join(', ')}${bridgeData.conditions.length > 3 ? ` and ${bridgeData.conditions.length - 3} more` : ''}**.\n\nTo find the best resources for you, I just need two quick answers:\n\n**1.** Do you already have an active VA claim for any of these conditions? *(Yes / No)*\n\n**2.** How long has this been affecting your daily life, and on a scale of 1–10 how much does it impact you? *(e.g., "8 years, impact 7/10")*\n\n_This is not medical advice. Discuss with your VA provider or primary doctor._`,
+        content: `I got you — I can see your records show **${bridgeData.conditions.map(c => c.condition).slice(0, 3).join(', ')}${bridgeData.conditions.length > 3 ? ` and ${bridgeData.conditions.length - 3} more` : ''}**.
+
+To find the best resources for you, I need three quick answers:
+
+**1.** Do you already have an active VA claim for any of these conditions? *(Yes / No)*
+
+**2.** Are you currently receiving VA care, and are you satisfied with it? *(Yes / No / Not enrolled)*
+
+**3.** Is there anything else about your situation you'd like to share before I find your resources?
+
+_This is not medical advice. Discuss with your VA provider or primary doctor._`,
         timestamp: Date.now(),
       };
       setMessages([openingMsg]);
@@ -309,6 +319,7 @@ export default function SymptomFinderWizard({ bridgeData = null }: SymptomFinder
           keywords: data.keywords ?? [],
         });
         setIsHandedOff(true);
+        setChatExpanded(true);
         setStep('results');
 
         try {
@@ -355,7 +366,7 @@ export default function SymptomFinderWizard({ bridgeData = null }: SymptomFinder
     setUserInput('');
     setSuggestedQuestions([]);
     const userTurns = newMessages.filter(m => m.role === 'user').length;
-    callTriageApi(newMessages, userTurns >= 2 ? 'assess' : 'quick_triage', text);
+    callTriageApi(newMessages, userTurns >= 3 ? 'assess' : 'quick_triage', text);
   }, [userInput, isLoading, messages, callTriageApi]);
 
   const handleSuggestedQuestion = useCallback((q: string) => {
@@ -364,7 +375,7 @@ export default function SymptomFinderWizard({ bridgeData = null }: SymptomFinder
     setMessages(newMessages);
     setSuggestedQuestions([]);
     const userTurns = newMessages.filter(m => m.role === 'user').length;
-    callTriageApi(newMessages, userTurns >= 2 ? 'assess' : 'quick_triage', q);
+    callTriageApi(newMessages, userTurns >= 3 ? 'assess' : 'quick_triage', q);
   }, [messages, callTriageApi]);
 
   const handleSkipChat = useCallback(() => {
@@ -393,7 +404,7 @@ export default function SymptomFinderWizard({ bridgeData = null }: SymptomFinder
     if (lastUser) {
       setErrorMsg(null);
       const userTurns = messages.filter(m => m.role === 'user').length;
-      callTriageApi(messages, userTurns >= 2 ? 'assess' : 'quick_triage', lastUser.content);
+      callTriageApi(messages, userTurns >= 3 ? 'assess' : 'quick_triage', lastUser.content);
     }
   }, [messages, callTriageApi]);
 
@@ -411,12 +422,12 @@ export default function SymptomFinderWizard({ bridgeData = null }: SymptomFinder
   const handleStartChat = useCallback(() => {
     const openingMsg: TriageMessage = {
       role: 'assistant',
-      content: `Copy that — let's get you the right resources fast. Just two quick answers:\n\n**1.** Do you already have an active VA claim for this, or see the VA regularly? *(Yes / No)*\n\n**2.** How long has this been affecting you, and what's your daily impact on a scale of 1–10?\n\n_This is not medical advice. Discuss with your VA provider or primary doctor._`,
+      content: `Copy that — let's get you the right resources. I need three quick answers before I can map your options:\n\n**1.** Do you already have an active VA claim for this? *(Yes / No)*\n\n**2.** Are you currently receiving VA care — and if so, are you satisfied with it? *(Yes / No / Not enrolled)*\n\n**3.** Is there anything else about your situation you'd like to share before I pull your resources?\n\n_This is not medical advice. Discuss with your VA provider or primary doctor._`,
       timestamp: Date.now(),
     };
     setMessages([openingMsg]);
     setStep('chat');
-    setSuggestedQuestions(['Yes, I have a VA claim', 'No, I don\'t have a VA claim', 'I\'m not enrolled in VA healthcare yet']);
+    setSuggestedQuestions(['Yes, active VA claim', 'No VA claim yet', 'Not enrolled in VA healthcare']);
   }, []);
 
   // Visible (non-suppressed) messages for rendering
@@ -514,10 +525,10 @@ export default function SymptomFinderWizard({ bridgeData = null }: SymptomFinder
           </div>
           <h3 className="text-xl sm:text-2xl md:text-3xl font-bold text-[#1A2C5B] mb-2 sm:mb-3">Symptom Finder</h3>
           <p className="text-gray-600 mb-2 max-w-md text-sm sm:text-base">
-            Answer 2 quick questions and we&apos;ll connect you with matched VA, NGO, and State resources.
+            Answer 3 quick questions and we&apos;ll connect you with matched VA, NGO, and State resources.
           </p>
           <p className="text-xs text-gray-400 mb-6 sm:mb-8 max-w-sm">
-            2 questions → AI maps your needs → Scored VA, NGO &amp; State resources.
+            3 questions → AI maps your needs → Scored VA, NGO &amp; State resources.
           </p>
           <button
             onClick={handleSkipChat}
@@ -531,7 +542,7 @@ export default function SymptomFinderWizard({ bridgeData = null }: SymptomFinder
             className="w-full max-w-sm inline-flex items-center justify-center gap-2 px-5 sm:px-6 py-3 sm:py-3.5 rounded-xl border-2 border-[#1A2C5B] text-[#1A2C5B] font-semibold text-sm sm:text-base hover:bg-blue-50 transition-all focus:outline-none focus:ring-4 focus:ring-blue-200"
           >
             <ChatBubbleLeftRightIcon className="h-5 w-5" />
-            Chat (2 Questions)
+            Chat (3 Questions)
           </button>
         </div>
       )}
