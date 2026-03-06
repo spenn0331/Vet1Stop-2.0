@@ -302,73 +302,120 @@ async function fetchMongoResources(
     const dbName = process.env.MONGODB_DB || 'vet1stop';
     const { db } = await connectToDatabase(dbName);
 
-    const collectionsToTry = ['symptomResources', 'resources', 'healthResources'];
+    const collections = ['symptomResources', 'resources', 'healthResources'];
     let docs: Record<string, unknown>[] = [];
 
-    for (const collName of collectionsToTry) {
-      const coll = db.collection(collName);
-      const count = await coll.countDocuments({});
-      if (count === 0) continue;
+    // Merge bridge conditions into keyword pool for richer matching
+    const bridgeTerms = bridgeContext?.conditions?.map(c => c.condition.toLowerCase()) ?? [];
+    const allTerms    = [...new Set([...keywords, ...bridgeTerms])];
+    const searchPat   = allTerms.length > 0 ? allTerms.join('|') : '';
 
-      const query = keywords.length > 0
-        ? {
+    for (const collName of collections) {
+      try {
+        const coll  = db.collection(collName);
+        const count = await coll.countDocuments({});
+        if (count === 0) { console.log(`[SymptomTriage] ${collName}: empty`); continue; }
+        console.log(`[SymptomTriage] ${collName}: ${count} total docs`);
+
+        // STRING-based $regex only — no JS RegExp objects (strict Server API safe)
+        let found: Record<string, unknown>[] = [];
+        if (searchPat) {
+          found = await coll.find({
             $or: [
-              { tags: { $in: keywords.map(k => new RegExp(k, 'i')) } },
-              { title: { $regex: keywords.join('|'), $options: 'i' } },
-              { description: { $regex: keywords.join('|'), $options: 'i' } },
-              { categories: { $in: keywords.map(k => new RegExp(k, 'i')) } },
+              { title:       { $regex: searchPat, $options: 'i' } },
+              { description: { $regex: searchPat, $options: 'i' } },
+              { name:        { $regex: searchPat, $options: 'i' } },
             ],
-          }
-        : {};
+          }).sort({ rating: -1 }).limit(21).toArray() as Record<string, unknown>[];
+          console.log(`[SymptomTriage] ${collName}: keyword query → ${found.length} docs`);
+        }
 
-      docs = await coll.find(query).sort({ rating: -1 }).limit(24).toArray() as Record<string, unknown>[];
-      if (docs.length > 0) {
-        console.log(`[SymptomTriage] MongoDB fallback: ${docs.length} docs from ${collName}`);
-        break;
+        // Pad with top-rated general docs when keyword query returns < 7
+        if (found.length < 7) {
+          const seen    = new Set(found.map(d => String(d.title ?? d.name ?? '')));
+          const general = await coll.find({}).sort({ rating: -1 }).limit(21)
+            .toArray() as Record<string, unknown>[];
+          for (const d of general) {
+            const key = String(d.title ?? d.name ?? '');
+            if (key && !seen.has(key)) { found.push(d); seen.add(key); }
+          }
+          console.log(`[SymptomTriage] ${collName}: after padding → ${found.length} docs`);
+        }
+
+        if (found.length > 0) { docs = found; break; }
+      } catch (collErr) {
+        console.warn(`[SymptomTriage] ${collName} query error:`, (collErr as Error).message);
       }
     }
 
-    if (docs.length === 0) return { rawVa: [], rawNgo: [], rawState: [] };
+    if (docs.length === 0) {
+      console.warn('[SymptomTriage] MongoDB: all collections returned 0 docs');
+      return { rawVa: [], rawNgo: [], rawState: [] };
+    }
 
     const toRaw = (doc: Record<string, unknown>): RawResource => ({
-      title: (doc.title as string) || '',
-      description: (doc.description as string) || '',
-      url: (doc.url as string) || (doc.website as string) || '',
-      phone: (doc.phone as string) || (doc.phoneNumber as string) || undefined,
-      priority: (doc.priority as 'high' | 'medium' | 'low') || 'medium',
-      tags: (doc.tags as string[]) || [],
-      isFree: (doc.isFree as boolean) ?? (doc.free as boolean) ?? false,
-      costLevel: (doc.costLevel as 'free' | 'low' | 'moderate' | 'high') || 'free',
-      rating: (doc.rating as number) || 0,
-      location: (doc.location as string) || (doc.state as string) || undefined,
+      title:       String(doc.title ?? doc.name ?? ''),
+      description: String(doc.description ?? ''),
+      url:         String(doc.url ?? doc.website ?? doc.link ?? ''),
+      phone:       doc.phone ? String(doc.phone) : doc.phoneNumber ? String(doc.phoneNumber) : undefined,
+      priority:    (['high', 'medium', 'low'].includes(String(doc.priority))
+                     ? doc.priority as 'high' | 'medium' | 'low' : 'medium'),
+      tags:        Array.isArray(doc.tags) ? (doc.tags as string[]) : [],
+      isFree:      typeof doc.isFree === 'boolean' ? doc.isFree
+                   : typeof doc.free  === 'boolean' ? (doc.free as boolean) : false,
+      costLevel:   (['free', 'low', 'moderate', 'high'].includes(String(doc.costLevel))
+                     ? doc.costLevel as 'free' | 'low' | 'moderate' | 'high' : 'free'),
+      rating:      typeof doc.rating === 'number' ? doc.rating : 0,
+      location:    doc.location ? String(doc.location) : doc.state ? String(doc.state) : undefined,
     });
 
-    const isVa = (d: Record<string, unknown>) =>
-      (d.resourceType as string) === 'va' ||
-      ((d.organization as string) || '').toLowerCase().includes('veterans affairs');
-    const isNgo = (d: Record<string, unknown>) =>
-      (d.resourceType as string) === 'ngo' ||
-      (d.resourceType as string) === 'NGO';
-    const isState = (d: Record<string, unknown>) =>
-      (d.resourceType as string) === 'state' ||
-      ((d.location as string) || '').toLowerCase().includes('pennsylvania');
+    // Broader classifiers — URL, resourceType, org, category
+    const isVaDoc = (d: Record<string, unknown>) => {
+      const rt  = String(d.resourceType ?? '').toLowerCase();
+      const url = String(d.url ?? d.website ?? '').toLowerCase();
+      const org = String(d.organization ?? '').toLowerCase();
+      const cat = String(d.category ?? '').toLowerCase();
+      return rt === 'va' || url.includes('va.gov') || url.includes('veterans.gov') ||
+             org.includes('veterans affairs') || cat.includes('veterans affairs');
+    };
+    const isNgoDoc = (d: Record<string, unknown>) => {
+      const rt  = String(d.resourceType ?? '').toLowerCase();
+      const cat = String(d.category ?? '').toLowerCase();
+      const org = String(d.organization ?? '').toLowerCase();
+      const url = String(d.url ?? d.website ?? '').toLowerCase();
+      return rt === 'ngo' || cat.includes('ngo') || cat.includes('nonprofit') ||
+             org.includes('project') || org.includes('network') || org.includes('foundation') ||
+             org.includes('alliance') || org.includes('association') ||
+             (!url.includes('va.gov') && !url.includes('.pa.gov') && !url.includes('dmva') && rt === 'org');
+    };
+    const isStateDoc = (d: Record<string, unknown>) => {
+      const rt  = String(d.resourceType ?? '').toLowerCase();
+      const loc = String(d.location ?? '').toLowerCase();
+      const ttl = String(d.title ?? d.name ?? '').toLowerCase();
+      const url = String(d.url ?? d.website ?? '').toLowerCase();
+      return rt === 'state' || loc.includes('pennsylvania') || loc.includes(' pa') ||
+             ttl.includes('pennsylvania') || ttl.includes('dmva') || ttl.includes('cumberland') ||
+             url.includes('.pa.gov') || url.includes('dmva.pa');
+    };
 
-    const rawVa    = docs.filter(isVa).slice(0, 7).map(toRaw);
-    const rawNgo   = docs.filter(isNgo).slice(0, 7).map(toRaw);
-    const rawState = docs.filter(isState).slice(0, 7).map(toRaw);
+    const rawVa    = docs.filter(isVaDoc).slice(0, 7).map(toRaw);
+    const rawNgo   = docs.filter(isNgoDoc).slice(0, 7).map(toRaw);
+    const rawState = docs.filter(isStateDoc).slice(0, 7).map(toRaw);
 
-    // If any track is empty, fill from uncategorized remaining docs
+    // Distribute uncategorized docs across empty tracks (non-overlapping)
     const usedTitles = new Set([...rawVa, ...rawNgo, ...rawState].map(r => r.title));
-    const remaining = docs
-      .filter(d => !usedTitles.has((d.title as string) || ''))
+    const remaining  = docs
+      .filter(d => !usedTitles.has(String(d.title ?? d.name ?? '')))
       .map(toRaw);
+    let ri = 0;
+    if (rawVa.length    === 0 && ri < remaining.length) { rawVa.push(...remaining.slice(ri, ri + 7));    ri += 7; }
+    if (rawNgo.length   === 0 && ri < remaining.length) { rawNgo.push(...remaining.slice(ri, ri + 7));   ri += 7; }
+    if (rawState.length === 0 && ri < remaining.length) { rawState.push(...remaining.slice(ri, ri + 7)); }
 
-    if (rawNgo.length === 0 && remaining.length > 0) rawNgo.push(...remaining.slice(0, 7));
-    if (rawVa.length === 0 && remaining.length > 0) rawVa.push(...remaining.slice(0, 7));
-
+    console.log(`[SymptomTriage] MongoDB final → VA=${rawVa.length} NGO=${rawNgo.length} State=${rawState.length}`);
     return { rawVa, rawNgo, rawState };
   } catch (err) {
-    console.warn('[SymptomTriage] MongoDB fetchMongoResources failed:', err);
+    console.error('[SymptomTriage] fetchMongoResources critical error:', (err as Error).message);
     return { rawVa: [], rawNgo: [], rawState: [] };
   }
 }
@@ -529,20 +576,36 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(getCrisisResponse());
     }
 
-    // Assess step: AI-powered assessment + scoring
+    // Assess step: MongoDB-FIRST (primary source) + Grok for aiMessage/fallback
     if (step === 'assess') {
+      const allUserTexts = [
+        userMessage ?? '',
+        ...messages.filter(m => m.role === 'user').map(m => m.content),
+      ].join(' ');
+      const kws = extractKeywords(allUserTexts);
+
+      // ── 1. Query MongoDB FIRST ───────────────────────────────────────────────────
+      const { rawVa: dbVa, rawNgo: dbNgo, rawState: dbState } =
+        await fetchMongoResources(kws, bridgeContext);
+      const mongoHas = dbVa.length + dbNgo.length + dbState.length > 0;
+
+      // ── 2. Call Grok for aiMessage prose + last-resort resources (if DB empty) ─
       const systemPrompt = buildSystemPrompt('assess', bridgeContext);
-      const aiResponse = await callGrokAI(messages, systemPrompt);
+      const aiResponse   = await callGrokAI(messages, systemPrompt);
+
+      let aiMessage  = '';
+      let grokVa:    RawResource[] = [];
+      let grokNgo:   RawResource[] = [];
+      let grokState: RawResource[] = [];
+      let severity   = 'moderate';
 
       if (aiResponse) {
         try {
-          // Strip markdown fences before parsing — Grok sometimes wraps JSON in ```json```
-          const strippedResponse = aiResponse
+          const stripped = aiResponse
             .replace(/```json\s*/gi, '')
             .replace(/```\s*/g, '')
             .trim();
-          // Extract the outermost JSON object.
-          const jsonMatch = strippedResponse.match(/\{[\s\S]*\}/);
+          const jsonMatch = stripped.match(/\{[\s\S]*\}/);
           if (jsonMatch) {
             const parsed = JSON.parse(jsonMatch[0]);
 
@@ -550,54 +613,40 @@ export async function POST(request: NextRequest) {
               return NextResponse.json(getCrisisResponse());
             }
 
-            // Extract resource arrays from the parsed JSON
-            const rawVa    = parsed.vaResources    ?? [];
-            const rawNgo   = parsed.ngoResources   ?? [];
-            const rawState = parsed.stateResources ?? [];
-            const hasResources = rawVa.length + rawNgo.length + rawState.length > 0;
+            severity  = parsed.severity ?? 'moderate';
+            aiMessage = sanitizeAiMessage(String(parsed.aiMessage ?? ''));
 
-            // Apply scoring to AI-returned resources
-            const scored = hasResources
-              ? applyScoring(rawVa, rawNgo, rawState, bridgeContext)
-              : applyScoring([], [], [], bridgeContext);
-
-            // CRITICAL: Always sanitize aiMessage to remove any raw JSON.
-            // Resources travel ONLY via the structured recommendations object.
-            const cleanMessage = sanitizeAiMessage(parsed.aiMessage ?? aiResponse);
-
-            return NextResponse.json({
-              aiMessage: cleanMessage,
-              nextStep: 'complete',
-              isCrisis: false,
-              severity: parsed.severity ?? 'moderate',
-              recommendations: {
-                va: scored.va.map((r) => ({ ...r, track: 'va' as const })),
-                ngo: scored.ngo.map((r) => ({ ...r, track: 'ngo' as const })),
-                state: scored.state.map((r) => ({ ...r, track: 'state' as const })),
-              },
-              keywords: scored.keywords,
-            });
+            // Capture Grok resource arrays ONLY as fallback when MongoDB is empty
+            if (!mongoHas) {
+              grokVa    = Array.isArray(parsed.vaResources)    ? parsed.vaResources    : [];
+              grokNgo   = Array.isArray(parsed.ngoResources)   ? parsed.ngoResources   : [];
+              grokState = Array.isArray(parsed.stateResources) ? parsed.stateResources : [];
+            }
           }
         } catch (parseErr) {
-          console.warn('[SymptomTriage] JSON parse failed, falling back to static assess:', parseErr);
+          console.warn('[SymptomTriage] assess JSON parse failed:', (parseErr as Error).message);
         }
       }
 
-      // AI unavailable or parse failed → query MongoDB for real resources
-      const userTexts = [
-        userMessage ?? '',
-        ...messages.filter(m => m.role === 'user').map(m => m.content),
-      ].join(' ');
-      const kws = extractKeywords(userTexts);
-      const { rawVa, rawNgo, rawState } = await fetchMongoResources(kws, bridgeContext);
+      // ── 3. Resolve final resource source: MongoDB preferred, Grok as fallback ──
+      const finalVa    = mongoHas ? dbVa    : grokVa;
+      const finalNgo   = mongoHas ? dbNgo   : grokNgo;
+      const finalState = mongoHas ? dbState : grokState;
+      const hasRes     = finalVa.length + finalNgo.length + finalState.length > 0;
 
-      if (rawVa.length + rawNgo.length + rawState.length > 0) {
-        const scored = applyScoring(rawVa, rawNgo, rawState, bridgeContext);
+      if (hasRes) {
+        const scored = applyScoring(finalVa, finalNgo, finalState, bridgeContext);
+        if (!aiMessage) {
+          const ct = bridgeContext?.conditions?.length
+            ? bridgeContext.conditions.slice(0, 2).map(c => c.condition).join(' and ')
+            : 'your health concerns';
+          aiMessage = `Based on your situation with ${ct}, here are your matched resources. This is not medical advice. Discuss with your VA provider or primary doctor.`;
+        }
         return NextResponse.json({
-          aiMessage: `Based on your situation, here are resources matched to your needs. This is not medical advice. Discuss with your VA provider or primary doctor.`,
+          aiMessage,
           nextStep: 'complete',
           isCrisis: false,
-          severity: 'moderate' as const,
+          severity: severity as 'low' | 'moderate' | 'high' | 'crisis',
           recommendations: {
             va:    scored.va.map(r    => ({ ...r, track: 'va'    as const })),
             ngo:   scored.ngo.map(r   => ({ ...r, track: 'ngo'   as const })),
@@ -607,7 +656,7 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      // MongoDB also empty → final static fallback
+      // ── 4. MongoDB + Grok both empty → static fallback ────────────────────────────
       return NextResponse.json(getAssessFallback(bridgeContext));
     }
 
@@ -623,56 +672,58 @@ export async function POST(request: NextRequest) {
       const grokJumpedAhead = JSON_CONTAMINATION_SIGNALS.some(sig => aiResponse.includes(sig));
 
       if (grokJumpedAhead) {
-        // Attempt to parse as a proper assess response
-        try {
-          const strippedFence = aiResponse
-            .replace(/```json\s*/gi, '')
-            .replace(/```\s*/g, '')
-            .trim();
-          const jsonMatch = strippedFence.match(/\{[\s\S]*\}/);
-          if (jsonMatch) {
-            const parsed = JSON.parse(jsonMatch[0]);
-            const rawVa    = parsed.vaResources    ?? [];
-            const rawNgo   = parsed.ngoResources   ?? [];
-            const rawState = parsed.stateResources ?? [];
-            if (rawVa.length + rawNgo.length + rawState.length > 0) {
-              const scored = applyScoring(rawVa, rawNgo, rawState, bridgeContext);
-              const cleanMessage = sanitizeAiMessage(parsed.aiMessage ?? '');
-              return NextResponse.json({
-                aiMessage: cleanMessage,
-                nextStep: 'complete',
-                isCrisis: false,
-                severity: parsed.severity ?? 'moderate',
-                recommendations: {
-                  va:    scored.va.map(r    => ({ ...r, track: 'va'    as const })),
-                  ngo:   scored.ngo.map(r   => ({ ...r, track: 'ngo'   as const })),
-                  state: scored.state.map(r => ({ ...r, track: 'state' as const })),
-                },
-                keywords: scored.keywords,
-              });
-            }
-          }
-        } catch {
-          // Truncated / malformed JSON — fall through to MongoDB below
-          console.warn('[SymptomTriage] quick_triage jump-ahead JSON parse failed (truncated?)');
-        }
-
-        // Grok jumped ahead but JSON was unusable → query MongoDB directly
+        // MongoDB PREFERRED — query DB first, use Grok only for aiMessage + last-resort resources
         const jumpTexts = [
           userMessage ?? '',
           ...messages.filter(m => m.role === 'user').map(m => m.content),
         ].join(' ');
         const jumpKws = extractKeywords(jumpTexts);
-        const { rawVa: jVa, rawNgo: jNgo, rawState: jState } =
-          await fetchMongoResources(jumpKws, bridgeContext);
 
-        if (jVa.length + jNgo.length + jState.length > 0) {
-          const scored = applyScoring(jVa, jNgo, jState, bridgeContext);
+        // ── Query MongoDB FIRST ───────────────────────────────────────────────────
+        const { rawVa: jDbVa, rawNgo: jDbNgo, rawState: jDbState } =
+          await fetchMongoResources(jumpKws, bridgeContext);
+        const jumpMongoHas = jDbVa.length + jDbNgo.length + jDbState.length > 0;
+
+        // ── Parse Grok response: aiMessage + fallback resources if MongoDB empty ─
+        let jumpMsg      = '';
+        let jGrokVa:    RawResource[] = [];
+        let jGrokNgo:   RawResource[] = [];
+        let jGrokState: RawResource[] = [];
+        let jumpSev      = 'moderate';
+        try {
+          const sf = aiResponse.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+          const jm = sf.match(/\{[\s\S]*\}/);
+          if (jm) {
+            const parsed = JSON.parse(jm[0]);
+            jumpMsg = sanitizeAiMessage(String(parsed.aiMessage ?? ''));
+            jumpSev = parsed.severity ?? 'moderate';
+            if (!jumpMongoHas) {
+              jGrokVa    = Array.isArray(parsed.vaResources)    ? parsed.vaResources    : [];
+              jGrokNgo   = Array.isArray(parsed.ngoResources)   ? parsed.ngoResources   : [];
+              jGrokState = Array.isArray(parsed.stateResources) ? parsed.stateResources : [];
+            }
+          }
+        } catch {
+          console.warn('[SymptomTriage] quick_triage jump-ahead JSON parse failed (truncated?)');
+        }
+
+        const finalVa    = jumpMongoHas ? jDbVa    : jGrokVa;
+        const finalNgo   = jumpMongoHas ? jDbNgo   : jGrokNgo;
+        const finalState = jumpMongoHas ? jDbState : jGrokState;
+
+        if (finalVa.length + finalNgo.length + finalState.length > 0) {
+          const scored = applyScoring(finalVa, finalNgo, finalState, bridgeContext);
+          if (!jumpMsg) {
+            const ct = bridgeContext?.conditions?.length
+              ? bridgeContext.conditions.slice(0, 2).map(c => c.condition).join(' and ')
+              : 'your health concerns';
+            jumpMsg = `Based on your situation with ${ct}, here are your matched resources. This is not medical advice. Discuss with your VA provider or primary doctor.`;
+          }
           return NextResponse.json({
-            aiMessage: 'Based on your situation, here are resources matched to your needs. This is not medical advice. Discuss with your VA provider or primary doctor.',
+            aiMessage: jumpMsg,
             nextStep: 'complete',
             isCrisis: false,
-            severity: 'moderate' as const,
+            severity: jumpSev as 'low' | 'moderate' | 'high' | 'crisis',
             recommendations: {
               va:    scored.va.map(r    => ({ ...r, track: 'va'    as const })),
               ngo:   scored.ngo.map(r   => ({ ...r, track: 'ngo'   as const })),
@@ -682,7 +733,7 @@ export async function POST(request: NextRequest) {
           });
         }
 
-        // Even MongoDB empty — static fallback (last resort)
+        // MongoDB + Grok both empty — static fallback (last resort)
         return NextResponse.json(getAssessFallback(bridgeContext));
       }
 
