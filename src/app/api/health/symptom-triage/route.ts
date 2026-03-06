@@ -469,10 +469,30 @@ function getCrisisResponse() {
 // conversational aiMessage field. Resources MUST travel via the structured
 // `recommendations` object — never inside the chat text.
 
+// JSON contamination signals — if ANY of these appear in the message text,
+// the message is considered JSON-contaminated and must be replaced wholesale.
+// This handles truncated JSON (no closing `}`) which regex-replace can't catch.
+const JSON_CONTAMINATION_SIGNALS = [
+  '"vaResources"',
+  '"ngoResources"',
+  '"stateResources"',
+  '"severity":',
+  '"aiMessage":',
+] as const;
+
 function sanitizeAiMessage(raw: string): string {
   if (!raw) return '';
 
-  // Strip standalone JSON objects/arrays (greedy but effective)
+  // Nuclear check — if ANY resource JSON keyword is present, the entire
+  // string is contaminated (possibly truncated). Replace immediately.
+  // This is more reliable than regex which requires a closing `}` to match.
+  const isJsonContaminated = JSON_CONTAMINATION_SIGNALS.some(sig => raw.includes(sig));
+  if (isJsonContaminated) {
+    return 'Here are your top matched resources based on your records. '
+         + 'This is not medical advice. Discuss with your VA provider or primary doctor.';
+  }
+
+  // For non-resource JSON (stray brackets, partial arrays, etc.), clean with regex
   let cleaned = raw
     .replace(/\{[\s\S]*"vaResources"[\s\S]*\}/g, '')
     .replace(/\{[\s\S]*"ngoResources"[\s\S]*\}/g, '')
@@ -480,14 +500,11 @@ function sanitizeAiMessage(raw: string): string {
     .replace(/\[[\s\S]*"title"[\s\S]*"description"[\s\S]*\]/g, '')
     .trim();
 
-  // If the entire message was JSON and nothing useful remains, return a
-  // hardcoded friendly summary so the chat bubble is never empty.
   if (!cleaned || cleaned.length < 20) {
     cleaned = 'Here are your top matched resources based on your records. '
             + 'This is not medical advice. Discuss with your VA provider or primary doctor.';
   }
 
-  // Guarantee the medical disclaimer is always present
   if (!cleaned.includes('not medical advice')) {
     cleaned += ' This is not medical advice. Discuss with your VA provider or primary doctor.';
   }
@@ -599,8 +616,77 @@ export async function POST(request: NextRequest) {
     const aiResponse = await callGrokAI(messages, systemPrompt);
 
     if (aiResponse) {
-      // Sanitize quick_triage responses too — Grok sometimes jumps ahead
-      // and dumps resource JSON even during the conversational phase.
+      // ── Detect "Grok jumped ahead" ──────────────────────────────────────
+      // When user answers all questions in one message, Grok ignores the
+      // quick_triage instruction and returns assess-style JSON. We MUST
+      // intercept this here — never let it leak into aiMessage as prose.
+      const grokJumpedAhead = JSON_CONTAMINATION_SIGNALS.some(sig => aiResponse.includes(sig));
+
+      if (grokJumpedAhead) {
+        // Attempt to parse as a proper assess response
+        try {
+          const strippedFence = aiResponse
+            .replace(/```json\s*/gi, '')
+            .replace(/```\s*/g, '')
+            .trim();
+          const jsonMatch = strippedFence.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0]);
+            const rawVa    = parsed.vaResources    ?? [];
+            const rawNgo   = parsed.ngoResources   ?? [];
+            const rawState = parsed.stateResources ?? [];
+            if (rawVa.length + rawNgo.length + rawState.length > 0) {
+              const scored = applyScoring(rawVa, rawNgo, rawState, bridgeContext);
+              const cleanMessage = sanitizeAiMessage(parsed.aiMessage ?? '');
+              return NextResponse.json({
+                aiMessage: cleanMessage,
+                nextStep: 'complete',
+                isCrisis: false,
+                severity: parsed.severity ?? 'moderate',
+                recommendations: {
+                  va:    scored.va.map(r    => ({ ...r, track: 'va'    as const })),
+                  ngo:   scored.ngo.map(r   => ({ ...r, track: 'ngo'   as const })),
+                  state: scored.state.map(r => ({ ...r, track: 'state' as const })),
+                },
+                keywords: scored.keywords,
+              });
+            }
+          }
+        } catch {
+          // Truncated / malformed JSON — fall through to MongoDB below
+          console.warn('[SymptomTriage] quick_triage jump-ahead JSON parse failed (truncated?)');
+        }
+
+        // Grok jumped ahead but JSON was unusable → query MongoDB directly
+        const jumpTexts = [
+          userMessage ?? '',
+          ...messages.filter(m => m.role === 'user').map(m => m.content),
+        ].join(' ');
+        const jumpKws = extractKeywords(jumpTexts);
+        const { rawVa: jVa, rawNgo: jNgo, rawState: jState } =
+          await fetchMongoResources(jumpKws, bridgeContext);
+
+        if (jVa.length + jNgo.length + jState.length > 0) {
+          const scored = applyScoring(jVa, jNgo, jState, bridgeContext);
+          return NextResponse.json({
+            aiMessage: 'Based on your situation, here are resources matched to your needs. This is not medical advice. Discuss with your VA provider or primary doctor.',
+            nextStep: 'complete',
+            isCrisis: false,
+            severity: 'moderate' as const,
+            recommendations: {
+              va:    scored.va.map(r    => ({ ...r, track: 'va'    as const })),
+              ngo:   scored.ngo.map(r   => ({ ...r, track: 'ngo'   as const })),
+              state: scored.state.map(r => ({ ...r, track: 'state' as const })),
+            },
+            keywords: scored.keywords,
+          });
+        }
+
+        // Even MongoDB empty — static fallback (last resort)
+        return NextResponse.json(getAssessFallback(bridgeContext));
+      }
+
+      // Normal conversational response — sanitize and return
       const cleanMessage = sanitizeAiMessage(aiResponse);
 
       return NextResponse.json({
