@@ -217,6 +217,7 @@ interface RawResource {
   costLevel?: 'free' | 'low' | 'moderate' | 'high';
   rating?: number;
   location?: string;
+  updatedAt?: string;
 }
 
 interface ScoredRawResource extends RawResource {
@@ -232,21 +233,39 @@ function applyScoring(
   ngoResources: RawResource[],
   stateResources: RawResource[],
   bridgeContext?: BridgeContext,
+  chatKeywords?: string[],
+  userProfile?: ReturnType<typeof parseUserProfile>,
 ): {
   va: ScoredRawResource[];
   ngo: ScoredRawResource[];
   state: ScoredRawResource[];
   keywords: string[];
 } {
-  const conditions = bridgeContext?.conditions?.map(c => c.condition) ?? [];
+  // Strike 4C: Merge bridge conditions + chat keywords into unified context
+  const bridgeConditions = bridgeContext?.conditions?.map(c => c.condition) ?? [];
+  const allConditions = Array.from(new Set([...bridgeConditions, ...(chatKeywords ?? [])]));
+
+  const severityWeights = chatKeywords && chatKeywords.length > 0
+    ? parseSeverityWeights(chatKeywords.join(' '), allConditions)
+    : undefined;
+
   const scoringContext = buildScoringContext({
-    conditions,
-    hasVaClaim: false, // extracted from conversation in Pass 2
+    conditions: allConditions,
+    hasVaClaim: userProfile?.hasVaClaim ?? false,
     preferences: [],
+    severityWeights,
+    userProfile: userProfile ? {
+      isPermanentTotal: userProfile.isPermanentTotal,
+      branch: userProfile.branch,
+      era: userProfile.era,
+      vaDissatisfied: userProfile.vaDissatisfied,
+    } : undefined,
   });
 
-  const scoreTrack = (resources: RawResource[]) =>
-    scoreAndSortResources(
+  // Strike 4D: Score cutoff — filter out resources below threshold; keep top 3 as safety net
+  const SCORE_CUTOFF = 35;
+  const scoreTrack = (resources: RawResource[]) => {
+    const scored = scoreAndSortResources(
       resources.map((r): ResourceInput => ({
         title: r.title,
         description: r.description,
@@ -257,13 +276,17 @@ function applyScoring(
         location: r.location ?? CARLISLE_PA_CONTEXT,
         url: r.url,
         phone: r.phone,
+        updatedAt: r.updatedAt,
       })),
       scoringContext,
-    ).map((scored, idx): ScoredRawResource => ({
-      ...resources[idx], // preserve original fields (url, phone, priority, track)
-      ...scored,         // overlay scored fields
-      location: typeof scored.location === 'object' ? undefined : scored.location,
+    ).map((s, idx): ScoredRawResource => ({
+      ...resources[idx],
+      ...s,
+      location: typeof s.location === 'object' ? undefined : s.location,
     }));
+    const filtered = scored.filter(r => (r.score ?? 0) >= SCORE_CUTOFF);
+    return filtered.length >= 3 ? filtered : scored.slice(0, 3);
+  };
 
   return {
     va:    scoreTrack(vaResources),
@@ -273,23 +296,138 @@ function applyScoring(
   };
 }
 
-// ─── Keyword extractor ───────────────────────────────────────────────────────
+// ─── Keyword extractor (Strike 4A — compound phrase detection) ───────────────
+
+/** Known health/condition phrases detected before single-word splitting */
+const KNOWN_HEALTH_PHRASES = [
+  'back pain', 'chronic pain', 'sleep apnea', 'weight loss', 'weight gain',
+  'substance use', 'traumatic brain injury', 'hearing loss', 'mental health',
+  'physical therapy', 'peer support', 'pain management', 'adaptive sports',
+  'sleep issues', 'sleep problems', 'out of shape', 'lack motivation',
+  'lack of motivation', 'always tired', 'post traumatic',
+];
+
+/** Single health-signal words — kept regardless of length */
+const HEALTH_SIGNAL_WORDS = new Set([
+  'ptsd', 'tbi', 'pain', 'sleep', 'knee', 'back', 'anxiety', 'depression',
+  'fitness', 'weight', 'fatigue', 'tired', 'motivation', 'wellness',
+  'counseling', 'therapy', 'yoga', 'nutrition', 'stress', 'trauma',
+  'entrepreneur', 'business', 'disability', 'tinnitus', 'diabetes',
+]);
+
+/** Noise words that produce false DB regex matches */
+const KEYWORD_NOISE = new Set([
+  'i', 'me', 'my', 'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to',
+  'for', 'of', 'with', 'have', 'has', 'is', 'are', 'was', 'be', 'been', 'do',
+  'does', 'did', 'not', 'no', 'yes', 'its', 'it', 'this', 'that', 'what', 'how',
+  'about', 'any', 'some', 'get', 'can', 'will', 'would', 'could', 'should', 'just',
+  'also', 'your', 'you', 'we', 'they', 'he', 'she', 'very', 'more', 'want',
+  'need', 'help', 'find', 'know', 'tell', 'here', 'there', 'when', 'where', 'which',
+  // Noise that causes false DB matches
+  'service', 'services', 'stuff', 'things', 'shape', 'leaving', 'started',
+  'already', 'currently', 'affect', 'aspects', 'bother', 'since', 'like',
+  'aches', 'pains', 'active', 'claim', 'past', 'satisfied', 'aspiring',
+  'from', 'then', 'them', 'their', 'been', 'both', 'such', 'into', 'over',
+]);
 
 function extractKeywords(text: string): string[] {
-  const stopWords = new Set([
-    'i', 'me', 'my', 'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to',
-    'for', 'of', 'with', 'have', 'has', 'is', 'are', 'was', 'be', 'been', 'do',
-    'does', 'did', 'not', 'no', 'yes', 'its', 'it', 'this', 'that', 'what', 'how',
-    'about', 'any', 'some', 'get', 'can', 'will', 'would', 'could', 'should', 'just',
-    'also', 'your', 'you', 'we', 'they', 'he', 'she', 'been', 'very', 'more', 'want',
-    'need', 'help', 'find', 'know', 'tell', 'here', 'there', 'when', 'where', 'which',
-  ]);
-  return text
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .split(/\s+/)
-    .filter(w => w.length > 3 && !stopWords.has(w))
-    .slice(0, 12);
+  const lower = text.toLowerCase().replace(/[^a-z0-9\s'-]/g, ' ');
+  const found: string[] = [];
+
+  // Phase 1: Compound phrases (highest signal)
+  for (const phrase of KNOWN_HEALTH_PHRASES) {
+    if (lower.includes(phrase)) found.push(phrase);
+  }
+
+  // Phase 2: Single health-signal words
+  const words = lower.split(/\s+/);
+  for (const word of words) {
+    if (HEALTH_SIGNAL_WORDS.has(word) && !found.some(f => f.includes(word))) {
+      found.push(word);
+    }
+  }
+
+  // Phase 3: Meaningful remaining words (fallback for novel terms)
+  for (const word of words) {
+    if (word.length > 4 && !KEYWORD_NOISE.has(word) && !found.some(f => f.includes(word))) {
+      found.push(word);
+    }
+  }
+
+  return Array.from(new Set(found)).slice(0, 15);
+}
+
+// ─── User profile parser (Strike 4G) ─────────────────────────────────────────
+
+function parseUserProfile(text: string): {
+  isPermanentTotal: boolean;
+  hasVaClaim: boolean;
+  branch?: string;
+  era?: string;
+  vaDissatisfied: boolean;
+} {
+  const lower = text.toLowerCase();
+  const isPermanentTotal = /100\s*%\s*p\s*[&and]*\s*t|permanent\s*(and\s*)?total/.test(lower);
+  const hasVaClaim = /(active|open|pending)\s*claim|already\s*service\s*connected|service\s*connected/.test(lower)
+    && !/no\s*active|no\s*claim|don.t\s*have/.test(lower);
+  const vaDissatisfied = /not\s*satisfied|wasn.t\s*satisfied|dissatisfied|not\s*happy|poor\s*care/.test(lower);
+
+  let branch: string | undefined;
+  if (/\barmy\b/.test(lower)) branch = 'army';
+  else if (/\bnavy\b/.test(lower)) branch = 'navy';
+  else if (/\bmarine|\busmс/.test(lower)) branch = 'marines';
+  else if (/\bair\s*force\b/.test(lower)) branch = 'air force';
+  else if (/\bcoast\s*guard\b/.test(lower)) branch = 'coast guard';
+  else if (/\bspace\s*force\b/.test(lower)) branch = 'space force';
+
+  let era: string | undefined;
+  if (/post.?9.?11|post\s*9\/11|gwot|oif|oef|iraq|afghanistan/.test(lower)) era = 'post-9/11';
+  else if (/vietnam/.test(lower)) era = 'vietnam';
+  else if (/gulf\s*war/.test(lower)) era = 'gulf war';
+
+  return { isPermanentTotal, hasVaClaim, branch, era, vaDissatisfied };
+}
+
+// ─── Severity weight parser (Strike 4J) ──────────────────────────────────────
+
+/** Amplifier words that indicate a keyword is more impactful */
+const AMPLIFIERS = ['more', 'most', 'worst', 'really', 'very', 'severely', 'seriously', 'badly', 'affects me', 'bothers me most', 'affects me more'];
+
+function parseSeverityWeights(text: string, keywords: string[]): Record<string, number> {
+  const lower = text.toLowerCase();
+  const weights: Record<string, number> = {};
+
+  for (const kw of keywords) {
+    const kwLower = kw.toLowerCase();
+    // Look for amplifier words near the keyword (within 30 chars)
+    const kwIdx = lower.indexOf(kwLower);
+    if (kwIdx === -1) { weights[kwLower] = 1.0; continue; }
+    const window = lower.slice(Math.max(0, kwIdx - 40), kwIdx + kwLower.length + 40);
+    const hasAmplifier = AMPLIFIERS.some(amp => window.includes(amp));
+    // Count extra mentions
+    const mentionCount = (lower.match(new RegExp(kwLower.replace(/[+?.*()\[\]{}|^$\\]/g, '\\$&'), 'g')) ?? []).length;
+    weights[kwLower] = hasAmplifier ? 1.5 : mentionCount > 1 ? 1.3 : 1.0;
+  }
+
+  return weights;
+}
+
+// ─── Cross-domain intent detector (Strike 4I) ────────────────────────────────
+
+const CROSS_DOMAIN_SIGNALS: Record<string, string[]> = {
+  careers:   ['entrepreneur', 'business', 'job', 'career', 'employment', 'hire', 'resume', 'work', 'sdvosb'],
+  education: ['school', 'college', 'gi bill', 'degree', 'certificate', 'vocational', 'training', 'university'],
+  life:      ['housing', 'moving', 'relocation', 'lease', 'mortgage', 'pcs', 'home base', 'mwr', 'recreation'],
+};
+
+function detectCrossDomainIntent(text: string): Array<{ domain: string; signal: string }> {
+  const lower = text.toLowerCase();
+  const hints: Array<{ domain: string; signal: string }> = [];
+  for (const [domain, signals] of Object.entries(CROSS_DOMAIN_SIGNALS)) {
+    const matched = signals.find(s => lower.includes(s));
+    if (matched) hints.push({ domain, signal: matched });
+  }
+  return hints;
 }
 
 // ─── MongoDB resource fetcher (replaces static fallback) ─────────────────────
@@ -336,6 +474,7 @@ async function fetchMongoResources(
       costLevel:   (['free', 'low', 'moderate', 'high'].includes(String(doc.costLevel))
                      ? doc.costLevel as 'free' | 'low' | 'moderate' | 'high' : 'free'),
       rating:      typeof doc.rating === 'number' ? doc.rating : 0,
+      updatedAt:   doc.updatedAt ? String(doc.updatedAt) : doc.ratingLastUpdated ? String(doc.ratingLastUpdated) : undefined,
       location:    (() => {
         const loc = doc.location;
         if (loc && typeof loc === 'object') {
@@ -351,11 +490,11 @@ async function fetchMongoResources(
     const vaQuery = searchPat
       ? { $and: [keywordFilter, { subcategory: 'federal' }] }
       : { subcategory: 'federal' };
-    let vaRaw = await coll.find(vaQuery).sort({ rating: -1 }).limit(7)
+    let vaRaw = await coll.find(vaQuery).sort({ rating: -1 }).limit(20)
       .toArray() as Record<string, unknown>[];
     if (vaRaw.length < 3) {
       // Pad: relax keyword filter, keep subcategory constraint
-      vaRaw = await coll.find({ subcategory: 'federal' }).sort({ rating: -1 }).limit(7)
+      vaRaw = await coll.find({ subcategory: 'federal' }).sort({ rating: -1 }).limit(20)
         .toArray() as Record<string, unknown>[];
     }
     console.log(`[SymptomTriage] healthResources VA → ${vaRaw.length} docs`);
@@ -364,10 +503,10 @@ async function fetchMongoResources(
     const ngoQuery = searchPat
       ? { $and: [keywordFilter, { subcategory: 'ngo' }] }
       : { subcategory: 'ngo' };
-    let ngoRaw = await coll.find(ngoQuery).sort({ rating: -1 }).limit(7)
+    let ngoRaw = await coll.find(ngoQuery).sort({ rating: -1 }).limit(20)
       .toArray() as Record<string, unknown>[];
     if (ngoRaw.length < 3) {
-      ngoRaw = await coll.find({ subcategory: 'ngo' }).sort({ rating: -1 }).limit(7)
+      ngoRaw = await coll.find({ subcategory: 'ngo' }).sort({ rating: -1 }).limit(20)
         .toArray() as Record<string, unknown>[];
     }
     console.log(`[SymptomTriage] healthResources NGO → ${ngoRaw.length} docs`);
@@ -383,14 +522,14 @@ async function fetchMongoResources(
     const stateQueryStrict = searchPat
       ? { $and: [keywordFilter, { subcategory: 'state' }, paFilter] }
       : { $and: [{ subcategory: 'state' }, paFilter] };
-    let stateRaw = await coll.find(stateQueryStrict).sort({ rating: -1 }).limit(7)
+    let stateRaw = await coll.find(stateQueryStrict).sort({ rating: -1 }).limit(20)
       .toArray() as Record<string, unknown>[];
     if (stateRaw.length < 3) {
       // Relax location filter — any state-subcategory resource matching keywords
       const stateQueryRelaxed = searchPat
         ? { $and: [keywordFilter, { subcategory: 'state' }] }
         : { subcategory: 'state' };
-      stateRaw = await coll.find(stateQueryRelaxed).sort({ rating: -1 }).limit(7)
+      stateRaw = await coll.find(stateQueryRelaxed).sort({ rating: -1 }).limit(20)
         .toArray() as Record<string, unknown>[];
     }
     console.log(`[SymptomTriage] healthResources State → ${stateRaw.length} docs`);
@@ -569,7 +708,10 @@ export async function POST(request: NextRequest) {
         userMessage ?? '',
         ...messages.filter(m => m.role === 'user').map(m => m.content),
       ].join(' ');
-      const kws = extractKeywords(allUserTexts);
+      const kws         = extractKeywords(allUserTexts);
+      const userProfile = parseUserProfile(allUserTexts);
+      const crossHints  = detectCrossDomainIntent(allUserTexts);
+      if (crossHints.length > 0) console.log('[SymptomTriage] Cross-domain intents detected:', crossHints);
 
       // ── 1. Query MongoDB FIRST ───────────────────────────────────────────────────
       const { rawVa: dbVa, rawNgo: dbNgo, rawState: dbState } =
@@ -622,7 +764,7 @@ export async function POST(request: NextRequest) {
       const hasRes     = finalVa.length + finalNgo.length + finalState.length > 0;
 
       if (hasRes) {
-        const scored = applyScoring(finalVa, finalNgo, finalState, bridgeContext);
+        const scored = applyScoring(finalVa, finalNgo, finalState, bridgeContext, kws, userProfile);
         if (!aiMessage) {
           const ct = bridgeContext?.conditions?.length
             ? bridgeContext.conditions.slice(0, 2).map(c => c.condition).join(' and ')
@@ -640,6 +782,7 @@ export async function POST(request: NextRequest) {
             state: scored.state.map(r => ({ ...r, track: 'state' as const })),
           },
           keywords: scored.keywords,
+          crossDomainHints: crossHints,
         });
       }
 
@@ -664,7 +807,8 @@ export async function POST(request: NextRequest) {
           userMessage ?? '',
           ...messages.filter(m => m.role === 'user').map(m => m.content),
         ].join(' ');
-        const jumpKws = extractKeywords(jumpTexts);
+        const jumpKws     = extractKeywords(jumpTexts);
+        const jumpProfile = parseUserProfile(jumpTexts);
 
         // ── Query MongoDB FIRST ───────────────────────────────────────────────────
         const { rawVa: jDbVa, rawNgo: jDbNgo, rawState: jDbState } =
@@ -699,7 +843,7 @@ export async function POST(request: NextRequest) {
         const finalState = jumpMongoHas ? jDbState : jGrokState;
 
         if (finalVa.length + finalNgo.length + finalState.length > 0) {
-          const scored = applyScoring(finalVa, finalNgo, finalState, bridgeContext);
+          const scored = applyScoring(finalVa, finalNgo, finalState, bridgeContext, jumpKws, jumpProfile);
           if (!jumpMsg) {
             const ct = bridgeContext?.conditions?.length
               ? bridgeContext.conditions.slice(0, 2).map(c => c.condition).join(' and ')

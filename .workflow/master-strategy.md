@@ -207,7 +207,7 @@ Net-income scenario planner by school/zip.
 
 ### **IV. The Financial & Career Layer – Phase 1–2**
 
-#### **12. PCS Commander** – Full relocation Gantt chart + broker referral (Golden Goose revenue)
+#### **12. Home Base** – Full relocation Gantt chart + broker referral (Golden Goose revenue)
 
 **How it works:** Enter move details → auto-pulls BAH/schools/housing → interactive timeline. "Find Housing" triggers vetted VA-loan broker pop-up and lead capture.
 
@@ -262,13 +262,13 @@ Vet1Stop is designed to be the premier digital social ecosystem exclusively for 
 ### **Monetization Ties (Built-In from Day 1)**
 
 * **Premium ($9.99/mo or $99/yr):** Unlimited AI scans, priority exports, ad-free experience
-* **Golden Goose Referral Fees:** PCS Commander + Local Directory → vetted VA-loan brokers (~$2,250 per $300k closing)
+* **Golden Goose Referral Fees:** Home Base + Local Directory → vetted VA-loan brokers (~$2,250 per $300k closing)
 * **Featured NGO/Business Spotlight:** $250–$1,000/mo algorithmic pinning
 * **Education Lead-Gen:** $50–$200 per qualified match. Core platform remains 100% free
 
 ### **KPI Dashboard (Track from Launch)**
 
-* **PCS Commander:** Leads generated, referral conversion %, avg fee per closing
+* **Home Base:** Leads generated, referral conversion %, avg fee per closing
 * **Auto-Fill / Records Recon / Contract Highlighter:** Documents scanned, flags found, time saved
 * **Platform-wide:** MAU, feature engagement %, premium conversion (target 8–12% by Month 6), NPS ≥70
 
@@ -283,7 +283,7 @@ This mapping shows exactly where every feature lives on the site/app and its tar
 ★ = Highest priority (revenue drivers + core user value)
 
 * Health page (Symptom Finder + Records Recon) ★
-* PCS Commander + Real Estate Referral Network (Golden Goose revenue engine) ★
+* Home Base + Real Estate Referral Network (Golden Goose revenue engine) ★
 * Local VOB Directory with Real Estate & Housing category ★
 * Auto-Fill Engine, Contract Highlighter, Smart Matching (quick utility wins) ★
 * GI Bill Pathfinder & School Finder (Education page)
@@ -291,7 +291,7 @@ This mapping shows exactly where every feature lives on the site/app and its tar
 ### **Home Page (The "First and Only Stop" Hub)**
 
 * Smart Matching – Personalized Benefits Finder (quick 3-question quiz → top 3 results with "Why this matches you") (Phase 1, ★ global)
-* Hero Quick Wins cards – Prominent one-click shortcuts to the most-used Phase 1 tools (e.g., PCS Commander, Records Recon, Contract Highlighter, Auto-Fill) (Phase 1, ★)
+* Hero Quick Wins cards – Prominent one-click shortcuts to the most-used Phase 1 tools (e.g., Home Base, Records Recon, Contract Highlighter, Auto-Fill) (Phase 1, ★)
 * Featured Core Foundation tiles (Local VOB Directory, Vet1Stop Shop, Government Contracting Hub, etc.) (Phase 1)
 
 ### **Health Page (/health)**
@@ -319,7 +319,7 @@ This mapping shows exactly where every feature lives on the site/app and its tar
 
 ### **Life & Leisure Page (/life)**
 
-* PCS Commander – Relocation Gantt chart \+ VA-loan broker referral (Golden Goose revenue) (Phase 1, ★)  
+* Home Base – Relocation Gantt chart \+ VA-loan broker referral (Golden Goose revenue) (Phase 1, ★)  
 * Contract Highlighter (Overwatch Shield) – SCRA/MLA violation scanner (Phase 1, ★)  
 * Pension Poacher Detector – Scam email/text scanner \+ report generator (Phase 1\)  
 * Tax Shield Optimizer – Combat-zone refund finder \+ pre-filled IRS forms (Phase 1\)  

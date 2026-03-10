@@ -13,8 +13,34 @@
 
 ---
 
-## 🎯 Current Status: Strike 1 + 2 Complete — API Stabilized & Feedback Skeleton Live
-**As of Mar 5, 2026:** Two surgical strikes shipped on top of Triage V3. **Strike 1** hardened the LLM pipeline in `symptom-triage/route.ts` (structured output enforcement, 3-question intake, domain constraints, fallback cleanup). **Strike 2** built the Phase 1.5 feedback framework skeleton (MongoDB ratings schema, `/api/feedback` endpoint, thumbs/stars on ResourceCard, admin Ratings Inbox stub). Both strikes are code-complete but **not yet tested or committed** — pending developer verification.
+## 🎯 Current Status: Strike 4 Complete — Resource Intelligence Engine Live
+**As of Mar 9, 2026:** Strike 4 ships 11 quality improvements to the resource matching pipeline across `route.ts` and `resources-scoring.ts`. Resources are now filtered, scored, and ranked using both Blue Button bridge data AND chat context simultaneously. "PCS Commander" renamed to "Home Base" across all documentation.
+
+### ✅ Strike 4 — Resource Intelligence Engine (Mar 9, 2026)
+
+**11 fixes across 2 code files + 2 doc files. No new files, no DB changes, no new dependencies.**
+
+**`src/app/api/health/symptom-triage/route.ts`**
+- **Fix A — Smart keyword extraction**: Replaced single-word splitter with compound phrase detection (`KNOWN_HEALTH_PHRASES`) + health-signal word set + expanded noise word list (removes `"service"`, `"stuff"`, `"things"` etc. that caused Navy SEAL Foundation false matches). Returns up to 15 meaningful phrases, not 12 single words.
+- **Fix B — Limit 7 → 20**: All 3 MongoDB track queries now fetch up to 20 docs. Scoring engine + cutoff determine final count, not DB cap.
+- **Fix C — Unified scoring context**: `applyScoring()` now accepts `chatKeywords` + `userProfile`. Merges bridge conditions (PDF) + chat keywords into single deduplicated `allConditions` array. Both sources score each resource together.
+- **Fix D — Score cutoff 35**: After scoring, resources below score 35 are filtered out. Top 3 kept as safety net per track if all fall below threshold.
+- **Fix G — User profile parser**: `parseUserProfile()` detects 100% P&T, branch, era, VA satisfaction from chat text. Passed into scoring context.
+- **Fix I — Cross-domain intent**: `detectCrossDomainIntent()` detects off-domain signals (entrepreneur → careers, school → education, moving → life). Logged + returned as `crossDomainHints[]` in response. No UI yet.
+- **Fix J — Severity weighting**: `parseSeverityWeights()` detects amplifier words near keywords ("sleep and ptsd affect me **more**" → PTSD/sleep get 1.5x weight in scoring).
+- **Fix K — Already-handled penalty**: Passed via `userProfile.isPermanentTotal` → scoring engine applies -15 to enrollment/onboarding resources for 100% P&T veterans.
+
+**`src/lib/resources-scoring.ts`**
+- **Fix E — Per-resource `whyMatches`**: `buildWhyMatches()` now checks which keywords actually match THIS resource's title/description/tags. Cards show "Matches your PTSD + sleep needs" instead of the same 2 PDF conditions on every card.
+- **Fix F — Population penalty (-20 pts)**: `POPULATION_PENALTY_PHRASES` list added. Resources like Navy SEAL Foundation (`"supports seals"`, `"navy seal foundation"`) receive -20 penalty, dropping them below the score cutoff.
+- **Fix H — Freshness bonus (+3 pts)**: `scoreFreshness()` gives +3 to resources with `updatedAt` < 6 months, +1 for < 12 months.
+- **Fix J (scoring side)**: `scoreKeywordRelevance()` now accepts `ScoringContext` instead of `keywords[]`, reads `severityWeights` to multiply hit contribution per keyword.
+- Updated `ScoringContext` interface: added `severityWeights?`, `userProfile?` fields.
+- Updated `ResourceInput` interface: added `updatedAt?` field.
+- Updated `buildScoringContext()`: accepts and passes through `severityWeights` + `userProfile`.
+
+**`.workflow/master-strategy.md` + `.workflow/project_status.md`**
+- **Renamed "PCS Commander" → "Home Base"** across all 8 occurrences. Rationale: veterans aren't PCSing to duty stations — they're just moving. "Home Base" is warmer and civilian-friendly.
 
 ### ✅ Recently Completed (Mar 5, 2026) — Strike 1 + Strike 2
 
@@ -70,7 +96,7 @@ Phase 1 + 1.5 data-harvesting skeleton — ratings flow Day 1, post-launch team 
 - `educationResources`, `jobResources`, `lifeLeisureResources`: existing, serving their respective pages, no changes needed for Phase 1 Health MVP.
 - `ngos`, `undefinedResources`: legacy artifacts from Apr 2025 reformulation — not queried, not deleted. Can be cleaned up in a future maintenance pass.
 
-**Phase 1.5 (Q2 2026) — PCS Commander + Local VOB Directory**
+**Phase 1.5 (Q2 2026) — Home Base + Local VOB Directory**
 - **`localResources`** (6 docs currently): Expand to full PA/national VOB directory. Add `location.coordinates: {lat, lng}` for Leaflet map rendering. Seed from partner data or verified scraping.
 - **`pcsPlans`** collection (NEW): Stores per-user relocation Gantt data. Schema: `userId` (Firebase UID), `originBase`, `destinationBase`, `timeline[]`, `leadCapture`, `referralAgentId`. Real estate lead routing API writes here.
 
@@ -633,7 +659,7 @@ Key documents to reference:
 5. **Get Vercel deployment working** — Critical for investor demos.
 
 ### Short-Term (Complete MVP)
-6. **PCS Commander + Smart Bridge integration** — Phase 1 priority #3 per master-strategy.
+6. **Home Base + Smart Bridge integration** — Phase 1 priority #3 per master-strategy.
 7. **Auto-Fill shared component** — Phase 1 priority #4, "not official VA claims assistance" disclaimer required.
 8. **Build Life & Leisure page** — Follow Health/Education pattern.
 9. **Implement premium feature indicators** — Visual gates showing future paid features.

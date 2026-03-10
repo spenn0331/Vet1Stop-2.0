@@ -39,6 +39,18 @@ const KEYWORD_TAG_MAP: Record<string, string[]> = {
   'peer':          ['peer', 'peer support', 'peer-led', 'veteran community'],
 };
 
+/** Population-specific description phrases that trigger a -20 penalty (branch/group-exclusive resources) */
+const POPULATION_PENALTY_PHRASES = [
+  'supports seals', 'navy seal foundation', 'for navy seals', 'seal teams',
+  'for caregivers only', 'caregiver only', 'family members only',
+];
+
+/** Onboarding/enrollment phrases — penalized when user is already 100% P&T rated */
+const ONBOARDING_PHRASES = [
+  'how to apply', 'apply for va', 'file a claim', 'va enrollment', 'enroll in va',
+  'how to get va', 'introduction to va', 'first time', 'getting started with va',
+];
+
 /** Compound keyword pair → suggested pathway label */
 export const PATHWAY_MAP: Record<string, string> = {
   'back pain+ptsd':        'Back Pain to Shape',
@@ -62,6 +74,15 @@ export interface ScoringContext {
   location: string;
   /** User preference tags (e.g., ["peer", "fitness", "grants"]) */
   preferences: string[];
+  /** Fix J — per-keyword severity multiplier (e.g., { 'ptsd': 1.5, 'back pain': 1.0 }) */
+  severityWeights?: Record<string, number>;
+  /** Fix G/K — parsed user profile signals from chat text */
+  userProfile?: {
+    isPermanentTotal?: boolean;
+    branch?: string;
+    era?: string;
+    vaDissatisfied?: boolean;
+  };
 }
 
 export interface ResourceInput {
@@ -75,6 +96,8 @@ export interface ResourceInput {
   track?: 'va' | 'ngo' | 'state';
   phone?: string;
   url?: string;
+  /** Fix H — ISO date string for freshness scoring */
+  updatedAt?: string;
 }
 
 export interface ScoredResource extends ResourceInput {
@@ -101,9 +124,10 @@ function hasGeoBonus(loc: ResourceInput['location']): boolean {
   return PA_TERMS.some(t => s.includes(t));
 }
 
-// ─── Keyword relevance scorer (50 pts) ───────────────────────────────────────
+// ─── Keyword relevance scorer (50 pts, severity-weighted) ──────────────────────────────
 
-function scoreKeywordRelevance(resource: ResourceInput, keywords: string[]): number {
+function scoreKeywordRelevance(resource: ResourceInput, context: ScoringContext): number {
+  const { keywords, severityWeights } = context;
   if (!keywords.length) return 0;
 
   const haystack = [
@@ -112,32 +136,31 @@ function scoreKeywordRelevance(resource: ResourceInput, keywords: string[]): num
     ...(resource.tags ?? []),
   ].join(' ').toLowerCase();
 
-  let matchedKeywords = 0;
-  let totalTagHits = 0;
+  let weightedHits = 0;
+  let totalWeight = 0;
 
   for (const kw of keywords) {
     const normalizedKw = kw.toLowerCase();
-    // Direct match in haystack
+    const weight = severityWeights?.[normalizedKw] ?? 1.0;
+    totalWeight += weight;
+
+    let hit = false;
     if (haystack.includes(normalizedKw)) {
-      matchedKeywords++;
-      totalTagHits++;
-      continue;
+      hit = true;
+    } else {
+      // Related-tag match via KEYWORD_TAG_MAP
+      const relatedTags = KEYWORD_TAG_MAP[normalizedKw] ?? [];
+      if (relatedTags.some(tag => haystack.includes(tag))) {
+        hit = true;
+      }
     }
-    // Related-tag match via KEYWORD_TAG_MAP
-    const relatedTags = KEYWORD_TAG_MAP[normalizedKw] ?? [];
-    const tagHits = relatedTags.filter(tag => haystack.includes(tag)).length;
-    if (tagHits > 0) {
-      matchedKeywords++;
-      totalTagHits += tagHits;
-    }
+    if (hit) weightedHits += weight;
   }
 
-  if (matchedKeywords === 0) return 0;
+  if (weightedHits === 0) return 0;
 
-  // Scale: full 50 pts if all keywords match with multiple tag hits; proportional otherwise
-  const keywordRatio = matchedKeywords / keywords.length;
-  const bonusHits = Math.min(totalTagHits / (keywords.length * 2), 1);
-  return Math.round(50 * (keywordRatio * 0.7 + bonusHits * 0.3));
+  // Scale proportional to weighted hit ratio, max 50
+  return Math.round(50 * (weightedHits / totalWeight));
 }
 
 // ─── Veteran-centric scorer (20 pts) ─────────────────────────────────────────
@@ -188,57 +211,99 @@ function scoreRating(resource: ResourceInput): number {
   return 0;
 }
 
-// ─── whyMatches builder ───────────────────────────────────────────────────────
+// ─── Freshness scorer (+3 bonus) ─────────────────────────────────────────────────
+
+function scoreFreshness(resource: ResourceInput): number {
+  if (!resource.updatedAt) return 0;
+  const monthsOld = (Date.now() - new Date(resource.updatedAt).getTime()) / (1000 * 60 * 60 * 24 * 30);
+  if (monthsOld < 6) return 3;
+  if (monthsOld < 12) return 1;
+  return 0;
+}
+
+// ─── Population penalty (-20 pts) ─────────────────────────────────────────────
+
+function scorePopulationPenalty(resource: ResourceInput): number {
+  const haystack = [
+    resource.title,
+    resource.description,
+    ...(resource.tags ?? []),
+  ].join(' ').toLowerCase();
+  if (POPULATION_PENALTY_PHRASES.some(phrase => haystack.includes(phrase))) return -20;
+  return 0;
+}
+
+// ─── Already-handled penalty (-15 pts) ───────────────────────────────────────
+
+function scoreOnboardingPenalty(resource: ResourceInput, context: ScoringContext): number {
+  if (!context.userProfile?.isPermanentTotal && !context.hasVaClaim) return 0;
+  const haystack = [resource.title, resource.description].join(' ').toLowerCase();
+  if (ONBOARDING_PHRASES.some(phrase => haystack.includes(phrase))) return -15;
+  return 0;
+}
+
+// ─── whyMatches builder (Fix E — per-resource keyword hits) ───────────────────────
 
 function buildWhyMatches(
   resource: ResourceInput,
   context: ScoringContext,
   score: number,
 ): string {
-  const kws = context.keywords.slice(0, 2);
+  const haystack = [
+    resource.title,
+    resource.description,
+    ...(resource.tags ?? []),
+  ].join(' ').toLowerCase();
+
+  // Find which of the user's keywords actually match THIS resource
+  const matchedKws: string[] = [];
+  for (const kw of context.keywords) {
+    const nkw = kw.toLowerCase();
+    if (haystack.includes(nkw)) {
+      matchedKws.push(kw);
+    } else {
+      const relatedTags = KEYWORD_TAG_MAP[nkw] ?? [];
+      if (relatedTags.some(tag => haystack.includes(tag))) {
+        matchedKws.push(kw);
+      }
+    }
+  }
+
   const hasGeo = hasGeoBonus(resource.location);
   const isFreeish = resource.isFree || resource.costLevel === 'free' || resource.costLevel === 'low';
   const isPeer = (resource.tags ?? []).some(t => ['peer', 'peer-led', 'peer support'].includes(t.toLowerCase()));
 
-  // Build a ≤15 word sentence from available signals
   const parts: string[] = [];
-
-  if (kws.length > 0) {
-    parts.push(`Matches your ${kws.join(' + ')} needs`);
+  if (matchedKws.length > 0) {
+    parts.push(`Matches your ${matchedKws.slice(0, 2).join(' + ')} needs`);
   }
-  if (isPeer) {
-    parts.push('peer-led support');
-  }
-  if (isFreeish) {
-    parts.push('at no cost');
-  }
-  if (hasGeo) {
-    parts.push('near Carlisle, PA');
-  }
+  if (isPeer) parts.push('peer-led support');
+  if (isFreeish) parts.push('at no cost');
+  if (hasGeo) parts.push('near Carlisle, PA');
   if (score >= 80 && context.preferences.length > 0) {
     parts.push(`fits ${context.preferences[0]} goal`);
   }
 
   const sentence = parts.join(', ');
-
-  // Hard cap at 15 words
   const words = sentence.split(' ');
-  if (words.length > 15) {
-    return words.slice(0, 15).join(' ');
-  }
+  if (words.length > 15) return words.slice(0, 15).join(' ');
   return sentence || 'Strong match for your veteran health profile';
 }
 
-// ─── Main scoring function ────────────────────────────────────────────────────
+// ─── Main scoring function ───────────────────────────────────────────────────
 
 export function scoreResource(resource: ResourceInput, context: ScoringContext): ScoredResource {
-  const kwScore   = scoreKeywordRelevance(resource, context.keywords);
-  const vetScore  = scoreVeteranCentric(resource);
-  const freeScore = scoreFreeAccessible(resource);
-  const geoScore  = hasGeoBonus(resource.location) ? 10 : 0;
-  const ratScore  = scoreRating(resource);
+  const kwScore        = scoreKeywordRelevance(resource, context);
+  const vetScore       = scoreVeteranCentric(resource);
+  const freeScore      = scoreFreeAccessible(resource);
+  const geoScore       = hasGeoBonus(resource.location) ? 10 : 0;
+  const ratScore       = scoreRating(resource);
+  const freshBonus     = scoreFreshness(resource);
+  const popPenalty     = scorePopulationPenalty(resource);
+  const onboardPenalty = scoreOnboardingPenalty(resource, context);
 
-  const score = Math.min(100, kwScore + vetScore + freeScore + geoScore + ratScore);
+  const rawScore = kwScore + vetScore + freeScore + geoScore + ratScore + freshBonus + popPenalty + onboardPenalty;
+  const score = Math.min(100, Math.max(0, rawScore));
   const matchPercent = score;
 
   let badge: ScoredResource['badge'] = null;
@@ -273,6 +338,8 @@ export function buildScoringContext(opts: {
   conditions: string[];
   hasVaClaim: boolean;
   preferences?: string[];
+  severityWeights?: Record<string, number>;
+  userProfile?: ScoringContext['userProfile'];
 }): ScoringContext {
   // MVP: location hardcoded — dynamic in Pass 2
   const MVP_LOCATION = 'Carlisle, PA';
@@ -286,6 +353,8 @@ export function buildScoringContext(opts: {
     hasVaClaim: opts.hasVaClaim,
     location: MVP_LOCATION,
     preferences: opts.preferences ?? [],
+    severityWeights: opts.severityWeights,
+    userProfile: opts.userProfile,
   };
 }
 
