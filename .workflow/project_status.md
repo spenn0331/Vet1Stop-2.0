@@ -30,6 +30,18 @@
 - `src/app/health/components/SymptomFinderWizard.tsx`: Replaced `userState: 'PA'` hardcode with `bridgeData?.userState ?? undefined`. State now flows from Records Recon bridge payload.
 - `src/app/api/health/symptom-triage/route.ts`: Destructures `userState` as `bodyUserState` from request body. Merges into `bridgeContext.userState` (bridge value wins, body value is fallback). Without bridge, creates minimal `{ conditions: [], userState }` context. `applyScoring` + `buildSystemPrompt` now always receive the correct veteran state.
 
+### ✅ State Geo Filter + Chat UX Fixes (Mar 10, 2026)
+
+**Root causes found and fixed across 5 files:**
+
+- **`resource-fetcher.ts`**: `buildStateGeoFilter` generated wrong abbreviation (`'PE'` instead of `'PA'`) when a full state name like `'pennsylvania'` was passed. Added `STATE_NAME_TO_ABBR` reverse map and proper Title Case resolution.
+- **`route.ts` — jump-ahead path**: When user answered all 4 questions in one message, `grokJumpedAhead=true` triggered a path that called `fetchDomainResources(HEALTH_CONFIG, jumpKws, bridgeContext)` with the raw bridge (no state). Now applies `jumpBridge` enrichment using `jumpProfile.state` (same pattern as the assess path).
+- **`route.ts` — system prompt**: Hardcoded `"ONLY Pennsylvania programs"` overrode all state detection at the AI level. Replaced with dynamic state label derived from `bridgeContext.userState`.
+- **`/api/geocode/route.ts`** *(new)*: Browser `fetch` strips `User-Agent` header for security — Nominatim returned 400. Created server-side proxy that adds the required header. Wizard now calls `/api/geocode?lat=X&lon=Y` instead of Nominatim directly.
+- **`SymptomFinderWizard.tsx`**: Geolocation call routed through proxy. Textarea auto-resizes (42px → 200px) as user types, resets after send. Fallback `aiMessage` rewritten to be warmer ("Alright — I found some solid options...").
+- **`profile-parser.ts`**: 4-tier state detection: context phrase + full name → context phrase + abbr → bare full name → bare UPPERCASE abbr (`PA`, `TX`). `VA`/common words excluded from bare abbr scan.
+- **`scripts/fix-state-locations.js`**: Migrated all 51 state `healthResources` to have `location.state` set from their title (was `N/A` for all 51).
+
 ### ✅ Strike 5 — Resource Intelligence Engine Architecture (Mar 10, 2026)
 
 **Phase 1 — DB Audit:** Ran `scripts/audit-tags.js`. All 190 `healthResources` docs have ≥3 tags (100% coverage). 189/190 have `updatedAt`. Key finding: `federal` subcategory = only 5 docs (VA track very thin — separate data issue). `location.state` = 0 on all docs (geo-bonus was never firing via DB location). No enrichment needed for Phase 1.
