@@ -428,7 +428,11 @@ function sanitizeAiMessage(raw: string): string {
 export async function POST(request: NextRequest) {
   try {
     const body: TriageRequest = await request.json();
-    const { messages = [], step, category, userMessage, bridgeContext } = body;
+    const { messages = [], step, category, userMessage, bridgeContext: rawBridgeContext, userState: bodyUserState } = body;
+    // Merge top-level userState (from client) into bridgeContext so applyScoring + buildSystemPrompt both see it
+    const bridgeContext: BridgeContext | undefined = rawBridgeContext
+      ? { ...rawBridgeContext, userState: rawBridgeContext.userState ?? bodyUserState }
+      : (bodyUserState ? { conditions: [], userState: bodyUserState } : undefined);
 
     // Crisis check across all user text
     const allUserText = [

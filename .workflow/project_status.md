@@ -13,8 +13,22 @@
 
 ---
 
-## 🎯 Current Status: Strike 5 Complete — RIE Architecture Extracted + Gemini Critiques Fixed
-**As of Mar 10, 2026:** Strike 5 addresses all 3 Gemini architectural critiques (hardcoded KEYWORD_TAG_MAP, data shape vulnerability, static location) and extracts the Resource Intelligence Engine into a reusable `src/lib/resource-intelligence/` library. Education and Life pages can now plug in with zero code duplication.
+## 🎯 Current Status: Strike 6 Complete — Federal Seeding + Admin Live Data + userState Wiring
+**As of Mar 10, 2026:** Strike 6 expands the federal VA track from 5 → 33 resources, wires the Admin Dashboard to live MongoDB stats, fixes the `/admin/ngos` 404, and routes the veteran's detected state end-to-end from `BridgeData` → `SymptomFinderWizard` → `route.ts` → scoring engine.
+
+### ✅ Strike 6 — Data Expansion + Admin Live Data + State Wiring (Mar 10, 2026)
+
+**Phase 1 — Federal VA Resource Seed:**
+- `scripts/seed-federal-va-resources.js`: Seeded 28 new federal resources. `healthResources` federal subcategory: 5 → 33. Total collection: 190 → 218 (federal: 33 | ngo: 133 | state: 51). VA track in Symptom Finder now has real MongoDB results instead of Grok fallback.
+
+**Phase 2 — Admin Dashboard Live Data (3 files):**
+- `src/app/api/admin/stats/route.ts` *(new)*: `GET /api/admin/stats` — queries MongoDB for live counts of `healthResources` (total + by subcategory), `pathways`, and `ratings` (count + avg + recent 5). Returns 500 gracefully on DB error.
+- `src/app/admin/page.tsx`: Converted from static server component → `'use client'` component. Fetches `/api/admin/stats` on mount. Replaces hardcoded 12/8/15 with live DB counts across 7 stat cards (resources by subcategory, pathways, ratings count, avg rating). Ratings Inbox table renders live recent rows when present.
+- `src/app/admin/ngos/page.tsx` *(new)*: Fixes `/admin/ngos` 404. Placeholder page with current NGO counts and Phase 1.5 roadmap note.
+
+**Phase 3 — userState End-to-End Wiring (2 files):**
+- `src/app/health/components/SymptomFinderWizard.tsx`: Replaced `userState: 'PA'` hardcode with `bridgeData?.userState ?? undefined`. State now flows from Records Recon bridge payload.
+- `src/app/api/health/symptom-triage/route.ts`: Destructures `userState` as `bodyUserState` from request body. Merges into `bridgeContext.userState` (bridge value wins, body value is fallback). Without bridge, creates minimal `{ conditions: [], userState }` context. `applyScoring` + `buildSystemPrompt` now always receive the correct veteran state.
 
 ### ✅ Strike 5 — Resource Intelligence Engine Architecture (Mar 10, 2026)
 

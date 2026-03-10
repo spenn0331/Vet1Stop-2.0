@@ -243,7 +243,7 @@ _This is not medical advice. Discuss with your VA provider or primary doctor._`,
           step: triageStep,
           userMessage,
           bridgeContext,
-          userState: 'PA',
+          userState: bridgeData?.userState ?? undefined,
         }),
       });
 
