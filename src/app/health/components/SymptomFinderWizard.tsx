@@ -186,10 +186,7 @@ export default function SymptomFinderWizard({ bridgeData = null }: SymptomFinder
       async (pos) => {
         try {
           const { latitude: lat, longitude: lon } = pos.coords;
-          const res = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`,
-            { headers: { 'Accept-Language': 'en', 'User-Agent': 'Vet1Stop/1.0' } },
-          );
+          const res = await fetch(`/api/geocode?lat=${lat}&lon=${lon}`);
           if (!res.ok) return;
           const data = await res.json();
           const state: string | undefined = data?.address?.state;

@@ -78,7 +78,7 @@ ASSESS STEP OUTPUT (JSON only — no prose wrapper):
   "ngoResources": [...same shape...],
   "stateResources": [...same shape...]
 }
-Include 5–7 resources per track ranked by relevance. For State track: ONLY Pennsylvania programs.
+Include 5–7 resources per track ranked by relevance. For State track: ONLY include programs for the veteran's detected state — match their location exactly, never show resources from other states.
 Each description must be exactly 2 sentences.
 `;
 
@@ -181,7 +181,8 @@ function buildSystemPrompt(step: string, bridgeContext?: BridgeContext): string 
 
   // Inject location context — dynamic state if detected, MVP fallback to PA
   const locationStr = bridgeContext?.userState ?? CARLISLE_PA_CONTEXT;
-  prompt += `\n\nUSER LOCATION: Veteran is in ${locationStr}. State Track MUST match their state.`;
+  const stateLabel  = bridgeContext?.userState ?? 'their state (detect from chat if mentioned)';
+  prompt += `\n\nUSER LOCATION: Veteran is in ${locationStr}. State Track MUST match ${stateLabel} exactly. Never show resources from other states.`;
 
   // Inject bridge context
   if (bridgeContext?.conditions?.length) {
@@ -519,8 +520,9 @@ export async function POST(request: NextRequest) {
         if (!aiMessage) {
           const ct = bridgeContext?.conditions?.length
             ? bridgeContext.conditions.slice(0, 2).map(c => c.condition).join(' and ')
-            : 'your health concerns';
-          aiMessage = `Based on your situation with ${ct}, here are your matched resources. This is not medical advice. Discuss with your VA provider or primary doctor.`;
+            : 'your conditions';
+          const stateNote = detectedState ? ` I've also pulled programs available in your area.` : '';
+          aiMessage = `Alright — I found some solid options for you based on your ${ct} and everything you shared.${stateNote} Take a look and feel free to ask me to adjust anything. This is not medical advice. Discuss with your VA provider or primary doctor.`;
         }
         return NextResponse.json({
           aiMessage,
@@ -561,8 +563,15 @@ export async function POST(request: NextRequest) {
         const jumpKws     = extractKeywords(jumpTexts);
         const jumpProfile = parseUserProfile(jumpTexts);
 
+        // Enrich bridge context with chat-detected state for the jump-ahead path
+        const jumpDetectedState = bridgeContext?.userState ?? jumpProfile?.state ?? null;
+        const jumpBridge = jumpDetectedState
+          ? { ...(bridgeContext ?? { conditions: [] }), userState: jumpDetectedState }
+          : bridgeContext;
+        console.log('[SymptomTriage] Jump-ahead detected state:', jumpDetectedState ?? 'none');
+
         // ── Query MongoDB FIRST (via Resource Intelligence Engine) ───────────────
-        const jDbResults = await fetchDomainResources(HEALTH_CONFIG, jumpKws, bridgeContext);
+        const jDbResults = await fetchDomainResources(HEALTH_CONFIG, jumpKws, jumpBridge);
         const jDbVa    = jDbResults['va']    ?? [];
         const jDbNgo   = jDbResults['ngo']   ?? [];
         const jDbState = jDbResults['state'] ?? [];
@@ -596,12 +605,13 @@ export async function POST(request: NextRequest) {
         const finalState = jumpMongoHas ? jDbState : jGrokState;
 
         if (finalVa.length + finalNgo.length + finalState.length > 0) {
-          const scored = applyScoring(finalVa, finalNgo, finalState, bridgeContext, jumpKws, jumpProfile);
+          const scored = applyScoring(finalVa, finalNgo, finalState, jumpBridge, jumpKws, jumpProfile);
           if (!jumpMsg) {
             const ct = bridgeContext?.conditions?.length
               ? bridgeContext.conditions.slice(0, 2).map(c => c.condition).join(' and ')
-              : 'your health concerns';
-            jumpMsg = `Based on your situation with ${ct}, here are your matched resources. This is not medical advice. Discuss with your VA provider or primary doctor.`;
+              : 'your conditions';
+            const stateNote = jumpDetectedState ? ` I've also pulled programs available in your area.` : '';
+            jumpMsg = `Alright — I found some solid options for you based on your ${ct} and everything you shared.${stateNote} Take a look and feel free to ask me to adjust anything. This is not medical advice. Discuss with your VA provider or primary doctor.`;
           }
           return NextResponse.json({
             aiMessage: jumpMsg,
