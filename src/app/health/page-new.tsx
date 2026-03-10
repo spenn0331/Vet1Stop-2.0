@@ -25,13 +25,14 @@ import AutoFillButton from '@/components/shared/AutoFillButton';
 export const metadata: Metadata = {
   title: 'Health Resources | Vet1Stop',
   description: 'Access comprehensive veteran health resources, AI-powered symptom triage, medical record organization, and connections to VA, NGO, and state programs.',
-  keywords: 'veteran health, VA healthcare, PTSD, mental health veterans, records recon, symptom finder, veteran wellness, medical records',
+  keywords: 'veteran health, VA healthcare, PTSD, mental health veterans, records recon, symptom finder, veteran wellness',
 };
 
 export default function HealthPage() {
   return (
     <main className="bg-white min-h-screen" role="main">
-      {/* ─── Crisis Banner (always visible) ─── */}
+
+      {/* ─── Crisis Banner ─── */}
       <div className="bg-[#B22234] text-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-col sm:flex-row justify-between items-center gap-2">
           <div className="flex items-center gap-2">
@@ -39,20 +40,8 @@ export default function HealthPage() {
             <span className="font-bold text-base sm:text-lg">Veterans Crisis Line: Dial 988 then Press 1</span>
           </div>
           <div className="flex gap-3">
-            <a
-              href="tel:988"
-              className="px-4 py-2 bg-[#EAB308] text-[#1F2937] font-semibold rounded-md shadow hover:bg-[#FACC15] transition-colors focus:outline-none focus:ring-2 focus:ring-yellow-300 text-sm"
-              aria-label="Call Veterans Crisis Line"
-            >
-              Call 988
-            </a>
-            <a
-              href="sms:838255&body=HOME"
-              className="px-4 py-2 bg-white/20 text-white font-semibold rounded-md hover:bg-white/30 transition-colors focus:outline-none focus:ring-2 focus:ring-white/50 text-sm"
-              aria-label="Text Veterans Crisis Line"
-            >
-              Text 838255
-            </a>
+            <a href="tel:988" className="px-4 py-2 bg-[#EAB308] text-[#1F2937] font-semibold rounded-md shadow hover:bg-[#FACC15] transition-colors focus:outline-none focus:ring-2 focus:ring-yellow-300 text-sm" aria-label="Call Veterans Crisis Line">Call 988</a>
+            <a href="sms:838255&body=HOME" className="px-4 py-2 bg-white/20 text-white font-semibold rounded-md hover:bg-white/30 transition-colors focus:outline-none focus:ring-2 focus:ring-white/50 text-sm" aria-label="Text Veterans Crisis Line">Text 838255</a>
           </div>
         </div>
       </div>
@@ -61,7 +50,7 @@ export default function HealthPage() {
       <section aria-labelledby="health-hero-heading" className="bg-gradient-to-br from-[#0F1D3D] via-[#1A2C5B] to-[#1e3a7a] text-white relative overflow-hidden">
         <div className="absolute inset-0 pointer-events-none">
           <div className="absolute top-0 right-0 w-96 h-96 bg-[#EAB308]/5 rounded-full translate-x-32 -translate-y-24" />
-          <div className="absolute bottom-0 left-0 w-64 h-64 bg-white/[0.03] rounded-full -translate-x-20 translate-y-16" />
+          <div className="absolute bottom-0 left-0 w-64 h-64 bg-white/3 rounded-full -translate-x-20 translate-y-16" />
         </div>
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14 md:py-20">
           <div className="max-w-3xl">
@@ -70,7 +59,7 @@ export default function HealthPage() {
               <span className="text-[#EAB308]">Your Resources.</span>
             </h1>
             <p className="text-lg text-white/80 mb-2 max-w-2xl leading-relaxed">
-              AI-powered tools and 190+ vetted VA, NGO, and state programs to support your well-being &mdash; free, secure, and built for veterans.
+              AI-powered tools and 190+ vetted VA, NGO, and state programs to support your well-being — free, secure, and built for veterans.
             </p>
             <p className="text-sm text-white/50 italic mb-8">
               &ldquo;The strength you built in service doesn&rsquo;t end at discharge.&rdquo;
@@ -92,12 +81,12 @@ export default function HealthPage() {
       {/* ─── Trust & Capability Banner ─── */}
       <div className="bg-slate-50 border-b border-slate-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-wrap items-center justify-center gap-x-8 gap-y-1.5">
-          {([
-            { Icon: LockClosedIcon,  text: 'Private & Secure' },
-            { Icon: CheckCircleIcon, text: '190+ Vetted Resources' },
-            { Icon: MapPinIcon,      text: 'Local State Matching' },
-            { Icon: ShieldCheckIcon, text: 'No data shared without consent' },
-          ] as const).map(({ Icon, text }) => (
+          {[
+            { Icon: LockClosedIcon,    text: 'Private & Secure' },
+            { Icon: CheckCircleIcon,   text: '190+ Vetted Resources' },
+            { Icon: MapPinIcon,        text: 'Local State Matching' },
+            { Icon: ShieldCheckIcon,   text: 'No data shared without consent' },
+          ].map(({ Icon, text }) => (
             <span key={text} className="flex items-center gap-1.5 text-xs text-slate-500">
               <Icon className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" aria-hidden="true" />
               {text}
@@ -135,7 +124,9 @@ export default function HealthPage() {
                 ))}
               </ul>
               <div className="mt-5 pt-4 border-t border-blue-100">
-                <span className="text-sm font-bold text-[#1A2C5B] group-hover:text-blue-700 inline-flex items-center gap-1">Start Symptom Finder <ArrowRightIcon className="h-4 w-4" aria-hidden="true" /></span>
+                <span className="text-sm font-bold text-[#1A2C5B] group-hover:text-blue-700 inline-flex items-center gap-1">
+                  Start Symptom Finder <ArrowRightIcon className="h-4 w-4" aria-hidden="true" />
+                </span>
               </div>
             </Link>
 
@@ -148,7 +139,7 @@ export default function HealthPage() {
                 <ArrowRightIcon className="h-5 w-5 text-gray-400 group-hover:text-[#1A2C5B] group-hover:translate-x-1 transition-all duration-200" aria-hidden="true" />
               </div>
               <h3 className="text-lg font-extrabold text-[#1A2C5B] mb-2">Records Recon</h3>
-              <p className="text-sm text-gray-600 leading-relaxed mb-4">Upload VA medical records and organize them into a structured VSO Briefing Pack &mdash; conditions index, timeline, and excerpts.</p>
+              <p className="text-sm text-gray-600 leading-relaxed mb-4">Upload VA medical records and organize them into a structured VSO Briefing Pack — conditions index, timeline, and excerpts.</p>
               <ul className="space-y-1.5">
                 {['Upload PDFs — auto-deleted after scan', 'AI-powered condition extraction', 'Downloadable VSO Briefing Pack'].map(f => (
                   <li key={f} className="flex items-center gap-2 text-xs text-gray-500">
@@ -158,7 +149,9 @@ export default function HealthPage() {
                 ))}
               </ul>
               <div className="mt-5 pt-4 border-t border-blue-100">
-                <span className="text-sm font-bold text-[#1A2C5B] group-hover:text-blue-700 inline-flex items-center gap-1">Run Recon <ArrowRightIcon className="h-4 w-4" aria-hidden="true" /></span>
+                <span className="text-sm font-bold text-[#1A2C5B] group-hover:text-blue-700 inline-flex items-center gap-1">
+                  Run Recon <ArrowRightIcon className="h-4 w-4" aria-hidden="true" />
+                </span>
               </div>
             </Link>
 
@@ -180,7 +173,7 @@ export default function HealthPage() {
                 ))}
               </ul>
               <div className="mt-5 pt-4 border-t border-blue-100">
-                <a href="https://www.va.gov/health-care/apply/application/introduction" target="_blank" rel="noopener noreferrer" className="text-sm font-bold text-[#1A2C5B] group-hover:text-blue-700 inline-flex items-center gap-1 focus:outline-none focus:underline transition-colors duration-200" aria-label="Apply for VA health care on VA.gov">
+                <a href="https://www.va.gov/health-care/apply/application/introduction" target="_blank" rel="noopener noreferrer" className="text-sm font-bold text-[#1A2C5B] group-hover:text-blue-700 inline-flex items-center gap-1 focus:outline-none focus:underline" aria-label="Apply for VA health care on VA.gov (opens in new tab)">
                   Apply on VA.gov <ArrowRightIcon className="h-4 w-4" aria-hidden="true" />
                 </a>
               </div>
@@ -195,15 +188,15 @@ export default function HealthPage() {
       {/* ─── Browse Health Resources ─── */}
       <HealthBrowseSection />
 
-      {/* ─── Quick Guides ─── */}
+      {/* ─── Quick Guide ─── */}
       <section aria-labelledby="guides-heading" className="py-12 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <h2 id="guides-heading" className="text-2xl font-extrabold text-[#1A2C5B] tracking-tight mb-6">VA Quick Guides</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-            {([
+            {[
               { title: 'How to Enroll in VA Healthcare', desc: 'Confirm eligibility → gather DD-214 → submit VA Form 10-10EZ online → schedule first appointment.', href: 'https://www.va.gov/health-care/apply/application/introduction', cta: 'Apply on VA.gov' },
               { title: 'Filing a VA Disability Claim', desc: 'Gather medical evidence → connect with a VSO → file VA Form 21-526EZ → attend your C&P exam.', href: 'https://www.va.gov/disability/file-disability-claim-form-21-526ez/', cta: 'File a claim' },
-            ] as const).map(g => (
+            ].map(g => (
               <div key={g.title} className="bg-gray-50 rounded-2xl p-5 border border-gray-100">
                 <h3 className="font-extrabold text-[#1A2C5B] mb-2">{g.title}</h3>
                 <p className="text-sm text-gray-600 leading-relaxed mb-4">{g.desc}</p>
@@ -216,12 +209,12 @@ export default function HealthPage() {
         </div>
       </section>
 
-      {/* ─── Essential Resources ─── */}
+      {/* ─── Essential Resources (8 static cards) ─── */}
       <section aria-labelledby="essential-heading" className="py-12 bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <h2 id="essential-heading" className="text-2xl font-extrabold text-[#1A2C5B] tracking-tight mb-6">Essential Resources</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {([
+            {[
               { title: 'VA Mental Health', desc: 'Counseling, PTSD treatment, substance use, and crisis services.', url: 'https://www.va.gov/health-care/health-needs-conditions/mental-health/', phone: '1-800-273-8255' },
               { title: 'My HealtheVet', desc: 'Manage VA health records, prescriptions, and appointments.', url: 'https://www.myhealth.va.gov/' },
               { title: 'Wounded Warrior Project', desc: 'Programs for post-9/11 veterans with service-connected injuries.', url: 'https://www.woundedwarriorproject.org/', phone: '1-888-997-2586' },
@@ -230,7 +223,7 @@ export default function HealthPage() {
               { title: 'VA Caregiver Support', desc: 'Education, training, and respite care for veteran caregivers.', url: 'https://www.caregiver.va.gov/', phone: '1-855-260-3274' },
               { title: 'Team RWB', desc: 'Physical and social fitness programs connecting veterans to community.', url: 'https://www.teamrwb.org/' },
               { title: 'PACT Act Resources', desc: 'Expanded benefits for burn pit and toxic exposure veterans.', url: 'https://www.va.gov/resources/the-pact-act-and-your-va-benefits/' },
-            ] as const).map(r => (
+            ].map(r => (
               <div key={r.title} className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-300">
                 <h3 className="font-bold text-[#1A2C5B] text-sm mb-1.5">{r.title}</h3>
                 <p className="text-xs text-gray-500 leading-relaxed mb-3">{r.desc}</p>
@@ -238,8 +231,8 @@ export default function HealthPage() {
                   <a href={r.url} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-[#1A2C5B] hover:text-blue-700 inline-flex items-center gap-1 focus:outline-none focus:underline transition-colors duration-200">
                     Visit Website <ArrowRightIcon className="h-3 w-3" aria-hidden="true" />
                   </a>
-                  {'phone' in r && r.phone && (
-                    <a href={`tel:${(r.phone as string).replace(/\D/g, '')}`} className="text-xs font-semibold text-[#B22234] hover:text-red-700 inline-flex items-center gap-1 transition-colors duration-200">
+                  {r.phone && (
+                    <a href={`tel:${r.phone.replace(/\D/g, '')}`} className="text-xs font-semibold text-[#B22234] hover:text-red-700 inline-flex items-center gap-1 transition-colors duration-200">
                       <PhoneIcon className="h-3 w-3" aria-hidden="true" />
                       {r.phone}
                     </a>
@@ -277,6 +270,7 @@ export default function HealthPage() {
 
       {/* ─── Auto-Fill Floating Button ─── */}
       <AutoFillButton context="health" />
+
     </main>
   );
 }
