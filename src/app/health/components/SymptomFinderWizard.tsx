@@ -191,13 +191,15 @@ export default function SymptomFinderWizard({ bridgeData = null }: SymptomFinder
         role: 'assistant',
         content: `I got you — I can see your records show **${bridgeData.conditions.map(c => c.condition).slice(0, 3).join(', ')}${bridgeData.conditions.length > 3 ? ` and ${bridgeData.conditions.length - 3} more` : ''}**.
 
-To find the best resources for you, I need three quick answers:
+To find the best resources for you, I need a few quick answers:
 
 **1.** Do you already have an active VA claim for any of these conditions? *(Yes / No)*
 
-**2.** Are you currently receiving VA care, and are you satisfied with it? *(Yes / No / Not enrolled)*
+**2.** What state are you in? *(e.g., Pennsylvania, Texas, California — helps me find your state-level VA programs)*
 
-**3.** Is there anything else about your situation you'd like to share before I find your resources?
+**3.** Are you currently receiving VA care, and are you satisfied with it? *(Yes / No / Not enrolled)*
+
+**4.** Is there anything else about your situation you'd like to share?
 
 _This is not medical advice. Discuss with your VA provider or primary doctor._`,
         timestamp: Date.now(),
@@ -205,8 +207,8 @@ _This is not medical advice. Discuss with your VA provider or primary doctor._`,
       setMessages([openingMsg]);
       setStep('chat');
       setSuggestedQuestions([
-        'Yes, I have a VA claim',
-        'No, I don\'t have a VA claim yet',
+        'Yes, I have an active VA claim',
+        'No VA claim yet',
         'Not sure about my claim status',
       ]);
     }
@@ -296,13 +298,7 @@ _This is not medical advice. Discuss with your VA provider or primary doctor._`,
         finalRecs.ngo = dedup(finalRecs.ngo);
         finalRecs.state = dedup(finalRecs.state);
 
-        // Suppress raw JSON from chat: mark it as a resource payload
-        setMessages(prev => [
-          ...prev,
-          { role: 'assistant', content: data.aiMessage, timestamp: Date.now(), isResourcePayload: true },
-        ]);
-
-        // Build a clean prose summary for the ResultsPanel header
+        // Build a clean prose reply (strip any leaked JSON)
         const hasJsonInMessage = interceptedResources !== null ||
           data.aiMessage.includes('"vaResources"') ||
           data.aiMessage.includes('"title"') ||
@@ -311,6 +307,14 @@ _This is not medical advice. Discuss with your VA provider or primary doctor._`,
         const cleanAiMessage = hasJsonInMessage
           ? 'Here are your top matched resources based on your records. This is not medical advice. Discuss with your VA provider or primary doctor.'
           : data.aiMessage;
+
+        // Always show the conversational reply in chat (visible, not suppressed)
+        if (cleanAiMessage) {
+          setMessages(prev => [
+            ...prev,
+            { role: 'assistant', content: cleanAiMessage, timestamp: Date.now() },
+          ]);
+        }
 
         setTriageResult({
           aiMessage: cleanAiMessage,
@@ -422,7 +426,7 @@ _This is not medical advice. Discuss with your VA provider or primary doctor._`,
   const handleStartChat = useCallback(() => {
     const openingMsg: TriageMessage = {
       role: 'assistant',
-      content: `Copy that — let's get you the right resources. I need three quick answers before I can map your options:\n\n**1.** Do you already have an active VA claim for this? *(Yes / No)*\n\n**2.** Are you currently receiving VA care — and if so, are you satisfied with it? *(Yes / No / Not enrolled)*\n\n**3.** Is there anything else about your situation you'd like to share before I pull your resources?\n\n_This is not medical advice. Discuss with your VA provider or primary doctor._`,
+      content: `Copy that — let's get you the right resources. A few quick questions before I pull your options:\n\n**1.** Do you already have an active VA claim? *(Yes / No)*\n\n**2.** What state are you in? *(e.g., Pennsylvania, Texas — helps me find local VA programs)*\n\n**3.** Are you currently receiving VA care — and if so, are you satisfied with it? *(Yes / No / Not enrolled)*\n\n**4.** Anything else about your situation you'd like to share?\n\n_This is not medical advice. Discuss with your VA provider or primary doctor._`,
       timestamp: Date.now(),
     };
     setMessages([openingMsg]);

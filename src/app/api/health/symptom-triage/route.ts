@@ -455,8 +455,15 @@ export async function POST(request: NextRequest) {
       const crossHints  = detectCrossDomainIntent(allUserTexts);
       if (crossHints.length > 0) console.log('[SymptomTriage] Cross-domain intents detected:', crossHints);
 
+      // Enrich bridgeContext with chat-detected state (bridge value wins)
+      const detectedState = bridgeContext?.userState ?? userProfile?.state ?? null;
+      const fetchBridge = detectedState
+        ? { ...(bridgeContext ?? { conditions: [] }), userState: detectedState }
+        : bridgeContext;
+      console.log('[SymptomTriage] Detected state for geo filter:', detectedState ?? 'none');
+
       // ── 1. Query MongoDB FIRST (via Resource Intelligence Engine) ────────────────
-      const dbResults  = await fetchDomainResources(HEALTH_CONFIG, kws, bridgeContext);
+      const dbResults  = await fetchDomainResources(HEALTH_CONFIG, kws, fetchBridge);
       const dbVa    = dbResults['va']    ?? [];
       const dbNgo   = dbResults['ngo']   ?? [];
       const dbState = dbResults['state'] ?? [];

@@ -20,8 +20,24 @@ export const US_STATE_NAMES = [
   'north carolina', 'north dakota', 'ohio', 'oklahoma', 'oregon',
   'pennsylvania', 'rhode island', 'south carolina', 'south dakota',
   'tennessee', 'texas', 'utah', 'vermont', 'virginia', 'washington',
-  'west virginia', 'wisconsin', 'wyoming',
+  'west virginia', 'wisconsin', 'wyoming', 'district of columbia',
 ];
+
+// ─── State abbreviation → full name (lowercase) ──────────────────────────────
+
+const STATE_ABBR_MAP: Record<string, string> = {
+  al:'alabama', ak:'alaska', az:'arizona', ar:'arkansas', ca:'california',
+  co:'colorado', ct:'connecticut', de:'delaware', fl:'florida', ga:'georgia',
+  hi:'hawaii', id:'idaho', il:'illinois', 'in':'indiana', ia:'iowa',
+  ks:'kansas', ky:'kentucky', la:'louisiana', me:'maine', md:'maryland',
+  ma:'massachusetts', mi:'michigan', mn:'minnesota', ms:'mississippi',
+  mo:'missouri', mt:'montana', ne:'nebraska', nv:'nevada', nh:'new hampshire',
+  nj:'new jersey', nm:'new mexico', ny:'new york', nc:'north carolina',
+  nd:'north dakota', oh:'ohio', ok:'oklahoma', or:'oregon', pa:'pennsylvania',
+  ri:'rhode island', sc:'south carolina', sd:'south dakota', tn:'tennessee',
+  tx:'texas', ut:'utah', vt:'vermont', va:'virginia', wa:'washington',
+  wv:'west virginia', wi:'wisconsin', wy:'wyoming', dc:'district of columbia',
+};
 
 // ─── Amplifier words for severity weighting ───────────────────────────────────
 
@@ -67,18 +83,44 @@ export function parseUserProfile(text: string): UserProfile {
 
   // 50-state detection from chat context patterns
   let state: string | undefined;
+
+  // 1. Context phrase + full state name: "I'm in Pennsylvania", "live in Texas"
   const stateCtxRe = /(?:live(?:\s+in)?|living\s+in|i'?m\s+in|i\s+am\s+in|based\s+in|located\s+in|from|residing\s+in)\s+([a-z][a-z\s]{2,}?)(?:[\s,.]|$)/;
   const ctxMatch = lower.match(stateCtxRe);
   if (ctxMatch) {
     const candidate = ctxMatch[1].trim();
     state = US_STATE_NAMES.find(s => s === candidate || candidate.startsWith(s));
   }
+
+  // 2. Context phrase + 2-letter abbreviation: "I'm in PA", "based in TX"
+  if (!state) {
+    const abbrCtxRe = /(?:live(?:\s+in)?|living\s+in|i'?m\s+in|i\s+am\s+in|based\s+in|located\s+in|from|residing\s+in)\s+\b([a-z]{2})\b/;
+    const abbrCtxMatch = lower.match(abbrCtxRe);
+    if (abbrCtxMatch) state = STATE_ABBR_MAP[abbrCtxMatch[1]];
+  }
+
+  // 3. Bare full state name anywhere in text: "Pennsylvania", "west virginia"
   if (!state) {
     const multiWord = US_STATE_NAMES.filter(s => s.includes(' '));
     state = multiWord.find(s => lower.includes(s))
       ?? US_STATE_NAMES.filter(s => !s.includes(' ')).find(s =>
           new RegExp(`\\b${s}\\b`).test(lower)
         );
+  }
+
+  // 4. Bare UPPERCASE 2-letter abbreviation in original text: "PA", "TX", "FL"
+  //    Uses original text (not lowercased) to avoid false matches on "in", "or", "me", "va" (Veterans Affairs), etc.
+  if (!state) {
+    const EXCLUDE_ABBR = new Set(['VA', 'OK', 'IN', 'OR', 'ME', 'OH', 'HI', 'ID', 'MS', 'LA', 'MA']);
+    const abbrMatch = text.match(/\b([A-Z]{2})\b/g);
+    if (abbrMatch) {
+      for (const abbr of abbrMatch) {
+        if (!EXCLUDE_ABBR.has(abbr) && STATE_ABBR_MAP[abbr.toLowerCase()]) {
+          state = STATE_ABBR_MAP[abbr.toLowerCase()];
+          break;
+        }
+      }
+    }
   }
 
   return { isPermanentTotal, hasVaClaim, branch, era, vaDissatisfied, state };

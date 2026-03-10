@@ -12,6 +12,42 @@
 import { connectToDatabase } from '@/lib/mongodb';
 import type { DomainConfig, RawResource, BridgeContext, TrackResults } from './types';
 
+// ─── State abbreviation → full name map ──────────────────────────────────────
+
+const STATE_NAMES: Record<string, string> = {
+  AL:'Alabama', AK:'Alaska', AZ:'Arizona', AR:'Arkansas', CA:'California',
+  CO:'Colorado', CT:'Connecticut', DE:'Delaware', FL:'Florida', GA:'Georgia',
+  HI:'Hawaii', ID:'Idaho', IL:'Illinois', IN:'Indiana', IA:'Iowa',
+  KS:'Kansas', KY:'Kentucky', LA:'Louisiana', ME:'Maine', MD:'Maryland',
+  MA:'Massachusetts', MI:'Michigan', MN:'Minnesota', MS:'Mississippi',
+  MO:'Missouri', MT:'Montana', NE:'Nebraska', NV:'Nevada', NH:'New Hampshire',
+  NJ:'New Jersey', NM:'New Mexico', NY:'New York', NC:'North Carolina',
+  ND:'North Dakota', OH:'Ohio', OK:'Oklahoma', OR:'Oregon', PA:'Pennsylvania',
+  RI:'Rhode Island', SC:'South Carolina', SD:'South Dakota', TN:'Tennessee',
+  TX:'Texas', UT:'Utah', VT:'Vermont', VA:'Virginia', WA:'Washington',
+  WV:'West Virginia', WI:'Wisconsin', WY:'Wyoming', DC:'District of Columbia',
+};
+
+/** Build a MongoDB geo filter for a given state string (abbrev or full name). */
+function buildStateGeoFilter(userState: string): Record<string, unknown> {
+  const trimmed  = userState.trim();
+  const upper    = trimmed.toUpperCase().replace(/\s*\([^)]+\)$/, ''); // strip "(PA)" suffix
+  const abbr     = STATE_NAMES[upper] ? upper : null;
+  const fullName = abbr
+    ? STATE_NAMES[abbr]
+    : trimmed.replace(/\s*\([^)]+\)$/, ''); // full name passed directly
+  const escaped  = fullName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const abbrStr  = abbr ?? upper.slice(0, 2);
+
+  return {
+    $or: [
+      { 'location.state': { $regex: `${escaped}|\\b${abbrStr}\\b`, $options: 'i' } },
+      { title:            { $regex: escaped, $options: 'i' } },
+      { description:      { $regex: `${escaped}.*veteran|veteran.*${escaped}`, $options: 'i' } },
+    ],
+  };
+}
+
 // ─── toRaw helper — normalizes a raw MongoDB doc to RawResource ───────────────
 
 function toRaw(doc: Record<string, unknown>): RawResource {
@@ -83,27 +119,37 @@ export async function fetchDomainResources(
     for (const track of config.tracks) {
       const subcatFilter = { subcategory: track.subcategory };
 
-      // Build strict query: keywords + subcategory + optional geo filter
-      const strictParts = [keywordFilter, subcatFilter];
-      if (track.geoFilter) strictParts.push(track.geoFilter as Record<string, unknown>);
-      const strictQuery = searchPat && strictParts.length > 1
-        ? { $and: strictParts }
-        : subcatFilter;
+      // For state track: dynamic geo from bridge, else fall back to config geoFilter
+      const effectiveGeo: Record<string, unknown> | undefined =
+        track.id === 'state' && bridgeContext?.userState
+          ? buildStateGeoFilter(bridgeContext.userState)
+          : (track.geoFilter as Record<string, unknown> | undefined);
+
+      // If the user's state is explicitly known, never fall back to wrong-state resources
+      const userStateKnown = track.id === 'state' && !!bridgeContext?.userState;
+
+      // Query 1: keywords + subcategory + geo
+      const strictParts: Record<string, unknown>[] = [];
+      if (searchPat) strictParts.push(keywordFilter);
+      strictParts.push(subcatFilter);
+      if (effectiveGeo) strictParts.push(effectiveGeo);
+      const strictQuery = strictParts.length > 1 ? { $and: strictParts } : subcatFilter;
 
       let docs = await coll.find(strictQuery).sort({ rating: -1 }).limit(20)
         .toArray() as Record<string, unknown>[];
 
       if (docs.length < 3) {
-        // Relax: keywords + subcategory (drop geo filter)
-        const relaxedQuery = searchPat
-          ? { $and: [keywordFilter, subcatFilter] }
-          : subcatFilter;
+        // Query 2: relax keywords, keep geo filter
+        const relaxParts: Record<string, unknown>[] = [subcatFilter];
+        if (effectiveGeo) relaxParts.push(effectiveGeo);
+        const relaxedQuery = relaxParts.length > 1 ? { $and: relaxParts } : subcatFilter;
         docs = await coll.find(relaxedQuery).sort({ rating: -1 }).limit(20)
           .toArray() as Record<string, unknown>[];
       }
 
-      if (docs.length < 3) {
-        // Last resort: subcategory only
+      if (docs.length < 3 && !userStateKnown) {
+        // Query 3 (last resort): subcategory only — only when state is unknown
+        // When state IS known but has 0 resources, return [] rather than wrong-state results
         docs = await coll.find(subcatFilter).sort({ rating: -1 }).limit(20)
           .toArray() as Record<string, unknown>[];
       }
