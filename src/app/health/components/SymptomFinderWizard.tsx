@@ -173,10 +173,36 @@ export default function SymptomFinderWizard({ bridgeData = null }: SymptomFinder
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const geoStateRef = useRef<string | null>(null); // auto-detected state via browser geolocation
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
+
+  // ── Browser geolocation → reverse-geocode → state name ───────────────────
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const { latitude: lat, longitude: lon } = pos.coords;
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`,
+            { headers: { 'Accept-Language': 'en', 'User-Agent': 'Vet1Stop/1.0' } },
+          );
+          if (!res.ok) return;
+          const data = await res.json();
+          const state: string | undefined = data?.address?.state;
+          if (state) {
+            geoStateRef.current = state;
+            console.log('[Geolocation] Detected state:', state);
+          }
+        } catch { /* non-fatal — fallback to chat text detection */ }
+      },
+      () => { /* permission denied — silent fallback */ },
+      { timeout: 8000 },
+    );
+  }, []);
 
   useEffect(() => {
     if (step === 'chat' && !isHandedOff) {
@@ -245,7 +271,7 @@ _This is not medical advice. Discuss with your VA provider or primary doctor._`,
           step: triageStep,
           userMessage,
           bridgeContext,
-          userState: bridgeData?.userState ?? undefined,
+          userState: bridgeData?.userState ?? geoStateRef.current ?? undefined,
         }),
       });
 
@@ -368,6 +394,7 @@ _This is not medical advice. Discuss with your VA provider or primary doctor._`,
     const newMessages = [...messages, userMsg];
     setMessages(newMessages);
     setUserInput('');
+    if (inputRef.current) inputRef.current.style.height = '42px';
     setSuggestedQuestions([]);
     const userTurns = newMessages.filter(m => m.role === 'user').length;
     callTriageApi(newMessages, userTurns >= 3 ? 'assess' : 'quick_triage', text);
@@ -619,13 +646,18 @@ _This is not medical advice. Discuss with your VA provider or primary doctor._`,
                       ref={inputRef}
                       rows={1}
                       value={userInput}
-                      onChange={e => setUserInput(e.target.value)}
+                      onChange={e => {
+                        setUserInput(e.target.value);
+                        const el = e.target;
+                        el.style.height = 'auto';
+                        el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+                      }}
                       onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } }}
                       placeholder="Type your answer..."
                       disabled={isLoading}
-                      className="flex-1 px-3.5 py-2.5 rounded-xl border border-gray-300 focus:border-[#1A2C5B] focus:ring-2 focus:ring-blue-200 focus:outline-none text-sm disabled:opacity-50 shadow-sm resize-none"
+                      className="flex-1 px-3.5 py-2.5 rounded-xl border border-gray-300 focus:border-[#1A2C5B] focus:ring-2 focus:ring-blue-200 focus:outline-none text-sm disabled:opacity-50 shadow-sm resize-none overflow-y-auto"
                       aria-label="Answer the triage question"
-                      style={{ minHeight: '42px', maxHeight: '100px' }}
+                      style={{ minHeight: '42px', maxHeight: '200px' }}
                     />
                     <button
                       onClick={handleSendMessage}

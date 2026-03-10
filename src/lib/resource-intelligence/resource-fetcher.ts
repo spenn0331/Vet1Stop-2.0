@@ -28,20 +28,39 @@ const STATE_NAMES: Record<string, string> = {
   WV:'West Virginia', WI:'Wisconsin', WY:'Wyoming', DC:'District of Columbia',
 };
 
+// Reverse map: lowercase full name → abbreviation
+const STATE_NAME_TO_ABBR: Record<string, string> = Object.fromEntries(
+  Object.entries(STATE_NAMES).map(([abbr, name]) => [name.toLowerCase(), abbr])
+);
+
 /** Build a MongoDB geo filter for a given state string (abbrev or full name). */
 function buildStateGeoFilter(userState: string): Record<string, unknown> {
-  const trimmed  = userState.trim();
-  const upper    = trimmed.toUpperCase().replace(/\s*\([^)]+\)$/, ''); // strip "(PA)" suffix
-  const abbr     = STATE_NAMES[upper] ? upper : null;
-  const fullName = abbr
-    ? STATE_NAMES[abbr]
-    : trimmed.replace(/\s*\([^)]+\)$/, ''); // full name passed directly
-  const escaped  = fullName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const abbrStr  = abbr ?? upper.slice(0, 2);
+  const trimmed   = userState.trim().replace(/\s*\([^)]+\)$/, ''); // strip "(PA)" suffix
+  const upperKey  = trimmed.toUpperCase();
+  const lowerKey  = trimmed.toLowerCase();
+
+  // Resolve to abbreviation + Title-Case full name
+  let abbr: string;
+  let fullName: string;
+  if (STATE_NAMES[upperKey]) {
+    // Input is an abbreviation e.g. 'PA'
+    abbr     = upperKey;
+    fullName = STATE_NAMES[upperKey]; // e.g. 'Pennsylvania'
+  } else if (STATE_NAME_TO_ABBR[lowerKey]) {
+    // Input is a full name e.g. 'pennsylvania'
+    abbr     = STATE_NAME_TO_ABBR[lowerKey]; // e.g. 'PA'
+    fullName = STATE_NAMES[abbr];             // e.g. 'Pennsylvania'
+  } else {
+    // Unknown — use trimmed as-is, no abbreviation shortcut
+    abbr     = trimmed.slice(0, 2).toUpperCase();
+    fullName = trimmed;
+  }
+
+  const escaped = fullName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
   return {
     $or: [
-      { 'location.state': { $regex: `${escaped}|\\b${abbrStr}\\b`, $options: 'i' } },
+      { 'location.state': { $regex: `${escaped}|\\b${abbr}\\b`, $options: 'i' } },
       { title:            { $regex: escaped, $options: 'i' } },
       { description:      { $regex: `${escaped}.*veteran|veteran.*${escaped}`, $options: 'i' } },
     ],
