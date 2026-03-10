@@ -97,8 +97,8 @@ a:not([class]):hover {
   text-decoration: none;
 }
 
-/* Smooth scrolling */
-html {
+/* Smooth scrolling — scoped to data attribute for Next.js 15 compatibility */
+html[data-scroll-behavior="smooth"] {
   scroll-behavior: smooth;
 }
 

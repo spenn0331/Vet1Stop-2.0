@@ -171,12 +171,14 @@ export default function SymptomFinderWizard({ bridgeData = null }: SymptomFinder
   const [isHandedOff, setIsHandedOff] = useState(false);
   const [chatExpanded, setChatExpanded] = useState(false);
 
-  const chatEndRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const geoStateRef = useRef<string | null>(null); // auto-detected state via browser geolocation
 
+  // Scroll within the chat box — never triggers page-level smooth scroll
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const el = chatContainerRef.current;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
   }, [messages, isLoading]);
 
   // ── Browser geolocation → reverse-geocode → state name ───────────────────
@@ -604,6 +606,7 @@ _This is not medical advice. Discuss with your VA provider or primary doctor._`,
               <div className="flex flex-col">
                 {/* Message list — desktop gets more room, mobile constrained */}
                 <div
+                  ref={chatContainerRef}
                   className="bg-gradient-to-b from-gray-50 to-white border-b border-gray-200 p-3 sm:p-4 overflow-y-auto overscroll-contain shadow-inner"
                   style={{ maxHeight: isHandedOff ? '160px' : '340px', minHeight: '120px' }}
                 >
@@ -611,7 +614,6 @@ _This is not medical advice. Discuss with your VA provider or primary doctor._`,
                     <ChatBubble key={idx} msg={msg} />
                   ))}
                   {isLoading && <TypingIndicator />}
-                  <div ref={chatEndRef} />
                 </div>
 
                 {errorMsg && (
