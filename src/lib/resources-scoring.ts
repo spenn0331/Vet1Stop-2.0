@@ -70,8 +70,8 @@ export interface ScoringContext {
   /** Normalized lowercase keywords extracted from conditions/symptoms (e.g., ["back pain", "ptsd"]) */
   keywords: string[];
   hasVaClaim: boolean;
-  /** MVP: always "Carlisle, PA" — make dynamic in Pass 2 */
-  location: string;
+  /** Strike 5: Dynamic user state for geo scoring. null = no geo-bonus (honest default) */
+  location: string | null;
   /** User preference tags (e.g., ["peer", "fitness", "grants"]) */
   preferences: string[];
   /** Fix J — per-keyword severity multiplier (e.g., { 'ptsd': 1.5, 'back pain': 1.0 }) */
@@ -108,9 +108,7 @@ export interface ScoredResource extends ResourceInput {
   whyMatches: string;
 }
 
-// ─── Geo helpers ─────────────────────────────────────────────────────────────
-
-const PA_TERMS = ['carlisle', 'pennsylvania', ', pa', ' pa ', 'pa,'];
+// ─── Geo helpers (Strike 5 — dynamic user state) ───────────────────────────────
 
 function locationString(loc: ResourceInput['location']): string {
   if (!loc) return '';
@@ -118,10 +116,21 @@ function locationString(loc: ResourceInput['location']): string {
   return [loc.city, loc.state, loc.region].filter(Boolean).join(' ').toLowerCase();
 }
 
-function hasGeoBonus(loc: ResourceInput['location']): boolean {
-  const s = locationString(loc);
-  if (!s) return false;
-  return PA_TERMS.some(t => s.includes(t));
+/**
+ * Returns true when a resource appears to serve the user's detected state.
+ * Checks the full resource haystack (title + description + tags + location).
+ * When userLocation is null, always returns false (no false geo-bonuses).
+ */
+function hasGeoBonus(resource: ResourceInput, userLocation: string | null): boolean {
+  if (!userLocation) return false;
+  const userLower = userLocation.toLowerCase().trim();
+  const haystack = [
+    resource.title,
+    resource.description,
+    ...(resource.tags ?? []),
+    locationString(resource.location),
+  ].join(' ').toLowerCase();
+  return haystack.includes(userLower);
 }
 
 // ─── Keyword relevance scorer (50 pts, severity-weighted) ──────────────────────────────
@@ -269,7 +278,7 @@ function buildWhyMatches(
     }
   }
 
-  const hasGeo = hasGeoBonus(resource.location);
+  const hasGeo = hasGeoBonus(resource, context.location);
   const isFreeish = resource.isFree || resource.costLevel === 'free' || resource.costLevel === 'low';
   const isPeer = (resource.tags ?? []).some(t => ['peer', 'peer-led', 'peer support'].includes(t.toLowerCase()));
 
@@ -279,7 +288,7 @@ function buildWhyMatches(
   }
   if (isPeer) parts.push('peer-led support');
   if (isFreeish) parts.push('at no cost');
-  if (hasGeo) parts.push('near Carlisle, PA');
+  if (hasGeo) parts.push('near your location');
   if (score >= 80 && context.preferences.length > 0) {
     parts.push(`fits ${context.preferences[0]} goal`);
   }
@@ -296,7 +305,7 @@ export function scoreResource(resource: ResourceInput, context: ScoringContext):
   const kwScore        = scoreKeywordRelevance(resource, context);
   const vetScore       = scoreVeteranCentric(resource);
   const freeScore      = scoreFreeAccessible(resource);
-  const geoScore       = hasGeoBonus(resource.location) ? 10 : 0;
+  const geoScore  = hasGeoBonus(resource, context.location) ? 10 : 0;
   const ratScore       = scoreRating(resource);
   const freshBonus     = scoreFreshness(resource);
   const popPenalty     = scorePopulationPenalty(resource);
@@ -340,10 +349,9 @@ export function buildScoringContext(opts: {
   preferences?: string[];
   severityWeights?: Record<string, number>;
   userProfile?: ScoringContext['userProfile'];
+  /** Strike 5: user's detected state (null = no geo-bonus) */
+  userLocation?: string | null;
 }): ScoringContext {
-  // MVP: location hardcoded — dynamic in Pass 2
-  const MVP_LOCATION = 'Carlisle, PA';
-
   const keywords = opts.conditions
     .map(c => c.toLowerCase().trim())
     .filter(Boolean);
@@ -351,7 +359,7 @@ export function buildScoringContext(opts: {
   return {
     keywords,
     hasVaClaim: opts.hasVaClaim,
-    location: MVP_LOCATION,
+    location: opts.userLocation ?? null,
     preferences: opts.preferences ?? [],
     severityWeights: opts.severityWeights,
     userProfile: opts.userProfile,

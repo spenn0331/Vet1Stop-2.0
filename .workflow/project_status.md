@@ -13,8 +13,36 @@
 
 ---
 
-## 🎯 Current Status: Strike 4 Complete — Resource Intelligence Engine Live
-**As of Mar 9, 2026:** Strike 4 ships 11 quality improvements to the resource matching pipeline across `route.ts` and `resources-scoring.ts`. Resources are now filtered, scored, and ranked using both Blue Button bridge data AND chat context simultaneously. "PCS Commander" renamed to "Home Base" across all documentation.
+## 🎯 Current Status: Strike 5 Complete — RIE Architecture Extracted + Gemini Critiques Fixed
+**As of Mar 10, 2026:** Strike 5 addresses all 3 Gemini architectural critiques (hardcoded KEYWORD_TAG_MAP, data shape vulnerability, static location) and extracts the Resource Intelligence Engine into a reusable `src/lib/resource-intelligence/` library. Education and Life pages can now plug in with zero code duplication.
+
+### ✅ Strike 5 — Resource Intelligence Engine Architecture (Mar 10, 2026)
+
+**Phase 1 — DB Audit:** Ran `scripts/audit-tags.js`. All 190 `healthResources` docs have ≥3 tags (100% coverage). 189/190 have `updatedAt`. Key finding: `federal` subcategory = only 5 docs (VA track very thin — separate data issue). `location.state` = 0 on all docs (geo-bonus was never firing via DB location). No enrichment needed for Phase 1.
+
+**Phase 2 — Dynamic Location Wiring (3 files):**
+- `src/types/records-recon.ts`: Added `userState?: string` to `BridgeData` interface
+- `src/app/api/health/symptom-triage/route.ts`: Added 50-state detection to `parseUserProfile()`. Dynamic location in `buildSystemPrompt()` (uses bridge state > CARLISLE_PA fallback). `applyScoring()` extracts `userState` from bridge first, then chat-parsed state, passes to `buildScoringContext`
+- `src/lib/resources-scoring.ts`: Removed hardcoded `PA_TERMS` + `'Carlisle, PA'`. `hasGeoBonus(resource, userLocation)` now checks full resource haystack against user's detected state. `ScoringContext.location` is now `string | null` (null = no geo-bonus, honest default). `buildScoringContext` accepts `userLocation?: string | null`
+
+**Phase 3 — KEYWORD_TAG_MAP → MongoDB (2 new files):**
+- `scripts/seed-keyword-mappings.js`: Seeds 33 keyword mappings (health=19, education=7, life=7). Indexes on domain + keyword+domain. Run and confirmed seeded.
+- `src/lib/resource-intelligence/keyword-map-loader.ts`: MongoDB loader with 10-min in-memory cache + hardcoded fallback. `getKeywordTagMap(domain)` used by scoring engine.
+
+**Phase 4 — Engine Extraction (7 new files + route.ts refactor):**
+- `src/lib/resource-intelligence/types.ts`: All shared interfaces (RawResource, ScoredRawResource, BridgeContext, BridgeCondition, UserProfile, DomainConfig, DomainTrack, TrackResults, CrossDomainHint)
+- `src/lib/resource-intelligence/domain-configs.ts`: HEALTH_CONFIG, EDUCATION_CONFIG, LIFE_CONFIG + PA_GEO_FILTER
+- `src/lib/resource-intelligence/keyword-extractor.ts`: `extractKeywords(text, config?)` — domain-configurable, uses config.knownPhrases + config.signalWords
+- `src/lib/resource-intelligence/profile-parser.ts`: `parseUserProfile()`, `parseSeverityWeights()`, `detectCrossDomainIntent()`
+- `src/lib/resource-intelligence/resource-fetcher.ts`: `fetchDomainResources(config, keywords, bridge?)` — generic track-aware MongoDB fetcher
+- `src/lib/resource-intelligence/resource-scorer.ts`: Re-exports all scoring functions from resources-scoring.ts
+- `src/lib/resource-intelligence/index.ts`: Barrel export — single import path for all RIE functions
+- `src/app/api/health/symptom-triage/route.ts`: Imports all extracted functions from `@/lib/resource-intelligence`. Removed ~220 lines of duplicate local definitions. `fetchMongoResources` → `fetchDomainResources(HEALTH_CONFIG, ...)`. `connectToDatabase` import removed.
+
+**Phase 5 — Data Enrichment Script:**
+- `scripts/enrich-resource-tags.js`: AI-assisted tag enrichment (dry-run default, `--write` to commit). Sends sparse docs to Grok, merges returned tags. Not needed now (100% coverage) but ready for future use.
+
+**Critical Data Finding:** `healthResources.subcategory = 'federal'` has only 5 docs. VA track in Symptom Finder almost always shows fallback static resources. This needs a separate data seeding pass to expand federal resources.
 
 ### ✅ Strike 4 — Resource Intelligence Engine (Mar 9, 2026)
 

@@ -2,12 +2,21 @@
 // Strike 1 + DB Fallback Fix: MongoDB query replaces hardcoded static fallback — March 2026
 
 import { NextRequest, NextResponse } from 'next/server';
-import { connectToDatabase } from '@/lib/mongodb';
 import {
   scoreAndSortResources,
   buildScoringContext,
+  extractKeywords,
+  parseUserProfile,
+  parseSeverityWeights,
+  detectCrossDomainIntent,
+  fetchDomainResources,
+  HEALTH_CONFIG,
   type ResourceInput,
-} from '@/lib/resources-scoring';
+  type RawResource,
+  type ScoredRawResource,
+  type BridgeCondition,
+  type BridgeContext,
+} from '@/lib/resource-intelligence';
 
 /**
  * POST /api/health/symptom-triage  (v3 — Triage V3, Mar 2026)
@@ -95,16 +104,7 @@ interface TriageMessage {
   content: string;
 }
 
-interface BridgeCondition {
-  condition: string;
-  category: string;
-  mentionCount: number;
-}
-
-interface BridgeContext {
-  conditions: BridgeCondition[];
-  reportSummary?: string;
-}
+// BridgeCondition + BridgeContext imported from @/lib/resource-intelligence
 
 interface TriageRequest {
   messages: TriageMessage[];
@@ -179,8 +179,9 @@ async function callGrokAI(messages: TriageMessage[], systemPrompt: string): Prom
 function buildSystemPrompt(step: string, bridgeContext?: BridgeContext): string {
   let prompt = TRIAGE_SYSTEM_PROMPT;
 
-  // Inject location context
-  prompt += `\n\nUSER LOCATION: Veteran is in ${CARLISLE_PA_CONTEXT}. State Track MUST be Pennsylvania-only.`;
+  // Inject location context — dynamic state if detected, MVP fallback to PA
+  const locationStr = bridgeContext?.userState ?? CARLISLE_PA_CONTEXT;
+  prompt += `\n\nUSER LOCATION: Veteran is in ${locationStr}. State Track MUST match their state.`;
 
   // Inject bridge context
   if (bridgeContext?.conditions?.length) {
@@ -206,27 +207,7 @@ function buildSystemPrompt(step: string, bridgeContext?: BridgeContext): string 
 
 // ─── Resource scorer integration ─────────────────────────────────────────────
 
-interface RawResource {
-  title: string;
-  description: string;
-  url: string;
-  phone?: string;
-  priority: 'high' | 'medium' | 'low';
-  tags?: string[];
-  isFree?: boolean;
-  costLevel?: 'free' | 'low' | 'moderate' | 'high';
-  rating?: number;
-  location?: string;
-  updatedAt?: string;
-}
-
-interface ScoredRawResource extends RawResource {
-  score?: number;
-  matchPercent?: number;
-  badge?: string | null;
-  whyMatches?: string;
-  track?: string;
-}
+// RawResource + ScoredRawResource imported from @/lib/resource-intelligence
 
 function applyScoring(
   vaResources: RawResource[],
@@ -249,11 +230,15 @@ function applyScoring(
     ? parseSeverityWeights(chatKeywords.join(' '), allConditions)
     : undefined;
 
+  // Strike 5: Dynamic location — bridge data first, then chat-parsed state
+  const userState = bridgeContext?.userState ?? userProfile?.state ?? null;
+
   const scoringContext = buildScoringContext({
     conditions: allConditions,
     hasVaClaim: userProfile?.hasVaClaim ?? false,
     preferences: [],
     severityWeights,
+    userLocation: userState,
     userProfile: userProfile ? {
       isPermanentTotal: userProfile.isPermanentTotal,
       branch: userProfile.branch,
@@ -296,255 +281,8 @@ function applyScoring(
   };
 }
 
-// ─── Keyword extractor (Strike 4A — compound phrase detection) ───────────────
-
-/** Known health/condition phrases detected before single-word splitting */
-const KNOWN_HEALTH_PHRASES = [
-  'back pain', 'chronic pain', 'sleep apnea', 'weight loss', 'weight gain',
-  'substance use', 'traumatic brain injury', 'hearing loss', 'mental health',
-  'physical therapy', 'peer support', 'pain management', 'adaptive sports',
-  'sleep issues', 'sleep problems', 'out of shape', 'lack motivation',
-  'lack of motivation', 'always tired', 'post traumatic',
-];
-
-/** Single health-signal words — kept regardless of length */
-const HEALTH_SIGNAL_WORDS = new Set([
-  'ptsd', 'tbi', 'pain', 'sleep', 'knee', 'back', 'anxiety', 'depression',
-  'fitness', 'weight', 'fatigue', 'tired', 'motivation', 'wellness',
-  'counseling', 'therapy', 'yoga', 'nutrition', 'stress', 'trauma',
-  'entrepreneur', 'business', 'disability', 'tinnitus', 'diabetes',
-]);
-
-/** Noise words that produce false DB regex matches */
-const KEYWORD_NOISE = new Set([
-  'i', 'me', 'my', 'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to',
-  'for', 'of', 'with', 'have', 'has', 'is', 'are', 'was', 'be', 'been', 'do',
-  'does', 'did', 'not', 'no', 'yes', 'its', 'it', 'this', 'that', 'what', 'how',
-  'about', 'any', 'some', 'get', 'can', 'will', 'would', 'could', 'should', 'just',
-  'also', 'your', 'you', 'we', 'they', 'he', 'she', 'very', 'more', 'want',
-  'need', 'help', 'find', 'know', 'tell', 'here', 'there', 'when', 'where', 'which',
-  // Noise that causes false DB matches
-  'service', 'services', 'stuff', 'things', 'shape', 'leaving', 'started',
-  'already', 'currently', 'affect', 'aspects', 'bother', 'since', 'like',
-  'aches', 'pains', 'active', 'claim', 'past', 'satisfied', 'aspiring',
-  'from', 'then', 'them', 'their', 'been', 'both', 'such', 'into', 'over',
-]);
-
-function extractKeywords(text: string): string[] {
-  const lower = text.toLowerCase().replace(/[^a-z0-9\s'-]/g, ' ');
-  const found: string[] = [];
-
-  // Phase 1: Compound phrases (highest signal)
-  for (const phrase of KNOWN_HEALTH_PHRASES) {
-    if (lower.includes(phrase)) found.push(phrase);
-  }
-
-  // Phase 2: Single health-signal words
-  const words = lower.split(/\s+/);
-  for (const word of words) {
-    if (HEALTH_SIGNAL_WORDS.has(word) && !found.some(f => f.includes(word))) {
-      found.push(word);
-    }
-  }
-
-  // Phase 3: Meaningful remaining words (fallback for novel terms)
-  for (const word of words) {
-    if (word.length > 4 && !KEYWORD_NOISE.has(word) && !found.some(f => f.includes(word))) {
-      found.push(word);
-    }
-  }
-
-  return Array.from(new Set(found)).slice(0, 15);
-}
-
-// ─── User profile parser (Strike 4G) ─────────────────────────────────────────
-
-function parseUserProfile(text: string): {
-  isPermanentTotal: boolean;
-  hasVaClaim: boolean;
-  branch?: string;
-  era?: string;
-  vaDissatisfied: boolean;
-} {
-  const lower = text.toLowerCase();
-  const isPermanentTotal = /100\s*%\s*p\s*[&and]*\s*t|permanent\s*(and\s*)?total/.test(lower);
-  const hasVaClaim = /(active|open|pending)\s*claim|already\s*service\s*connected|service\s*connected/.test(lower)
-    && !/no\s*active|no\s*claim|don.t\s*have/.test(lower);
-  const vaDissatisfied = /not\s*satisfied|wasn.t\s*satisfied|dissatisfied|not\s*happy|poor\s*care/.test(lower);
-
-  let branch: string | undefined;
-  if (/\barmy\b/.test(lower)) branch = 'army';
-  else if (/\bnavy\b/.test(lower)) branch = 'navy';
-  else if (/\bmarine|\busmс/.test(lower)) branch = 'marines';
-  else if (/\bair\s*force\b/.test(lower)) branch = 'air force';
-  else if (/\bcoast\s*guard\b/.test(lower)) branch = 'coast guard';
-  else if (/\bspace\s*force\b/.test(lower)) branch = 'space force';
-
-  let era: string | undefined;
-  if (/post.?9.?11|post\s*9\/11|gwot|oif|oef|iraq|afghanistan/.test(lower)) era = 'post-9/11';
-  else if (/vietnam/.test(lower)) era = 'vietnam';
-  else if (/gulf\s*war/.test(lower)) era = 'gulf war';
-
-  return { isPermanentTotal, hasVaClaim, branch, era, vaDissatisfied };
-}
-
-// ─── Severity weight parser (Strike 4J) ──────────────────────────────────────
-
-/** Amplifier words that indicate a keyword is more impactful */
-const AMPLIFIERS = ['more', 'most', 'worst', 'really', 'very', 'severely', 'seriously', 'badly', 'affects me', 'bothers me most', 'affects me more'];
-
-function parseSeverityWeights(text: string, keywords: string[]): Record<string, number> {
-  const lower = text.toLowerCase();
-  const weights: Record<string, number> = {};
-
-  for (const kw of keywords) {
-    const kwLower = kw.toLowerCase();
-    // Look for amplifier words near the keyword (within 30 chars)
-    const kwIdx = lower.indexOf(kwLower);
-    if (kwIdx === -1) { weights[kwLower] = 1.0; continue; }
-    const window = lower.slice(Math.max(0, kwIdx - 40), kwIdx + kwLower.length + 40);
-    const hasAmplifier = AMPLIFIERS.some(amp => window.includes(amp));
-    // Count extra mentions
-    const mentionCount = (lower.match(new RegExp(kwLower.replace(/[+?.*()\[\]{}|^$\\]/g, '\\$&'), 'g')) ?? []).length;
-    weights[kwLower] = hasAmplifier ? 1.5 : mentionCount > 1 ? 1.3 : 1.0;
-  }
-
-  return weights;
-}
-
-// ─── Cross-domain intent detector (Strike 4I) ────────────────────────────────
-
-const CROSS_DOMAIN_SIGNALS: Record<string, string[]> = {
-  careers:   ['entrepreneur', 'business', 'job', 'career', 'employment', 'hire', 'resume', 'work', 'sdvosb'],
-  education: ['school', 'college', 'gi bill', 'degree', 'certificate', 'vocational', 'training', 'university'],
-  life:      ['housing', 'moving', 'relocation', 'lease', 'mortgage', 'pcs', 'home base', 'mwr', 'recreation'],
-};
-
-function detectCrossDomainIntent(text: string): Array<{ domain: string; signal: string }> {
-  const lower = text.toLowerCase();
-  const hints: Array<{ domain: string; signal: string }> = [];
-  for (const [domain, signals] of Object.entries(CROSS_DOMAIN_SIGNALS)) {
-    const matched = signals.find(s => lower.includes(s));
-    if (matched) hints.push({ domain, signal: matched });
-  }
-  return hints;
-}
-
-// ─── MongoDB resource fetcher (replaces static fallback) ─────────────────────
-
-async function fetchMongoResources(
-  keywords: string[],
-  bridgeContext?: BridgeContext,
-): Promise<{ rawVa: RawResource[]; rawNgo: RawResource[]; rawState: RawResource[] }> {
-  try {
-    const dbName = process.env.MONGODB_DB || 'vet1stop';
-    const { db } = await connectToDatabase(dbName);
-
-    // healthResources is the single source of truth — 190 docs with subcategory: federal|ngo|state
-    const coll = db.collection('healthResources');
-
-    // Merge bridge conditions into keyword pool for richer matching
-    const bridgeTerms = bridgeContext?.conditions?.map(c => c.condition.toLowerCase()) ?? [];
-    const allTerms    = [...new Set([...keywords, ...bridgeTerms])];
-    const searchPat   = allTerms.length > 0 ? allTerms.join('|') : '';
-
-    // Keyword filter — title, description, AND tags array ($elemMatch for arrays)
-    const keywordFilter = searchPat ? {
-      $or: [
-        { title:       { $regex: searchPat, $options: 'i' } },
-        { description: { $regex: searchPat, $options: 'i' } },
-        { tags:        { $elemMatch: { $regex: searchPat, $options: 'i' } } },
-      ],
-    } : {};
-
-    // toRaw — fixed: location is a nested object {state, city, address} after Apr 2025 standardization
-    const toRaw = (doc: Record<string, unknown>): RawResource => ({
-      title:       String(doc.title ?? doc.name ?? ''),
-      description: String(doc.description ?? ''),
-      url:         String(doc.url ?? doc.website ?? doc.link ?? ''),
-      phone:       doc.phone       ? String(doc.phone)
-                 : doc.phoneNumber ? String(doc.phoneNumber)
-                 : doc.contact     ? String(doc.contact)
-                 : undefined,
-      priority:    (['high', 'medium', 'low'].includes(String(doc.priority))
-                     ? doc.priority as 'high' | 'medium' | 'low' : 'medium'),
-      tags:        Array.isArray(doc.tags) ? (doc.tags as string[]) : [],
-      isFree:      typeof doc.isFree === 'boolean' ? doc.isFree
-                   : typeof doc.free  === 'boolean' ? (doc.free as boolean) : false,
-      costLevel:   (['free', 'low', 'moderate', 'high'].includes(String(doc.costLevel))
-                     ? doc.costLevel as 'free' | 'low' | 'moderate' | 'high' : 'free'),
-      rating:      typeof doc.rating === 'number' ? doc.rating : 0,
-      updatedAt:   doc.updatedAt ? String(doc.updatedAt) : doc.ratingLastUpdated ? String(doc.ratingLastUpdated) : undefined,
-      location:    (() => {
-        const loc = doc.location;
-        if (loc && typeof loc === 'object') {
-          const obj   = loc as Record<string, unknown>;
-          const parts = [obj.city, obj.state].filter(Boolean);
-          return parts.length ? (parts.join(', ') as string) : undefined;
-        }
-        return loc ? String(loc) : doc.state ? String(doc.state) : undefined;
-      })(),
-    });
-
-    // ── VA track — subcategory: "federal" ────────────────────────────────────
-    const vaQuery = searchPat
-      ? { $and: [keywordFilter, { subcategory: 'federal' }] }
-      : { subcategory: 'federal' };
-    let vaRaw = await coll.find(vaQuery).sort({ rating: -1 }).limit(20)
-      .toArray() as Record<string, unknown>[];
-    if (vaRaw.length < 3) {
-      // Pad: relax keyword filter, keep subcategory constraint
-      vaRaw = await coll.find({ subcategory: 'federal' }).sort({ rating: -1 }).limit(20)
-        .toArray() as Record<string, unknown>[];
-    }
-    console.log(`[SymptomTriage] healthResources VA → ${vaRaw.length} docs`);
-
-    // ── NGO track — subcategory: "ngo" ────────────────────────────────────────
-    const ngoQuery = searchPat
-      ? { $and: [keywordFilter, { subcategory: 'ngo' }] }
-      : { subcategory: 'ngo' };
-    let ngoRaw = await coll.find(ngoQuery).sort({ rating: -1 }).limit(20)
-      .toArray() as Record<string, unknown>[];
-    if (ngoRaw.length < 3) {
-      ngoRaw = await coll.find({ subcategory: 'ngo' }).sort({ rating: -1 }).limit(20)
-        .toArray() as Record<string, unknown>[];
-    }
-    console.log(`[SymptomTriage] healthResources NGO → ${ngoRaw.length} docs`);
-
-    // ── State track — subcategory: "state" + PA location filter ──────────────
-    const paFilter = {
-      $or: [
-        { 'location.state': { $regex: 'Pennsylvania|\\bPA\\b', $options: 'i' } },
-        { 'location.city':  { $regex: 'Carlisle|Harrisburg|Camp Hill|York|Lancaster', $options: 'i' } },
-        { title:            { $regex: 'Pennsylvania|DMVA|Cumberland', $options: 'i' } },
-      ],
-    };
-    const stateQueryStrict = searchPat
-      ? { $and: [keywordFilter, { subcategory: 'state' }, paFilter] }
-      : { $and: [{ subcategory: 'state' }, paFilter] };
-    let stateRaw = await coll.find(stateQueryStrict).sort({ rating: -1 }).limit(20)
-      .toArray() as Record<string, unknown>[];
-    if (stateRaw.length < 3) {
-      // Relax location filter — any state-subcategory resource matching keywords
-      const stateQueryRelaxed = searchPat
-        ? { $and: [keywordFilter, { subcategory: 'state' }] }
-        : { subcategory: 'state' };
-      stateRaw = await coll.find(stateQueryRelaxed).sort({ rating: -1 }).limit(20)
-        .toArray() as Record<string, unknown>[];
-    }
-    console.log(`[SymptomTriage] healthResources State → ${stateRaw.length} docs`);
-
-    const rawVa    = vaRaw.map(toRaw);
-    const rawNgo   = ngoRaw.map(toRaw);
-    const rawState = stateRaw.map(toRaw);
-
-    console.log(`[SymptomTriage] MongoDB final → VA=${rawVa.length} NGO=${rawNgo.length} State=${rawState.length}`);
-    return { rawVa, rawNgo, rawState };
-  } catch (err) {
-    console.error('[SymptomTriage] fetchMongoResources critical error:', (err as Error).message);
-    return { rawVa: [], rawNgo: [], rawState: [] };
-  }
-}
+// parseUserProfile, parseSeverityWeights, detectCrossDomainIntent, fetchDomainResources
+// all imported from @/lib/resource-intelligence (Strike 5 extraction)
 
 // ─── Static fallbacks ─────────────────────────────────────────────────────────
 
@@ -713,9 +451,11 @@ export async function POST(request: NextRequest) {
       const crossHints  = detectCrossDomainIntent(allUserTexts);
       if (crossHints.length > 0) console.log('[SymptomTriage] Cross-domain intents detected:', crossHints);
 
-      // ── 1. Query MongoDB FIRST ───────────────────────────────────────────────────
-      const { rawVa: dbVa, rawNgo: dbNgo, rawState: dbState } =
-        await fetchMongoResources(kws, bridgeContext);
+      // ── 1. Query MongoDB FIRST (via Resource Intelligence Engine) ────────────────
+      const dbResults  = await fetchDomainResources(HEALTH_CONFIG, kws, bridgeContext);
+      const dbVa    = dbResults['va']    ?? [];
+      const dbNgo   = dbResults['ngo']   ?? [];
+      const dbState = dbResults['state'] ?? [];
       const mongoHas = dbVa.length + dbNgo.length + dbState.length > 0;
 
       // ── 2. Call Grok for aiMessage prose + last-resort resources (if DB empty) ─
@@ -810,9 +550,11 @@ export async function POST(request: NextRequest) {
         const jumpKws     = extractKeywords(jumpTexts);
         const jumpProfile = parseUserProfile(jumpTexts);
 
-        // ── Query MongoDB FIRST ───────────────────────────────────────────────────
-        const { rawVa: jDbVa, rawNgo: jDbNgo, rawState: jDbState } =
-          await fetchMongoResources(jumpKws, bridgeContext);
+        // ── Query MongoDB FIRST (via Resource Intelligence Engine) ───────────────
+        const jDbResults = await fetchDomainResources(HEALTH_CONFIG, jumpKws, bridgeContext);
+        const jDbVa    = jDbResults['va']    ?? [];
+        const jDbNgo   = jDbResults['ngo']   ?? [];
+        const jDbState = jDbResults['state'] ?? [];
         const jumpMongoHas = jDbVa.length + jDbNgo.length + jDbState.length > 0;
 
         // ── Parse Grok response: aiMessage + fallback resources if MongoDB empty ─

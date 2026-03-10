@@ -89,6 +89,8 @@ export interface BridgeData {
   sourceModule: string;
   timestamp: string;
   reportSummary: string;
+  /** Strike 5 — veteran's detected state for geo-aware resource scoring */
+  userState?: string;
 }
 
 // ─── Internal Component Types ───────────────────────────────────────────────
