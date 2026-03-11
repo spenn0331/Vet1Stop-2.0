@@ -31,6 +31,7 @@ const TABS: { id: Tab; label: string; ariaLabel: string }[] = [
 
 // ─── Tag filter chips ─────────────────────────────────────────────────────────
 
+// Used for All / VA / State tabs — general topic filters
 const TAG_FILTERS = [
   { label: 'Mental Health', value: 'mental health' },
   { label: 'PTSD',          value: 'ptsd' },
@@ -39,6 +40,19 @@ const TAG_FILTERS = [
   { label: 'Crisis',        value: 'crisis' },
   { label: 'Primary Care',  value: 'primary care' },
   { label: 'Free',          value: 'free' },
+];
+
+// Used exclusively for the NGO tab — need-based mega-categories
+// Each value is a regex string matched against the tags[] field in MongoDB.
+const NGO_FILTERS = [
+  { label: 'Mental Health & Crisis',   value: 'mental', emoji: '🧠' },
+  { label: 'Physical & Rehab',         value: 'physical', emoji: '💪' },
+  { label: 'Substance Use & Recovery', value: 'substance', emoji: '🔄' },
+  { label: 'Women Veterans',           value: 'women', emoji: '⭐' },
+  { label: 'Caregiver & Family',       value: 'caregiver', emoji: '🤝' },
+  { label: 'Peer Support',             value: 'peer', emoji: '👥' },
+  { label: 'Benefits & Claims Help',   value: 'benefits', emoji: '📋' },
+  { label: 'Free Services Only',       value: 'free', emoji: '✅' },
 ];
 
 const SORT_OPTIONS = [
@@ -219,39 +233,77 @@ export default function HealthBrowseSection() {
           )}
         </div>
 
-        {/* Tag filter chips */}
-        <div
-          className="flex flex-wrap gap-2 mb-6"
-          role="group"
-          aria-label="Filter by topic"
-        >
-          {TAG_FILTERS.map(f => (
-            <button
-              key={f.value}
-              onClick={() => setActiveTag(activeTag === f.value ? '' : f.value)}
-              className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-400 ${
-                activeTag === f.value
-                  ? 'bg-[#1A2C5B] text-white shadow-sm'
-                  : 'bg-white text-gray-600 border border-gray-200 hover:border-[#1A2C5B] hover:text-[#1A2C5B]'
-              }`}
-              aria-pressed={activeTag === f.value}
-              aria-label={`Filter by ${f.label}`}
+        {/* Filter chips — NGO tab gets need-based mega-categories; all others get generic topic chips */}
+        {activeTab === 'ngo' ? (
+          <div className="mb-6">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2.5">Filter by need</p>
+            <div
+              className="flex flex-wrap gap-2"
+              role="group"
+              aria-label="Filter NGO resources by need category"
             >
-              <FunnelIcon className="h-3 w-3" aria-hidden="true" />
-              {f.label}
-            </button>
-          ))}
-          {(activeTag || debouncedSearch) && (
-            <button
-              onClick={() => { setActiveTag(''); setSearch(''); setDebounced(''); }}
-              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold text-red-600 bg-red-50 border border-red-100 hover:bg-red-100 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-red-300"
-              aria-label="Clear all filters"
-            >
-              <ArrowPathIcon className="h-3 w-3" aria-hidden="true" />
-              Clear
-            </button>
-          )}
-        </div>
+              {NGO_FILTERS.map(f => (
+                <button
+                  key={f.value}
+                  onClick={() => setActiveTag(activeTag === f.value ? '' : f.value)}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-400 ${
+                    activeTag === f.value
+                      ? 'bg-[#1A2C5B] text-white shadow-sm'
+                      : 'bg-white text-gray-600 border border-gray-200 hover:border-[#1A2C5B] hover:text-[#1A2C5B]'
+                  }`}
+                  aria-pressed={activeTag === f.value}
+                  aria-label={`Filter by ${f.label}`}
+                >
+                  <span aria-hidden="true">{f.emoji}</span>
+                  {f.label}
+                </button>
+              ))}
+              {(activeTag || debouncedSearch) && (
+                <button
+                  onClick={() => { setActiveTag(''); setSearch(''); setDebounced(''); }}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold text-red-600 bg-red-50 border border-red-100 hover:bg-red-100 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-red-300"
+                  aria-label="Clear all filters"
+                >
+                  <ArrowPathIcon className="h-3 w-3" aria-hidden="true" />
+                  Clear
+                </button>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div
+            className="flex flex-wrap gap-2 mb-6"
+            role="group"
+            aria-label="Filter by topic"
+          >
+            {TAG_FILTERS.map(f => (
+              <button
+                key={f.value}
+                onClick={() => setActiveTag(activeTag === f.value ? '' : f.value)}
+                className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-400 ${
+                  activeTag === f.value
+                    ? 'bg-[#1A2C5B] text-white shadow-sm'
+                    : 'bg-white text-gray-600 border border-gray-200 hover:border-[#1A2C5B] hover:text-[#1A2C5B]'
+                }`}
+                aria-pressed={activeTag === f.value}
+                aria-label={`Filter by ${f.label}`}
+              >
+                <FunnelIcon className="h-3 w-3" aria-hidden="true" />
+                {f.label}
+              </button>
+            ))}
+            {(activeTag || debouncedSearch) && (
+              <button
+                onClick={() => { setActiveTag(''); setSearch(''); setDebounced(''); }}
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold text-red-600 bg-red-50 border border-red-100 hover:bg-red-100 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-red-300"
+                aria-label="Clear all filters"
+              >
+                <ArrowPathIcon className="h-3 w-3" aria-hidden="true" />
+                Clear
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Resource grid */}
         <div
