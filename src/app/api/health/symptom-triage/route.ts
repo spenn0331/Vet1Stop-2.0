@@ -327,8 +327,15 @@ function buildContextualHandoffMessage(
     ? " Also flagging your business/education interest for our Careers and Education pages — keeping this focused on health."
     : '';
 
-  const parts = [line1, line2, crossLine].filter(Boolean);
-  return parts.join(' ').trim() + ' This is not medical advice. Discuss with your VA provider or primary doctor.';
+  const INVITES = [
+    " If some of these don't fit your situation, just tell me and I'll readjust.",
+    " Tell me if anything here doesn't apply and I'll dial it in.",
+    " Let me know if you want to swap out any of these and I'll refine.",
+    " If these aren't quite right, tell me what's off and I'll adjust the results.",
+  ];
+  const invite = INVITES[Math.floor(Math.random() * INVITES.length)];
+  const parts   = [line1, line2, crossLine].filter(Boolean);
+  return parts.join(' ').trim() + invite + ' This is not medical advice. Discuss with your VA provider or primary doctor.';
 }
 
 // ─── System prompt builder ────────────────────────────────────────────────────
@@ -376,9 +383,9 @@ function buildSystemPrompt(
 
   // Step-specific overrides
   if (step === 'quick_triage') {
-    prompt += `\n\nCURRENT TASK: Ask your 3 clarifying questions in a single warm reply. Be conversational and brief. 3 questions max — no exceptions.\n\nJUMP-AHEAD PROTOCOL: If the veteran has already answered all 3 questions in a single detailed message (covering VA claim status, location, and additional context), do NOT re-ask questions. Jump directly to the JSON assessment output. Your aiMessage in that JSON MUST:\n- Open with a rotating phrase: "Copy that —" / "Got it —" / "Understood —" / "Noted —"\n- Reference their SPECIFIC stated priorities in their own words (PTSD, sleep, fitness, 100% P&T status, VA dissatisfaction, etc.) — NOT the conditions list from records\n- Note cross-domain interests you are flagging for other pages (entrepreneur → Careers, school → Education)\n- Sound like a knowledgeable friend who actually listened — NOT a form processor\n- NEVER use "Based on your records" or "Here are your resources" or "I found some solid options"`;
+    prompt += `\n\nCURRENT TASK: Ask your 3 clarifying questions in a single warm reply. Be conversational and brief. 3 questions max — no exceptions.\n\nJUMP-AHEAD PROTOCOL: If the veteran has already answered all 3 questions in a single detailed message (covering VA claim status, location, and additional context), do NOT re-ask questions. Jump directly to the JSON assessment output. Your aiMessage in that JSON MUST:\n- Open with a rotating phrase: "Copy that —" / "Got it —" / "Understood —" / "Noted —"\n- Reference their SPECIFIC stated priorities in their own words (PTSD, sleep, fitness, 100% P&T status, VA dissatisfaction, etc.) — NOT the conditions list from records\n- Note cross-domain interests you are flagging for other pages (entrepreneur → Careers, school → Education)\n- End with an invitation to refine: e.g. "If some of these don't fit, tell me and I'll readjust." — vary the phrasing, keep it conversational\n- Sound like a knowledgeable friend who actually listened — NOT a form processor\n- NEVER use "Based on your records" or "Here are your resources" or "I found some solid options"`;
   } else if (step === 'assess') {
-    prompt += `\n\nCURRENT TASK: Based on the full conversation, output the JSON assessment. No prose outside the JSON object.\n\naiMessage CRITICAL REQUIREMENTS (2-3 sentences max):\n- Open with a rotating phrase: "Copy that —" / "Got it —" / "Understood —" / "Noted —"\n- Reference what the veteran said was MOST important TO THEM in their actual words — not just the records conditions list\n- If they mentioned PTSD, sleep, fitness, motivation, weight — name those specifically\n- If they said 100% P&T, acknowledge it (affects benefit access)\n- If they expressed VA dissatisfaction, note you've prioritized NGO/community alternatives\n- If they mentioned cross-domain interests (entrepreneur, school), briefly note you're flagging for the right page\n- NEVER say "Based on" or "I found some solid options" or repeat the same opener twice`;
+    prompt += `\n\nCURRENT TASK: Based on the full conversation, output the JSON assessment. No prose outside the JSON object.\n\naiMessage CRITICAL REQUIREMENTS (2-3 sentences max):\n- Open with a rotating phrase: "Copy that —" / "Got it —" / "Understood —" / "Noted —"\n- Reference what the veteran said was MOST important TO THEM in their actual words — not just the records conditions list\n- If they mentioned PTSD, sleep, fitness, motivation, weight — name those specifically\n- If they said 100% P&T, acknowledge it (affects benefit access)\n- If they expressed VA dissatisfaction, note you've prioritized NGO/community alternatives\n- If they mentioned cross-domain interests (entrepreneur, school), briefly note you're flagging for the right page\n- NEVER say "Based on" or "I found some solid options" or repeat the same opener twice\n- End with a natural invitation to refine: e.g. "If any of these don't match your situation, just tell me and I'll adjust." — vary the phrasing each time, keep it conversational`;
   }
 
   return prompt;
@@ -450,7 +457,7 @@ function applyScoring(
     }));
     const filtered = scored.filter(r => (r.score ?? 0) >= SCORE_CUTOFF);
     const result    = filtered.length >= 3 ? filtered : scored.slice(0, 3);
-    return result.slice(0, 7); // cap at 7 per track (plan: 5-7 resources per track)
+    return result.slice(0, 25); // soft max — quality-driven, not forced (plan: best matches up to 25)
   };
 
   return {
