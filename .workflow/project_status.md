@@ -4,16 +4,60 @@
 - **Repo**: [github.com/spenn0331/Vet1Stop-2.0](https://github.com/spenn0331/Vet1Stop-2.0) (branch: `main`)
 - **Local Path**: `c:\Users\penny\Desktop\Vet1Stop`
 - **Primary Goal**: MVP Launch (Q2 2026)
-- **Current Phase**: Phase 1 Health MVP — Strike 1 + 2 API Stabilization & Feedback Skeleton Complete
+- **Current Phase**: Phase 1 Health MVP — Strike 7 AI Intelligence Overhaul Complete
 - **Dev Server**: `npm run dev` → http://localhost:3000
-- **Last Active Development**: Mar 5, 2026
+- **Last Active Development**: Mar 10, 2026
 - **Recovery Date**: Feb 14, 2026 (restored from git commit `863a42cd`)
-- **Latest Commits**: `ff37f44e` (Pass 3 mobile polish), `1483b15b` (refine chat), `38beebf4` (Triage V3)
-- **Pending Commit**: Strike 1 + Strike 2 changes (Mar 5, 2026) — not yet tested or committed
+- **Latest Commits**: `6dd06daf` (Strike 7 AI overhaul), `66c05afe` (NGO filters), `623375c3` (NGO spotlight placeholders)
+- **Pending**: End-to-end testing of Strike 7 in browser preview
 
 ---
 
-## 🎯 Current Status: Strike 6 Complete — Federal Seeding + Admin Live Data + userState Wiring
+## 🎯 Current Status: Strike 7 Complete — AI Intelligence Overhaul
+**As of Mar 10, 2026:** Strike 7 delivers a full intelligence overhaul of the Symptom Finder AI and Health Browse section: cold-start progressive profiling, intent classification, negative exclusion filtering, 3-tier query relaxation, thumbs up/down preference learning, and cross-domain redirect cards.
+
+### ✅ Strike 7 — AI Intelligence Overhaul (Mar 10, 2026) — Commit `6dd06daf`
+
+**Problem solved:** Grok 4 felt "dumb" compared to xAI's own platform. Root causes: rigid narrow system prompt, no intent classification, no negative feedback handling, cold-start resource quality, and no user preference signals.
+
+**Phase 1 — System Prompt + Intent Classification (route.ts):**
+- Rewrote `TRIAGE_SYSTEM_PROMPT`: removed "ONLY mission" cage, added personality rules, negative feedback handling ("Got it — removing those from your results"), follow-up question handling, cross-domain awareness. Grok 4 now sounds like a knowledgeable friend, not a form-filling bot.
+- Added `classifyIntent()`: zero-latency regex router — `health_query | negative_feedback | cross_domain | preference_signal | chitchat | crisis`. Runs on every message.
+- Added `parseNegativeContext()`: scans full conversation history for negative statements ("not homeless", "don't need service animal") → builds `exclusionTags[]`.
+- Added `applyExclusions()`: post-MongoDB filter removes resources whose tags/title/description match any exclusion string.
+- Temperature split: `0.5` for `quick_triage` (natural conversation), `0.3` for `assess` (structured JSON output).
+- `buildSystemPrompt()` now injects detected intent + active exclusions into the prompt context.
+- `TriageRequest` interface: added `userIntent` and `clientExclusionTags` fields.
+
+**Phase 2 — Cold Start / Progressive Profiling (SymptomFinderWizard.tsx):**
+- `handleStartChat()` now shows AI greeting + 5 intent tap cards instead of 4 stiff questions.
+- Cards: 🧠 Mental health, 💪 Physical pain, 📋 VA benefits, ⚕️ Managing a condition, 🔍 Just exploring.
+- `handleIntentSelect()`: tapping a card sends a natural seed message → triage API starts with intent context.
+- If `bridgeData` exists (Records Recon flow) → skips tap cards, goes straight to bridge-aware greeting.
+- `RawTriageResponse` extended: `crossDomainHints[]` + `activeExclusions[]`.
+
+**Phase 3 — Negative Exclusion + 3-Tier Query Relaxation (route.ts assess step):**
+- Exclusion tags parsed from conversation → applied post-MongoDB fetch → aiMessage acknowledges removals by name.
+- Tier 1: full query (state + keywords). Tier 2: drop state filter if < 10 results. Tier 3: drop keyword filter if still < 10.
+- Prevents "19 NGO resources for broad query" — system now guarantees meaningful result volume.
+- Grok's `exclusionTags[]` in JSON output merged with session exclusions for double-pass filter.
+
+**Phase 4 — Thumbs Up/Down Preference Signals (BrowseResourceCard + HealthBrowseSection):**
+- `BrowseResourceCard`: 👍/👎 buttons on every card. Writes to `localStorage` key `vet1stop_resource_prefs: { liked[], disliked[] }`. Dispatches `vet1stop:pref-update` custom event.
+- `HealthBrowseSection`: listens to pref-update event, re-ranks liked resources to top, disliked to bottom — in real-time without refetch.
+- Dislike toast: "Not finding what you need? Symptom Finder can pull more targeted results" → links to `/health/symptom-finder`. Auto-dismisses after 5s.
+
+**Phase 5 — Cross-Domain Redirect Cards (SymptomFinderWizard.tsx):**
+- `CROSS_DOMAIN_MAP`: maps `education/gi-bill/school → /education`, `careers/employment/business/entrepreneurship → /careers`, `housing → /local`.
+- Redirect card renders in the chat thread when `crossDomainHints` are detected. Amber-styled, dismissible, links to correct page without interrupting the health resource flow.
+
+**Also completed this session (pre-Strike 7):**
+- NGO Spotlight: added demo placeholder orgs (WWP premium, Cohen/Team RWB/DAV/Give An Hour featured) — commit `623375c3`.
+- HealthBrowseSection: NGO tab gets 8 need-based mega-category filters — commit `66c05afe`.
+
+---
+
+## 🎯 Previous Status: Strike 6 Complete — Federal Seeding + Admin Live Data + userState Wiring
 **As of Mar 10, 2026:** Strike 6 expands the federal VA track from 5 → 33 resources, wires the Admin Dashboard to live MongoDB stats, fixes the `/admin/ngos` 404, and routes the veteran's detected state end-to-end from `BridgeData` → `SymptomFinderWizard` → `route.ts` → scoring engine.
 
 ### ✅ Strike 6 — Data Expansion + Admin Live Data + State Wiring (Mar 10, 2026)
