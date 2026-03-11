@@ -26,11 +26,16 @@ import {
   MapIcon,
   FunnelIcon,
   TrashIcon,
+  HandThumbUpIcon,
+  HandThumbDownIcon,
 } from '@heroicons/react/24/outline';
 import {
   CheckCircleIcon as CheckCircleSolid,
   BookmarkIcon as BookmarkSolid,
+  HandThumbUpIcon as ThumbUpSolid,
+  HandThumbDownIcon as ThumbDownSolid,
 } from '@heroicons/react/24/solid';
+import { readResourcePrefs, writeResourcePrefs } from '../BrowseResourceCard';
 import {
   getSuggestedPathway,
   scoreAndSortResources,
@@ -417,6 +422,31 @@ function ResourceCard({ rec, isSaved, onToggleSave }: ResourceCardProps) {
   const isRecommended = rec.badge === 'Recommended';
   const hasBadge = isRecommended || rec.badge === 'Good Match';
 
+  const [pref, setPref] = useState<'liked' | 'disliked' | null>(() => {
+    try {
+      const prefs = readResourcePrefs();
+      if (prefs.liked.includes(rec.title)) return 'liked';
+      if (prefs.disliked.includes(rec.title)) return 'disliked';
+    } catch { /* non-fatal */ }
+    return null;
+  });
+
+  function handleThumb(e: React.MouseEvent, direction: 'liked' | 'disliked') {
+    e.preventDefault();
+    e.stopPropagation();
+    const prefs = readResourcePrefs();
+    const isToggle = pref === direction;
+    const newPref = isToggle ? null : direction;
+    prefs.liked    = prefs.liked.filter(t => t !== rec.title);
+    prefs.disliked = prefs.disliked.filter(t => t !== rec.title);
+    if (!isToggle) prefs[direction].push(rec.title);
+    writeResourcePrefs(prefs);
+    setPref(newPref);
+    window.dispatchEvent(new CustomEvent('vet1stop:pref-update', {
+      detail: { title: rec.title, direction: newPref },
+    }));
+  }
+
   return (
     <div
       className={`bg-white rounded-xl border p-4 hover:shadow-md transition-all ${
@@ -494,7 +524,7 @@ function ResourceCard({ rec, isSaved, onToggleSave }: ResourceCardProps) {
       )}
 
       {/* CTA row */}
-      <div className="flex flex-wrap items-center gap-3 mt-1">
+      <div className="flex flex-wrap items-center gap-2 mt-1">
         {rec.url && (
           <a
             href={rec.url}
@@ -514,16 +544,43 @@ function ResourceCard({ rec, isSaved, onToggleSave }: ResourceCardProps) {
             {rec.phone}
           </a>
         )}
-        <button
-          onClick={() => onToggleSave(rec.title)}
-          className={`ml-auto text-xs font-medium px-2.5 py-1 rounded-lg border transition-colors focus:outline-none focus:ring-2 focus:ring-yellow-200 ${
-            isSaved
-              ? 'bg-amber-50 border-amber-200 text-amber-700'
-              : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-amber-50 hover:border-amber-200 hover:text-amber-700'
-          }`}
-        >
-          {isSaved ? 'Saved ✓' : 'Save to Sea Bag'}
-        </button>
+        <div className="ml-auto flex items-center gap-2">
+          <div className="flex items-center gap-0.5" role="group" aria-label="Rate this resource">
+            <button
+              onClick={e => handleThumb(e, 'liked')}
+              className={`p-1 rounded transition-colors focus:outline-none focus:ring-2 focus:ring-green-300 ${
+                pref === 'liked' ? 'text-green-600' : 'text-gray-300 hover:text-green-500'
+              }`}
+              aria-label="This resource was helpful"
+              aria-pressed={pref === 'liked'}
+            >
+              {pref === 'liked'
+                ? <ThumbUpSolid className="h-3.5 w-3.5" />
+                : <HandThumbUpIcon className="h-3.5 w-3.5" />}
+            </button>
+            <button
+              onClick={e => handleThumb(e, 'disliked')}
+              className={`p-1 rounded transition-colors focus:outline-none focus:ring-2 focus:ring-red-300 ${
+                pref === 'disliked' ? 'text-red-500' : 'text-gray-300 hover:text-red-400'
+              }`}
+              aria-label="This resource was not helpful"
+              aria-pressed={pref === 'disliked'}            >
+              {pref === 'disliked'
+                ? <ThumbDownSolid className="h-3.5 w-3.5" />
+                : <HandThumbDownIcon className="h-3.5 w-3.5" />}
+            </button>
+          </div>
+          <button
+            onClick={() => onToggleSave(rec.title)}
+            className={`text-xs font-medium px-2.5 py-1 rounded-lg border transition-colors focus:outline-none focus:ring-2 focus:ring-yellow-200 ${
+              isSaved
+                ? 'bg-amber-50 border-amber-200 text-amber-700'
+                : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-amber-50 hover:border-amber-200 hover:text-amber-700'
+            }`}
+          >
+            {isSaved ? 'Saved ✓' : 'Save to Sea Bag'}
+          </button>
+        </div>
       </div>
 
       <p className="text-[10px] text-gray-400 mt-2">

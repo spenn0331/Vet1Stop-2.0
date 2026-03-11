@@ -266,6 +266,22 @@ _This is not medical advice. Discuss with your VA provider or primary doctor._`,
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bridgeData]);
 
+  // Auto-start with intent cards on direct visit (no bridge data)
+  useEffect(() => {
+    if ((!bridgeData || bridgeData.conditions.length === 0) && step === 'idle') {
+      const greetingMsg: TriageMessage = {
+        role: 'assistant',
+        content: `Hey — I'm your Vet1Stop health navigator. **What brings you in today?**\n\n_Choose the option that best fits your situation:_`,
+        timestamp: Date.now(),
+      };
+      setMessages([greetingMsg]);
+      setStep('chat');
+      setShowIntentCards(true);
+      setSuggestedQuestions([]);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Mount only — fires once
+
   // ─── Call triage API ──────────────────────────────────────────────────────
 
   const callTriageApi = useCallback(async (
@@ -471,17 +487,29 @@ _This is not medical advice. Discuss with your VA provider or primary doctor._`,
   }, [messages, callTriageApi]);
 
   const handleReset = useCallback(() => {
-    setStep('idle');
-    setMessages([]);
+    if (!bridgeData || bridgeData.conditions.length === 0) {
+      // Non-bridge: go back to intent cards view
+      const greetingMsg: TriageMessage = {
+        role: 'assistant',
+        content: `Hey — I'm your Vet1Stop health navigator. **What brings you in today?**\n\n_Choose the option that best fits your situation:_`,
+        timestamp: Date.now(),
+      };
+      setMessages([greetingMsg]);
+      setStep('chat');
+      setShowIntentCards(true);
+    } else {
+      setStep('idle');
+      setMessages([]);
+      setShowIntentCards(false);
+    }
     setUserInput('');
     setTriageResult(null);
     setSuggestedQuestions([]);
     setIsHandedOff(false);
     setChatExpanded(false);
     setErrorMsg(null);
-    setShowIntentCards(false);
     setCrossDomainHints([]);
-  }, []);
+  }, [bridgeData]);
 
   const handleStartChat = useCallback(() => {
     // Show progressive profiling intent cards instead of the 4-question wall

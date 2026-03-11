@@ -16,6 +16,7 @@ import {
   type ScoredRawResource,
   type BridgeCondition,
   type BridgeContext,
+  type CrossDomainHint,
 } from '@/lib/resource-intelligence';
 
 /**
@@ -264,6 +265,72 @@ function applyExclusions(resources: RawResource[], exclusions: string[]): RawRes
   });
 }
 
+// ─── Contextual handoff message builder ──────────────────────────────────────
+// Replaces boilerplate fallback messages with personalized summaries that
+// reference what the veteran ACTUALLY said, not just the conditions list.
+
+function buildContextualHandoffMessage(
+  userMessage: string,
+  bridgeContext?: BridgeContext,
+  detectedState?: string | null,
+  crossHints?: CrossDomainHint[],
+  exclusionTags?: string[],
+  chatKeywords?: string[],
+): string {
+  const lower = userMessage.toLowerCase();
+
+  // Detect what the veteran said was MOST important to them
+  const concerns: string[] = [];
+  if (/\bptsd\b|\btrauma\b|\bflashback/.test(lower))                                  concerns.push('PTSD');
+  if (/\bsleep\b|\binsomnia\b|\bnight.?sweat|\btired\b|\bfatigue/.test(lower))        concerns.push('sleep');
+  if (/\bmental\b|\banxiety\b|\bdepression\b|\bmotivat/.test(lower))                  concerns.push('mental health');
+  if (/\bweight\b|\bfitness\b|\bout of shape\b|\bexercise\b|\bworkout\b/.test(lower)) concerns.push('fitness');
+  if (/\bpain\b|\bback\b|\bknee\b|\bneck\b|\bshoulder\b|\bache\b/.test(lower))        concerns.push('pain management');
+  if (/\btbi\b|\bhead.?injur/.test(lower))                                             concerns.push('TBI');
+
+  // Special status signals
+  const is100PT   = /\b100%\b|permanent.{0,5}total|p\s*[&+]\s*t\b/i.test(userMessage);
+  const vaDissat  = /not satisfied|wasn.?t satisfied|bad experience|not happy with.{0,8}va|don.?t trust/i.test(lower);
+  const hasEntrep = /\bentrepreneur\b|\bstart.{0,15}business\b|\bown business\b|\baspiring\b/.test(lower);
+
+  // Rotating openers — never the same boilerplate
+  const OPENERS = ['Copy that —', 'Got it —', 'Understood —', 'Noted —'];
+  const opener  = OPENERS[Math.floor(Math.random() * OPENERS.length)];
+
+  // First sentence — reference their specific situation
+  let line1 = '';
+  if (is100PT && concerns.length > 0) {
+    line1 = `${opener} 100% P&T gives you full access, so I've focused your results on ${concerns.slice(0, 2).join(' and ')}.`;
+  } else if (concerns.length > 0) {
+    line1 = `${opener} since ${concerns.slice(0, 2).join(' and ')} is hitting hardest, I've weighted your results there.`;
+  } else if (bridgeContext?.conditions?.length) {
+    const ct = bridgeContext.conditions.slice(0, 2).map(c => c.condition).join(' and ');
+    line1 = `${opener} matched resources to your ${ct} and what you shared.`;
+  } else if (chatKeywords?.length) {
+    line1 = `${opener} here are resources matched to ${chatKeywords.slice(0, 2).join(' and ')}.`;
+  } else {
+    line1 = `${opener} here are your matched resources.`;
+  }
+
+  // Second sentence — context notes
+  const notes: string[] = [];
+  if (vaDissat)              notes.push("prioritized NGO and community options since VA care hasn't been a fit");
+  if (detectedState)         notes.push(`pulled programs near ${detectedState}`);
+  if (exclusionTags?.length) notes.push(`filtered out ${exclusionTags.join(', ')} resources based on what you told me`);
+  const line2 = notes.length > 0 ? `I've ${notes.join(' and ')}.` : '';
+
+  // Cross-domain flag
+  const isCrossDomain = hasEntrep || crossHints?.some(h =>
+    ['careers', 'education'].includes(h.domain)
+  );
+  const crossLine = isCrossDomain
+    ? " Also flagging your business/education interest for our Careers and Education pages — keeping this focused on health."
+    : '';
+
+  const parts = [line1, line2, crossLine].filter(Boolean);
+  return parts.join(' ').trim() + ' This is not medical advice. Discuss with your VA provider or primary doctor.';
+}
+
 // ─── System prompt builder ────────────────────────────────────────────────────
 
 function buildSystemPrompt(
@@ -309,9 +376,9 @@ function buildSystemPrompt(
 
   // Step-specific overrides
   if (step === 'quick_triage') {
-    prompt += `\n\nCURRENT TASK: Ask your 3 clarifying questions in a single warm reply. Be conversational and brief. 3 questions max — no exceptions.`;
+    prompt += `\n\nCURRENT TASK: Ask your 3 clarifying questions in a single warm reply. Be conversational and brief. 3 questions max — no exceptions.\n\nJUMP-AHEAD PROTOCOL: If the veteran has already answered all 3 questions in a single detailed message (covering VA claim status, location, and additional context), do NOT re-ask questions. Jump directly to the JSON assessment output. Your aiMessage in that JSON MUST:\n- Open with a rotating phrase: "Copy that —" / "Got it —" / "Understood —" / "Noted —"\n- Reference their SPECIFIC stated priorities in their own words (PTSD, sleep, fitness, 100% P&T status, VA dissatisfaction, etc.) — NOT the conditions list from records\n- Note cross-domain interests you are flagging for other pages (entrepreneur → Careers, school → Education)\n- Sound like a knowledgeable friend who actually listened — NOT a form processor\n- NEVER use "Based on your records" or "Here are your resources" or "I found some solid options"`;
   } else if (step === 'assess') {
-    prompt += `\n\nCURRENT TASK: Based on the full conversation, output the JSON assessment. No prose outside the JSON object.`;
+    prompt += `\n\nCURRENT TASK: Based on the full conversation, output the JSON assessment. No prose outside the JSON object.\n\naiMessage CRITICAL REQUIREMENTS (2-3 sentences max):\n- Open with a rotating phrase: "Copy that —" / "Got it —" / "Understood —" / "Noted —"\n- Reference what the veteran said was MOST important TO THEM in their actual words — not just the records conditions list\n- If they mentioned PTSD, sleep, fitness, motivation, weight — name those specifically\n- If they said 100% P&T, acknowledge it (affects benefit access)\n- If they expressed VA dissatisfaction, note you've prioritized NGO/community alternatives\n- If they mentioned cross-domain interests (entrepreneur, school), briefly note you're flagging for the right page\n- NEVER say "Based on" or "I found some solid options" or repeat the same opener twice`;
   }
 
   return prompt;
@@ -670,14 +737,14 @@ export async function POST(request: NextRequest) {
       if (hasRes) {
         const scored = applyScoring(finalVa, finalNgo, finalState, bridgeContext, kws, userProfile);
         if (!aiMessage) {
-          const ct = bridgeContext?.conditions?.length
-            ? bridgeContext.conditions.slice(0, 2).map(c => c.condition).join(' and ')
-            : kws.slice(0, 2).join(' and ') || 'your situation';
-          const stateNote = detectedState ? ` I also pulled programs available in your area.` : '';
-          const exclusionNote = allExclusions.length
-            ? ` I've removed ${allExclusions.join(', ')} resources based on what you told me.`
-            : '';
-          aiMessage = `Here are your top-matched resources based on ${ct}.${exclusionNote}${stateNote} Feel free to ask me to refine further. This is not medical advice. Discuss with your VA provider or primary doctor.`;
+          aiMessage = buildContextualHandoffMessage(
+            userMessage ?? '',
+            bridgeContext,
+            detectedState,
+            crossHints,
+            allExclusions,
+            kws,
+          );
         }
         return NextResponse.json({
           aiMessage,
@@ -714,8 +781,9 @@ export async function POST(request: NextRequest) {
           userMessage ?? '',
           ...messages.filter(m => m.role === 'user').map(m => m.content),
         ].join(' ');
-        const jumpKws     = extractKeywords(jumpTexts);
-        const jumpProfile = parseUserProfile(jumpTexts);
+        const jumpKws        = extractKeywords(jumpTexts);
+        const jumpProfile    = parseUserProfile(jumpTexts);
+        const jumpCrossHints = detectCrossDomainIntent(jumpTexts);
 
         // Enrich bridge context with chat-detected state for the jump-ahead path
         const jumpDetectedState = bridgeContext?.userState ?? jumpProfile?.state ?? null;
@@ -761,11 +829,14 @@ export async function POST(request: NextRequest) {
         if (finalVa.length + finalNgo.length + finalState.length > 0) {
           const scored = applyScoring(finalVa, finalNgo, finalState, jumpBridge, jumpKws, jumpProfile);
           if (!jumpMsg) {
-            const ct = bridgeContext?.conditions?.length
-              ? bridgeContext.conditions.slice(0, 2).map(c => c.condition).join(' and ')
-              : 'your conditions';
-            const stateNote = jumpDetectedState ? ` I've also pulled programs available in your area.` : '';
-            jumpMsg = `Alright — I found some solid options for you based on your ${ct} and everything you shared.${stateNote} Take a look and feel free to ask me to adjust anything. This is not medical advice. Discuss with your VA provider or primary doctor.`;
+            jumpMsg = buildContextualHandoffMessage(
+              userMessage ?? '',
+              bridgeContext,
+              jumpDetectedState,
+              jumpCrossHints,
+              exclusionTags,
+              jumpKws,
+            );
           }
           return NextResponse.json({
             aiMessage: jumpMsg,
@@ -778,6 +849,7 @@ export async function POST(request: NextRequest) {
               state: scored.state.map(r => ({ ...r, track: 'state' as const })),
             },
             keywords: scored.keywords,
+            crossDomainHints: jumpCrossHints,
           });
         }
 

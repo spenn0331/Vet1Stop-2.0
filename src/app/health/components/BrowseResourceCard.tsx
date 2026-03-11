@@ -27,7 +27,7 @@ export function readResourcePrefs(): { liked: string[]; disliked: string[] } {
   try { return JSON.parse(localStorage.getItem(RESOURCE_PREFS_KEY) || '{"liked":[],"disliked":[]}'); }
   catch { return { liked: [], disliked: [] }; }
 }
-function writeResourcePrefs(prefs: { liked: string[]; disliked: string[] }) {
+export function writeResourcePrefs(prefs: { liked: string[]; disliked: string[] }) {
   try { localStorage.setItem(RESOURCE_PREFS_KEY, JSON.stringify(prefs)); } catch { /* non-fatal */ }
 }
 
