@@ -394,6 +394,11 @@ _This is not medical advice. Discuss with your VA provider or primary doctor._`,
         setChatExpanded(true);
         setStep('results');
 
+        // Capture cross-domain hints so redirect card shows even after handoff
+        if (data.crossDomainHints?.length) {
+          setCrossDomainHints(data.crossDomainHints);
+        }
+
         try {
           localStorage.setItem(SYMPTOM_PROFILE_KEY, JSON.stringify({
             conditions: bridgeData?.conditions?.map(c => c.condition) ?? [],
@@ -718,7 +723,7 @@ _This is not medical advice. Discuss with your VA provider or primary doctor._`,
                 )}
 
                 {/* Cross-domain redirect card — appears when user mentions education/careers/housing */}
-                {crossDomainHints.length > 0 && !isHandedOff && (() => {
+                {crossDomainHints.length > 0 && (() => {
                   const hint = crossDomainHints[0];
                   const redirect = CROSS_DOMAIN_MAP[hint];
                   if (!redirect) return null;

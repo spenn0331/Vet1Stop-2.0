@@ -449,7 +449,8 @@ function applyScoring(
       location: typeof s.location === 'object' ? undefined : s.location,
     }));
     const filtered = scored.filter(r => (r.score ?? 0) >= SCORE_CUTOFF);
-    return filtered.length >= 3 ? filtered : scored.slice(0, 3);
+    const result    = filtered.length >= 3 ? filtered : scored.slice(0, 3);
+    return result.slice(0, 7); // cap at 7 per track (plan: 5-7 resources per track)
   };
 
   return {
@@ -757,7 +758,7 @@ export async function POST(request: NextRequest) {
             state: scored.state.map(r => ({ ...r, track: 'state' as const })),
           },
           keywords: scored.keywords,
-          crossDomainHints: crossHints,
+          crossDomainHints: crossHints.map(h => h.domain),
           activeExclusions: allExclusions,
         });
       }
@@ -849,7 +850,7 @@ export async function POST(request: NextRequest) {
               state: scored.state.map(r => ({ ...r, track: 'state' as const })),
             },
             keywords: scored.keywords,
-            crossDomainHints: jumpCrossHints,
+            crossDomainHints: jumpCrossHints.map(h => h.domain),
           });
         }
 
