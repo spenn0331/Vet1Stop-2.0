@@ -42,11 +42,24 @@ import {
   buildScoringContext,
 } from '@/lib/resources-scoring';
 
-// ─── localStorage keys ────────────────────────────────────────────────────────
+// ─── localStorage / sessionStorage keys ─────────────────────────────────────
 const SEA_BAG_KEY         = 'vet1stop_sea_bag';
 const SYMPTOM_PROFILE_KEY = 'vet1stop_symptom_profile';
 // Saved filters key — ONLY used for browse-mode filter presets. NEVER touches sea_bag.
 const SAVED_FILTERS_KEY   = 'vet1stop_saved_filters';
+// Session-only hidden resources (cleared on tab close)
+const HIDDEN_RESOURCES_KEY = 'vet1stop_hidden_resources';
+
+function loadHiddenTitles(): Set<string> {
+  try {
+    const raw = sessionStorage.getItem(HIDDEN_RESOURCES_KEY);
+    return new Set(raw ? JSON.parse(raw) : []);
+  } catch { return new Set(); }
+}
+function saveHiddenTitles(titles: Set<string>): void {
+  try { sessionStorage.setItem(HIDDEN_RESOURCES_KEY, JSON.stringify([...titles])); }
+  catch { /* no-op */ }
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -416,9 +429,10 @@ interface ResourceCardProps {
   rec: ResourceRecommendation;
   isSaved: boolean;
   onToggleSave: (title: string) => void;
+  onHide: (title: string) => void;
 }
 
-function ResourceCard({ rec, isSaved, onToggleSave }: ResourceCardProps) {
+function ResourceCard({ rec, isSaved, onToggleSave, onHide }: ResourceCardProps) {
   const isRecommended = rec.badge === 'Recommended';
   const hasBadge = isRecommended || rec.badge === 'Good Match';
 
@@ -442,6 +456,11 @@ function ResourceCard({ rec, isSaved, onToggleSave }: ResourceCardProps) {
     if (!isToggle) prefs[direction].push(rec.title);
     writeResourcePrefs(prefs);
     setPref(newPref);
+    // Hide resource for the session on thumbs-down
+    if (direction === 'disliked' && !isToggle) {
+      console.log(`[Thumbs ↓] Hidden: "${rec.title}"`);
+      onHide(rec.title);
+    }
     window.dispatchEvent(new CustomEvent('vet1stop:pref-update', {
       detail: { title: rec.title, direction: newPref },
     }));
@@ -598,6 +617,7 @@ export default function ResultsPanel({ result, onReset }: ResultsPanelProps) {
   const [browseMode, setBrowseMode]       = useState(false);
   const [activeFilters, setActiveFilters] = useState<BrowseFilter[]>([]);
   const [savedTitles, setSavedTitles]     = useState<string[]>([]);
+  const [hiddenTitles, setHiddenTitles]   = useState<Set<string>>(() => loadHiddenTitles());
 
   /**
    * liveRecs: driven by initial result.recommendations, updated in-place
@@ -631,6 +651,23 @@ export default function ResultsPanel({ result, onReset }: ResultsPanelProps) {
 
   const refineInputRef   = useRef<HTMLInputElement>(null);
   const refineChatEndRef = useRef<HTMLDivElement>(null);
+
+  // ─── Hidden resources handlers ────────────────────────────────────────────
+  const handleHideResource = useCallback((title: string) => {
+    setHiddenTitles(prev => {
+      const next = new Set(prev);
+      next.add(title);
+      saveHiddenTitles(next);
+      return next;
+    });
+  }, []);
+
+  const handleUndoHidden = useCallback(() => {
+    const empty = new Set<string>();
+    setHiddenTitles(empty);
+    saveHiddenTitles(empty);
+    console.log('[Thumbs ↓] All hidden resources restored');
+  }, []);
 
   // Hydrate Sea Bag on mount
   useEffect(() => { setSavedTitles(loadSeaBag()); }, []);
@@ -866,9 +903,17 @@ export default function ResultsPanel({ result, onReset }: ResultsPanelProps) {
         .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
     : [];
 
-  const activeResources = browseMode ? filteredResources : (liveRecs[activeTrack] ?? []);
+  // Filter hidden resources from all track lists
+  const visibleVa    = liveRecs.va.filter(r    => !hiddenTitles.has(r.title));
+  const visibleNgo   = liveRecs.ngo.filter(r   => !hiddenTitles.has(r.title));
+  const visibleState = liveRecs.state.filter(r => !hiddenTitles.has(r.title));
+  const visibleRecs  = { va: visibleVa, ngo: visibleNgo, state: visibleState };
+
+  const activeResources = browseMode
+    ? filteredResources.filter(r => !hiddenTitles.has(r.title))
+    : (visibleRecs[activeTrack] ?? []);
   const recommendedCount = allResources.filter(r => r.badge === 'Recommended').length;
-  const counts = { va: liveRecs.va.length, ngo: liveRecs.ngo.length, state: liveRecs.state.length };
+  const counts = { va: visibleVa.length, ngo: visibleNgo.length, state: visibleState.length };
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
@@ -946,6 +991,21 @@ export default function ResultsPanel({ result, onReset }: ResultsPanelProps) {
                 className="flex-shrink-0 text-xs font-bold text-yellow-900 bg-yellow-200 hover:bg-yellow-300 border border-yellow-400 px-3 py-1.5 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-yellow-400"
               >
                 View Now
+              </button>
+            </div>
+          )}
+
+          {/* ─── Hidden resources info chip ─── */}
+          {hiddenTitles.size > 0 && (
+            <div className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5 mb-2 text-xs">
+              <span className="text-amber-800 font-medium">
+                {hiddenTitles.size} resource{hiddenTitles.size > 1 ? 's' : ''} hidden this session
+              </span>
+              <button
+                onClick={handleUndoHidden}
+                className="text-amber-700 font-bold hover:text-amber-900 ml-3 underline focus:outline-none"
+              >
+                Undo
               </button>
             </div>
           )}
@@ -1239,6 +1299,7 @@ export default function ResultsPanel({ result, onReset }: ResultsPanelProps) {
                     rec={rec}
                     isSaved={savedTitles.includes(rec.title)}
                     onToggleSave={handleToggleSave}
+                    onHide={handleHideResource}
                   />
                 ))
               : (

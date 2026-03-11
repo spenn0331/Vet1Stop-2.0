@@ -143,6 +143,7 @@ interface TriageRequest {
   userState?: string;
   userIntent?: UserIntent;  // from progressive profiling tap card
   clientExclusionTags?: string[]; // additional exclusions from client-side thumbs-down
+  isRefinement?: boolean;         // true when veteran already has results and is refining
 }
 
 // ─── Grok API helpers ─────────────────────────────────────────────────────────
@@ -276,8 +277,37 @@ function buildContextualHandoffMessage(
   crossHints?: CrossDomainHint[],
   exclusionTags?: string[],
   chatKeywords?: string[],
+  isRefinement = false,
 ): string {
   const lower = userMessage.toLowerCase();
+
+  // ── REFINEMENT MODE: acknowledge what changed, not re-summarize ──────────
+  if (isRefinement) {
+    const removed: string[] = [];
+    const added:   string[] = [];
+    if (exclusionTags?.includes('homeless'))       removed.push('homeless resources');
+    if (exclusionTags?.includes('service animal')) removed.push('service animal resources');
+    if (exclusionTags?.includes('substance'))      removed.push('substance use resources');
+    if (exclusionTags?.includes('caregiver'))      removed.push('caregiver resources');
+    if (/hunt|fish|camp|outdoor|nature/i.test(lower)) added.push('outdoor and adventure therapy options');
+    if (/fitness|workout|exercise|weight/i.test(lower)) added.push('fitness programs');
+    if (/ptsd|sleep/i.test(lower))                added.push('additional PTSD and sleep resources');
+    const REFINE_OPENERS = ['Adjusted —', 'Done —', 'Updated —', 'Dialed in —'];
+    const opener = REFINE_OPENERS[Math.floor(Math.random() * REFINE_OPENERS.length)];
+    const removedLine = removed.length > 0 ? `Pulled out ${removed.join(' and ')}` : '';
+    const addedLine   = added.length   > 0 ? `added ${added.join(' and ')} based on what you shared` : '';
+    const changeLine  = [removedLine, addedLine].filter(Boolean).join(', ');
+    const msg = changeLine
+      ? `${opener} ${changeLine}.`
+      : `${opener} results updated based on your feedback.`;
+    const REFINE_INVITES = [
+      ' Anything else to adjust?',
+      ' Want me to dial it in further?',
+      ' Let me know if you need more changes.',
+    ];
+    const invite = REFINE_INVITES[Math.floor(Math.random() * REFINE_INVITES.length)];
+    return msg + invite + ' This is not medical advice. Discuss with your VA provider or primary doctor.';
+  }
 
   // Detect what the veteran said was MOST important to them
   const concerns: string[] = [];
@@ -345,6 +375,7 @@ function buildSystemPrompt(
   bridgeContext?: BridgeContext,
   userIntent?: UserIntent,
   exclusionTags?: string[],
+  isRefinement = false,
 ): string {
   let prompt = TRIAGE_SYSTEM_PROMPT;
 
@@ -385,7 +416,11 @@ function buildSystemPrompt(
   if (step === 'quick_triage') {
     prompt += `\n\nCURRENT TASK: Ask your 3 clarifying questions in a single warm reply. Be conversational and brief. 3 questions max — no exceptions.\n\nJUMP-AHEAD PROTOCOL: If the veteran has already answered all 3 questions in a single detailed message (covering VA claim status, location, and additional context), do NOT re-ask questions. Jump directly to the JSON assessment output. Your aiMessage in that JSON MUST:\n- Open with a rotating phrase: "Copy that —" / "Got it —" / "Understood —" / "Noted —"\n- Reference their SPECIFIC stated priorities in their own words (PTSD, sleep, fitness, 100% P&T status, VA dissatisfaction, etc.) — NOT the conditions list from records\n- Note cross-domain interests you are flagging for other pages (entrepreneur → Careers, school → Education)\n- End with an invitation to refine: e.g. "If some of these don't fit, tell me and I'll readjust." — vary the phrasing, keep it conversational\n- Sound like a knowledgeable friend who actually listened — NOT a form processor\n- NEVER use "Based on your records" or "Here are your resources" or "I found some solid options"`;
   } else if (step === 'assess') {
-    prompt += `\n\nCURRENT TASK: Based on the full conversation, output the JSON assessment. No prose outside the JSON object.\n\naiMessage CRITICAL REQUIREMENTS (2-3 sentences max):\n- Open with a rotating phrase: "Copy that —" / "Got it —" / "Understood —" / "Noted —"\n- Reference what the veteran said was MOST important TO THEM in their actual words — not just the records conditions list\n- If they mentioned PTSD, sleep, fitness, motivation, weight — name those specifically\n- If they said 100% P&T, acknowledge it (affects benefit access)\n- If they expressed VA dissatisfaction, note you've prioritized NGO/community alternatives\n- If they mentioned cross-domain interests (entrepreneur, school), briefly note you're flagging for the right page\n- NEVER say "Based on" or "I found some solid options" or repeat the same opener twice\n- End with a natural invitation to refine: e.g. "If any of these don't match your situation, just tell me and I'll adjust." — vary the phrasing each time, keep it conversational`;
+    if (isRefinement) {
+      prompt += `\n\nCURRENT TASK: The veteran already has results and just sent a REFINEMENT message. Output the updated JSON assessment.\n\nREFINEMENT MODE RULES (strictly follow):\n- DO NOT re-summarize the initial situation — the veteran already knows it\n- DO acknowledge what CHANGED: what you removed, what you added, what you adjusted\n- Reference their NEW message specifically: if they said hunting/fishing/camping → note you added outdoor/adventure options; if they removed homeless → confirm it's gone\n- Use action verbs: "Pulled out", "Swapped in", "Added", "Removed", "Adjusted", "Dialed in"\n- Keep it 1-2 sentences, not a paragraph\n- End with a short invite to keep refining: "Anything else to adjust?" or "Want me to dial it in further?"\n- NEVER repeat the opener from the prior message\n- Example: "Pulled the homeless resources, added outdoor therapy and adventure programs based on your hunting and camping interests — sleep and PTSD still weighted highest. Anything else to adjust?"`;  
+    } else {
+      prompt += `\n\nCURRENT TASK: Based on the full conversation, output the JSON assessment. No prose outside the JSON object.\n\naiMessage CRITICAL REQUIREMENTS (2-3 sentences max):\n- Open with a rotating phrase: "Copy that —" / "Got it —" / "Understood —" / "Noted —"\n- Reference what the veteran said was MOST important TO THEM in their actual words — not just the records conditions list\n- If they mentioned PTSD, sleep, fitness, motivation, weight — name those specifically\n- If they said 100% P&T, acknowledge it (affects benefit access)\n- If they expressed VA dissatisfaction, note you've prioritized NGO/community alternatives\n- If they mentioned cross-domain interests (entrepreneur, school), briefly note you're flagging for the right page\n- NEVER say "Based on" or "I found some solid options" or repeat the same opener twice\n- End with a natural invitation to refine: e.g. "If any of these don't match your situation, just tell me and I'll adjust." — vary the phrasing each time, keep it conversational`;
+    }
   }
 
   return prompt;
@@ -433,8 +468,16 @@ function applyScoring(
     } : undefined,
   });
 
-  // Strike 4D: Score cutoff — filter out resources below threshold; keep top 3 as safety net
-  const SCORE_CUTOFF = 35;
+  // Strike 4D: Dynamic score cutoff — scales with bridge condition count to prevent flooding
+  // More conditions = higher bar required = fewer but more precise results
+  const bridgeCount = bridgeContext?.conditions?.length ?? 0;
+  const SCORE_CUTOFF =
+    bridgeCount >= 31 ? 65 :
+    bridgeCount >= 16 ? 58 :
+    bridgeCount >=  6 ? 48 :
+                        35;
+  console.log(`[SymptomTriage] Score cutoff: ${SCORE_CUTOFF} (bridge conditions: ${bridgeCount})`);
+
   const scoreTrack = (resources: RawResource[]) => {
     const scored = scoreAndSortResources(
       resources.map((r): ResourceInput => ({
@@ -623,8 +666,9 @@ export async function POST(request: NextRequest) {
       bridgeContext: rawBridgeContext,
       userState: bodyUserState,
       userIntent: bodyUserIntent,
-      clientExclusionTags = [],
-    } = body;
+    clientExclusionTags = [],
+    isRefinement = false,
+  } = body;
 
     // Merge top-level userState into bridgeContext
     const bridgeContext: BridgeContext | undefined = rawBridgeContext
@@ -704,9 +748,12 @@ export async function POST(request: NextRequest) {
       }
 
       const mongoHas = dbVa.length + dbNgo.length + dbState.length > 0;
+      console.log(`[MongoDB] post-exclusion → va=${dbVa.length} ngo=${dbNgo.length} state=${dbState.length} | exclusions=[${exclusionTags.join(', ')}]`);
 
-      const assessPrompt = buildSystemPrompt('assess', bridgeContext, detectedIntent, exclusionTags);
+      const assessStart  = Date.now();
+      const assessPrompt = buildSystemPrompt('assess', bridgeContext, detectedIntent, exclusionTags, isRefinement);
       const aiResponse   = await callGrokAI(messages, assessPrompt);
+      console.log(`[Grok] assess response: ${aiResponse ? `✓ ${aiResponse.length} chars` : '✗ empty'} | timing=${Date.now()-assessStart}ms`);
 
       let aiMessage  = '';
       let grokVa:    RawResource[] = [];
@@ -744,6 +791,7 @@ export async function POST(request: NextRequest) {
 
       if (hasRes) {
         const scored = applyScoring(finalVa, finalNgo, finalState, bridgeContext, kws, userProfile);
+        console.log(`[Scoring] assess → va=${scored.va.length} ngo=${scored.ngo.length} state=${scored.state.length} | aiMessage=${aiMessage ? '✓ Grok' : '✓ fallback builder'}`);
         if (!aiMessage) {
           aiMessage = buildContextualHandoffMessage(
             userMessage ?? '',
@@ -752,6 +800,7 @@ export async function POST(request: NextRequest) {
             crossHints,
             allExclusions,
             kws,
+            isRefinement,
           );
         }
         return NextResponse.json({
@@ -773,7 +822,7 @@ export async function POST(request: NextRequest) {
     }
 
     // ── quick_triage + legacy steps: conversational AI (temperature 0.5 for natural tone) ──
-    const systemPrompt = buildSystemPrompt(step ?? 'quick_triage', bridgeContext, detectedIntent, exclusionTags);
+    const systemPrompt = buildSystemPrompt(step ?? 'quick_triage', bridgeContext, detectedIntent, exclusionTags, isRefinement);
     const aiResponse = await callGrokAI(messages, systemPrompt, 0.5);
 
     if (aiResponse) {
@@ -806,6 +855,7 @@ export async function POST(request: NextRequest) {
         const jDbNgo   = jDbResults['ngo']   ?? [];
         const jDbState = jDbResults['state'] ?? [];
         const jumpMongoHas = jDbVa.length + jDbNgo.length + jDbState.length > 0;
+        console.log(`[MongoDB] jump-ahead → va=${jDbVa.length} ngo=${jDbNgo.length} state=${jDbState.length} | source=${jumpMongoHas ? 'mongo' : 'grok-fallback'}`);
 
         // ── Parse Grok response: aiMessage + fallback resources if MongoDB empty ─
         let jumpMsg      = '';
@@ -836,6 +886,7 @@ export async function POST(request: NextRequest) {
 
         if (finalVa.length + finalNgo.length + finalState.length > 0) {
           const scored = applyScoring(finalVa, finalNgo, finalState, jumpBridge, jumpKws, jumpProfile);
+          console.log(`[Scoring] jump-ahead → va=${scored.va.length} ngo=${scored.ngo.length} state=${scored.state.length} | aiMessage=${jumpMsg ? '✓ Grok' : '✓ fallback builder'}`);
           if (!jumpMsg) {
             jumpMsg = buildContextualHandoffMessage(
               userMessage ?? '',

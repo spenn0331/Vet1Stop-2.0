@@ -291,6 +291,7 @@ _This is not medical advice. Discuss with your VA provider or primary doctor._`,
   ) => {
     setIsLoading(true);
     setErrorMsg(null);
+    const triageStart = Date.now();
 
     try {
       const bridgeContext = bridgeData
@@ -304,6 +305,8 @@ _This is not medical advice. Discuss with your VA provider or primary doctor._`,
           }
         : undefined;
 
+      console.log(`[Triage →] step=${triageStep} | bridge=${bridgeContext?.conditions?.length ?? 0} conditions | isRefinement=${isHandedOff} | msg="${userMessage.slice(0, 60)}${userMessage.length > 60 ? '…' : ''}" `);
+
       const res = await fetch('/api/health/symptom-triage', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -313,12 +316,14 @@ _This is not medical advice. Discuss with your VA provider or primary doctor._`,
           userMessage,
           bridgeContext,
           userState: bridgeData?.userState ?? geoStateRef.current ?? undefined,
+          isRefinement: isHandedOff,
         }),
       });
       // Note: userIntent is classified server-side from the message content
 
       if (!res.ok) throw new Error(`Server ${res.status}`);
       const data: RawTriageResponse = await res.json();
+      console.log(`[Triage ←] VA=${data.recommendations?.va?.length ?? 0} NGO=${data.recommendations?.ngo?.length ?? 0} St=${data.recommendations?.state?.length ?? 0} | handedOff=${isHandedOff} | crossHints=${data.crossDomainHints?.join(',') ?? 'none'} | timing=${Date.now()-triageStart}ms`);
 
       // Crisis path
       if (data.isCrisis) {
@@ -577,11 +582,12 @@ _This is not medical advice. Discuss with your VA provider or primary doctor._`,
           </div>
         )}
         <div
-          className={`max-w-[85%] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed ${
+          className={`max-w-[88%] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed break-words ${
             isUser
               ? 'bg-gradient-to-br from-[#1A2C5B] to-[#0F1D3D] text-white rounded-br-md shadow-md shadow-blue-900/20 ml-auto'
               : 'bg-white border border-gray-200 text-gray-800 rounded-bl-md shadow-sm'
           }`}
+          style={{ overflowWrap: 'anywhere' }}
         >
           {isUser ? (
             <span className="whitespace-pre-line">{msg.content}</span>
@@ -673,7 +679,7 @@ _This is not medical advice. Discuss with your VA provider or primary doctor._`,
                 <div className="flex items-center gap-2 min-w-0">
                   <SparklesIcon className="h-4 w-4 flex-shrink-0 text-[#1A2C5B]" />
                   <span className="truncate font-medium text-xs">
-                    {visibleMessages[visibleMessages.length - 1]?.content?.slice(0, 60) ?? 'Chat complete'}…
+                    {visibleMessages[visibleMessages.length - 1]?.content?.slice(0, 90) ?? 'Chat complete'}…
                   </span>
                 </div>
                 <ChevronDownIcon className="h-4 w-4 flex-shrink-0 ml-2 text-gray-400" />
@@ -686,7 +692,10 @@ _This is not medical advice. Discuss with your VA provider or primary doctor._`,
                 <div
                   ref={chatContainerRef}
                   className="bg-gradient-to-b from-gray-50 to-white border-b border-gray-200 p-3 sm:p-4 overflow-y-auto overscroll-contain shadow-inner"
-                  style={{ maxHeight: isHandedOff ? '160px' : '340px', minHeight: '120px' }}
+                  style={{
+                    maxHeight: isHandedOff ? '280px' : 'min(52vh, 520px)',
+                    minHeight: '160px',
+                  }}
                 >
                   {visibleMessages.map((msg, idx) => (
                     <ChatBubble key={idx} msg={msg} />
