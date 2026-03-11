@@ -14,10 +14,22 @@ import {
   CheckCircleIcon,
   MapPinIcon,
   TagIcon,
+  HandThumbUpIcon,
+  HandThumbDownIcon,
 } from '@heroicons/react/24/outline';
-import { BookmarkIcon as BookmarkSolid } from '@heroicons/react/24/solid';
+import { BookmarkIcon as BookmarkSolid, HandThumbUpIcon as ThumbUpSolid, HandThumbDownIcon as ThumbDownSolid } from '@heroicons/react/24/solid';
 
 const SEA_BAG_KEY = 'vet1stop_sea_bag';
+export const RESOURCE_PREFS_KEY = 'vet1stop_resource_prefs';
+
+// Helper to read/write the prefs store from localStorage
+export function readResourcePrefs(): { liked: string[]; disliked: string[] } {
+  try { return JSON.parse(localStorage.getItem(RESOURCE_PREFS_KEY) || '{"liked":[],"disliked":[]}'); }
+  catch { return { liked: [], disliked: [] }; }
+}
+function writeResourcePrefs(prefs: { liked: string[]; disliked: string[] }) {
+  try { localStorage.setItem(RESOURCE_PREFS_KEY, JSON.stringify(prefs)); } catch { /* non-fatal */ }
+}
 
 export interface BrowseResource {
   _id?: string;
@@ -72,6 +84,36 @@ export default function BrowseResourceCard({ resource }: BrowseResourceCardProps
     } catch { return false; }
   });
   const [justSaved, setJustSaved] = useState(false);
+
+  // Thumbs up/down — session preference signal
+  const [pref, setPref] = useState<'liked' | 'disliked' | null>(() => {
+    try {
+      const prefs = readResourcePrefs();
+      if (prefs.liked.includes(resource.title)) return 'liked';
+      if (prefs.disliked.includes(resource.title)) return 'disliked';
+    } catch { /* non-fatal */ }
+    return null;
+  });
+
+  function handleThumb(e: React.MouseEvent, direction: 'liked' | 'disliked') {
+    e.preventDefault();
+    e.stopPropagation();
+    const prefs = readResourcePrefs();
+    const isToggle = pref === direction; // clicking same button removes preference
+    const newPref = isToggle ? null : direction;
+    const otherDir: 'liked' | 'disliked' = direction === 'liked' ? 'disliked' : 'liked';
+    // Remove from both, then add to target if not toggling off
+    prefs.liked    = prefs.liked.filter(t => t !== resource.title);
+    prefs.disliked = prefs.disliked.filter(t => t !== resource.title);
+    if (!isToggle) prefs[direction].push(resource.title);
+    writeResourcePrefs(prefs);
+    setPref(newPref);
+    // Dispatch custom event so HealthBrowseSection can re-rank in real-time
+    window.dispatchEvent(new CustomEvent('vet1stop:pref-update', {
+      detail: { title: resource.title, direction: newPref },
+    }));
+    void otherDir; // suppress unused var warning
+  }
 
   function handleSave(e: React.MouseEvent) {
     e.preventDefault();
@@ -159,7 +201,7 @@ export default function BrowseResourceCard({ resource }: BrowseResourceCardProps
         )}
       </div>
 
-      {/* Footer CTAs */}
+      {/* Footer CTAs + Thumbs */}
       <div className="px-4 pb-4 flex items-center gap-3 mt-auto">
         {resource.url && (
           <a
@@ -183,6 +225,33 @@ export default function BrowseResourceCard({ resource }: BrowseResourceCardProps
             {resource.phone}
           </a>
         )}
+        {/* Thumbs up / down — session preference signal */}
+        <div className="flex items-center gap-1 ml-auto" role="group" aria-label="Rate this resource">
+          <button
+            onClick={e => handleThumb(e, 'liked')}
+            className={`p-1 rounded-md transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-green-300 ${
+              pref === 'liked' ? 'text-green-600' : 'text-gray-300 hover:text-green-500'
+            }`}
+            aria-label="This resource was helpful"
+            aria-pressed={pref === 'liked'}
+          >
+            {pref === 'liked'
+              ? <ThumbUpSolid className="h-4 w-4" />
+              : <HandThumbUpIcon className="h-4 w-4" />}
+          </button>
+          <button
+            onClick={e => handleThumb(e, 'disliked')}
+            className={`p-1 rounded-md transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-red-300 ${
+              pref === 'disliked' ? 'text-red-500' : 'text-gray-300 hover:text-red-400'
+            }`}
+            aria-label="This resource was not helpful"
+            aria-pressed={pref === 'disliked'}
+          >
+            {pref === 'disliked'
+              ? <ThumbDownSolid className="h-4 w-4" />
+              : <HandThumbDownIcon className="h-4 w-4" />}
+          </button>
+        </div>
       </div>
     </article>
   );

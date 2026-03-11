@@ -15,7 +15,7 @@ import {
   ChevronRightIcon,
   AdjustmentsHorizontalIcon,
 } from '@heroicons/react/24/outline';
-import BrowseResourceCard, { BrowseResourceSkeleton } from './BrowseResourceCard';
+import BrowseResourceCard, { BrowseResourceSkeleton, readResourcePrefs } from './BrowseResourceCard';
 import type { BrowseResource } from './BrowseResourceCard';
 
 // ─── Tab config ───────────────────────────────────────────────────────────────
@@ -77,8 +77,27 @@ export default function HealthBrowseSection() {
   const [loading, setLoading]         = useState(true);
   const [error, setError]             = useState<string | null>(null);
   const [showSort, setShowSort]       = useState(false);
+  const [prefs, setPrefs]             = useState<{ liked: string[]; disliked: string[] }>(() => {
+    if (typeof window === 'undefined') return { liked: [], disliked: [] };
+    return readResourcePrefs();
+  });
+  const [dislikeToast, setDislikeToast] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sectionRef = useRef<HTMLDivElement>(null);
+
+  // Listen for real-time pref updates from BrowseResourceCard
+  useEffect(() => {
+    function onPrefUpdate(e: Event) {
+      const detail = (e as CustomEvent).detail as { title: string; direction: 'liked' | 'disliked' | null };
+      setPrefs(readResourcePrefs());
+      if (detail.direction === 'disliked') {
+        setDislikeToast(true);
+        setTimeout(() => setDislikeToast(false), 5000);
+      }
+    }
+    window.addEventListener('vet1stop:pref-update', onPrefUpdate);
+    return () => window.removeEventListener('vet1stop:pref-update', onPrefUpdate);
+  }, []);
 
   // Debounce search input
   useEffect(() => {
@@ -107,6 +126,7 @@ export default function HealthBrowseSection() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setResources(data.resources ?? []);
+      setPrefs(readResourcePrefs()); // re-sync prefs on fresh fetch
       setTotalPages(data.pagination?.totalPages ?? 1);
       setTotal(data.pagination?.total ?? 0);
     } catch (err) {
@@ -137,6 +157,19 @@ export default function HealthBrowseSection() {
     ngo: activeTab === 'ngo' ? String(total) : '',
     state: activeTab === 'state' ? String(total) : '',
   };
+
+  // Apply session preference re-ranking: liked float up, disliked sink down
+  const rankedResources = [...resources].sort((a, b) => {
+    const aLiked = prefs.liked.includes(a.title);
+    const bLiked = prefs.liked.includes(b.title);
+    const aDisliked = prefs.disliked.includes(a.title);
+    const bDisliked = prefs.disliked.includes(b.title);
+    if (aLiked && !bLiked) return -1;
+    if (!aLiked && bLiked) return 1;
+    if (aDisliked && !bDisliked) return 1;
+    if (!aDisliked && bDisliked) return -1;
+    return 0;
+  });
 
   return (
     <section
@@ -328,7 +361,7 @@ export default function HealthBrowseSection() {
                 <BrowseResourceSkeleton key={i} />
               ))}
             </div>
-          ) : resources.length === 0 ? (
+          ) : rankedResources.length === 0 ? (
             <div className="text-center py-16 bg-white rounded-2xl border border-gray-100">
               <MagnifyingGlassIcon className="h-10 w-10 text-gray-300 mx-auto mb-3" aria-hidden="true" />
               <p className="text-gray-500 font-medium">No resources found</p>
@@ -336,8 +369,28 @@ export default function HealthBrowseSection() {
             </div>
           ) : (
             <>
+              {/* Dislike toast — nudge toward Symptom Finder */}
+              {dislikeToast && (
+                <div className="flex items-center justify-between gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 mb-5 animate-in fade-in shadow-sm">
+                  <p className="text-sm text-[#1A2C5B]">
+                    👎 Not finding what you need? The <strong>Symptom Finder</strong> can pull more targeted results for your situation.
+                  </p>
+                  <a
+                    href="/health/symptom-finder"
+                    className="flex-shrink-0 text-xs font-bold text-white bg-[#1A2C5B] px-3 py-1.5 rounded-lg hover:bg-[#243d7a] transition-colors"
+                  >
+                    Open Finder
+                  </a>
+                  <button
+                    onClick={() => setDislikeToast(false)}
+                    className="flex-shrink-0 text-gray-400 hover:text-gray-600 text-lg leading-none"
+                    aria-label="Dismiss"
+                  >×</button>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                {resources.map((r, i) => (
+                {rankedResources.map((r, i) => (
                   <BrowseResourceCard key={(r._id as string) ?? i} resource={r} />
                 ))}
               </div>

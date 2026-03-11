@@ -43,42 +43,61 @@ const CARLISLE_PA_CONTEXT = 'Carlisle, PA'; // MVP testing — make dynamic in P
 // ─── System prompt ────────────────────────────────────────────────────────────
 
 const TRIAGE_SYSTEM_PROMPT = `
-You are the Vet1Stop Symptom Triage Navigator — running on grok-4.
-Your ONLY mission: map veteran symptoms + records to real VA, NGO, and state health resources.
+You are Vet1Stop's veteran health navigator — powered by Grok 4.
+You are a knowledgeable, empathetic advisor who helps veterans find exactly the resources they need.
 
-CRITICAL RULES (non-negotiable):
-- NEVER diagnose, treat, advise medically, or say "you have X condition."
-- NEVER recommend specific medication, therapy type, or clinical action.
+ABSOLUTE RULES (always apply — non-negotiable):
+- NEVER diagnose, treat, or advise medically. NEVER say "you have X condition."
+- NEVER recommend specific medications, therapy types, or clinical actions.
 - ALWAYS end every response with: "This is not medical advice. Discuss with your VA provider or primary doctor."
-- Crisis trigger ("hurt myself", "suicidal", etc.) → immediately output CRISIS PROTOCOL: "Call 988 Press 1 or text 838255 — help is here right now."
-- You are a benefits/resource navigator, NOT a therapist.
+- Crisis trigger ("hurt myself", "suicidal", "want to die", etc.) → immediately: "Call 988 Press 1 — help is here right now."
+- You are a resource navigator, NOT a therapist or clinician.
 
-CRITICAL RULE — STRUCTURED OUTPUT ENFORCEMENT:
-When providing resource recommendations in the assess phase, you MUST return ONLY valid JSON matching the exact schema required by the tool call. Do not output raw JSON as standard conversational text. Do not wrap the JSON in markdown blocks (e.g., no \`\`\`json). Do not add introductory or concluding text. The output must be parsable immediately.
+PERSONALITY & TONE:
+- Conversational, warm, and direct. Military-adjacent tone, not stiff or robotic.
+- Vary acknowledgments naturally: "Got it.", "Copy that.", "Makes sense.", "Noted.", "Understood."
+- NEVER use the same acknowledgment twice in a row.
+- If a veteran shares something painful, acknowledge it with genuine empathy before moving to resources.
+- Sound like a knowledgeable friend, not a form-filling chatbot.
 
-DOMAIN CONSTRAINT RULE:
-- NEVER recommend education-focused NGOs (like Warrior-Scholar Project) or career NGOs unless the user explicitly mentions school, GI Bill, or employment.
-- Strictly prioritize health, mental health, and physical wellness NGOs for all symptom-related queries.
-- If the conversation is about symptoms, pain, PTSD, sleep, or any health concern, resources MUST be health/wellness focused.
+NEGATIVE FEEDBACK — CRITICAL:
+- When a veteran says "I'm NOT homeless", "I don't need a service animal", "stop showing me X", "that's not me", "wrong resources" —
+  acknowledge it specifically: "Got it — removing those from your results."
+  NEVER continue showing resources in the excluded category after this signal.
+  Include the exclusion tags in your JSON output under "exclusionTags".
 
-PHASE 1 QUICK TRIAGE BEHAVIOR:
-- Ask EXACTLY 3 clarifying questions in a single reply — never more.
+FOLLOW-UP QUESTION HANDLING:
+- When a veteran asks a direct follow-up question ("are there more outdoor resources?", "what about business?", "anything for hunting?") —
+  answer it directly and specifically. Do NOT regurgitate the same generic summary.
+  Address the specific question first, then offer to refine.
+
+CROSS-DOMAIN INTEREST HANDLING:
+- If a veteran mentions entrepreneurship, starting a business, GI Bill, school, education, jobs, or housing:
+  Acknowledge it warmly: "That's great — I'll flag that for our [Careers/Education] page."
+  Do NOT try to pull those resources from the health database.
+  Continue with health resources if the original query was health-related.
+  If the entire message is cross-domain with zero health need, suggest navigating to the right page.
+
+STRUCTURED OUTPUT ENFORCEMENT:
+In the assess phase, return ONLY valid JSON. No markdown code blocks. No text before or after the JSON object.
+
+CLARIFYING QUESTIONS (quick_triage phase — 3 only):
+- Ask EXACTLY 3 questions in a single reply.
   Q1: "Do you already have an active VA claim for any of these conditions?"
   Q2: "Are you currently receiving care at the VA, and are you satisfied with it?"
-  Q3: A brief, friendly, open-ended prompt: "Is there anything else about your situation you'd like to share before I find your resources?"
-- Close with a warm, professional offer to hear more before moving to assessment.
-- No therapy small talk. No category menus. 3 questions, then assess.
-- Vary empathy: "I got you" ONLY on first message. After that: "Got it", "Copy that", "Let's fix this."
+  Q3: "Is there anything else about your situation I should know before I pull your resources?"
+- 3 questions, then assess. Do not add more.
 
 ASSESS STEP OUTPUT (JSON only — no prose wrapper):
 {
   "severity": "low|moderate|high|crisis",
-  "aiMessage": "1–3 sentence warm summary. End with: 'This is not medical advice. Discuss with your VA provider or primary doctor.'",
+  "aiMessage": "1–3 sentence warm, specific response referencing the veteran's actual conditions/interests. If they gave negative feedback, acknowledge what was removed. End with: 'This is not medical advice. Discuss with your VA provider or primary doctor.'",
+  "exclusionTags": ["array of tag strings to exclude, e.g. homeless, service animal — parsed from veteran's negative statements"],
   "vaResources": [{"title":"","description":"","url":"","phone":"","priority":"high|medium|low","tags":[],"isFree":false,"costLevel":"free|low|moderate|high","rating":0}],
   "ngoResources": [...same shape...],
   "stateResources": [...same shape...]
 }
-Include 5–7 resources per track ranked by relevance. For State track: ONLY include programs for the veteran's detected state — match their location exactly, never show resources from other states.
+Include 5–7 resources per track ranked by relevance. For State track: ONLY include programs for the veteran's detected state.
 Each description must be exactly 2 sentences.
 `;
 
@@ -106,6 +125,14 @@ interface TriageMessage {
 
 // BridgeCondition + BridgeContext imported from @/lib/resource-intelligence
 
+type UserIntent =
+  | 'health_query'
+  | 'negative_feedback'
+  | 'cross_domain'
+  | 'preference_signal'
+  | 'chitchat'
+  | 'crisis';
+
 interface TriageRequest {
   messages: TriageMessage[];
   step: 'welcome' | 'quick_triage' | 'category' | 'symptoms' | 'severity' | 'context' | 'assess';
@@ -113,6 +140,8 @@ interface TriageRequest {
   userMessage?: string;
   bridgeContext?: BridgeContext;
   userState?: string;
+  userIntent?: UserIntent;  // from progressive profiling tap card
+  clientExclusionTags?: string[]; // additional exclusions from client-side thumbs-down
 }
 
 // ─── Grok API helpers ─────────────────────────────────────────────────────────
@@ -126,6 +155,7 @@ async function callGrokModel(
   model: string,
   messages: TriageMessage[],
   systemPrompt: string,
+  temperature = 0.3,
 ): Promise<string> {
   const response = await fetch('https://api.x.ai/v1/chat/completions', {
     method: 'POST',
@@ -136,7 +166,7 @@ async function callGrokModel(
     body: JSON.stringify({
       model,
       messages: [{ role: 'system', content: systemPrompt }, ...messages],
-      temperature: 0.3,
+      temperature,
       max_tokens: 2000,
     }),
   });
@@ -150,7 +180,7 @@ async function callGrokModel(
   return data.choices?.[0]?.message?.content || '';
 }
 
-async function callGrokAI(messages: TriageMessage[], systemPrompt: string): Promise<string> {
+async function callGrokAI(messages: TriageMessage[], systemPrompt: string, temperature = 0.3): Promise<string> {
   const apiKey = getGrokApiKey();
   if (!apiKey) {
     console.warn('[SymptomTriage] No Grok API key — using static fallback');
@@ -158,14 +188,14 @@ async function callGrokAI(messages: TriageMessage[], systemPrompt: string): Prom
   }
 
   try {
-    const result = await callGrokModel(apiKey, PRIMARY_MODEL, messages, systemPrompt);
+    const result = await callGrokModel(apiKey, PRIMARY_MODEL, messages, systemPrompt, temperature);
     if (result) return result;
   } catch (err) {
     console.warn(`[SymptomTriage] ${PRIMARY_MODEL} failed:`, (err as Error).message);
   }
 
   try {
-    const result = await callGrokModel(apiKey, FALLBACK_MODEL, messages, systemPrompt);
+    const result = await callGrokModel(apiKey, FALLBACK_MODEL, messages, systemPrompt, temperature);
     if (result) return result;
   } catch (err) {
     console.warn(`[SymptomTriage] ${FALLBACK_MODEL} also failed:`, (err as Error).message);
@@ -174,12 +204,77 @@ async function callGrokAI(messages: TriageMessage[], systemPrompt: string): Prom
   return '';
 }
 
+// ─── Intent classification (client-side, zero-latency) ────────────────────────
+
+function classifyIntent(userMessage: string): UserIntent {
+  const lower = userMessage.toLowerCase();
+
+  if (detectCrisis(userMessage)) return 'crisis';
+
+  // Negative feedback — "not homeless", "don't need X", "that's not me"
+  if (/\b(not homeless|i'm not homeless|don'?t need.{0,20}service animal|not.{0,10}service animal|stop showing|that'?s not me|wrong resources|don'?t need those|remove those|not.{0,10}addict|no substance|don'?t drink|i have housing|i have a home)\b/.test(lower)) {
+    return 'negative_feedback';
+  }
+
+  // Cross-domain interest
+  if (/\b(entrepreneur|start.{0,10}business|own business|self.?employed|startup|gi bill|school|college|degree|education|trade school|certif|job|career|employ|resume|housing|homeless|shelter|rent|mortgage)\b/.test(lower)) {
+    return 'cross_domain';
+  }
+
+  // Positive preference signal
+  if (/\b(more like this|i like|show me more|helpful|keep these|i prefer|give me more|great result)\b/.test(lower)) {
+    return 'preference_signal';
+  }
+
+  return 'health_query';
+}
+
+// ─── Negative context parser ──────────────────────────────────────────────────
+// Scans full conversation history for negative statements → builds exclusion tags
+
+function parseNegativeContext(messages: TriageMessage[]): string[] {
+  const userTexts = messages
+    .filter(m => m.role === 'user')
+    .map(m => m.content.toLowerCase())
+    .join(' ');
+
+  const NEGATIVE_MAP: { pattern: RegExp; tag: string }[] = [
+    { pattern: /\b(not homeless|not experiencing homelessness|i have housing|i have a home|don'?t need housing|i'?m housed)\b/, tag: 'homeless' },
+    { pattern: /\b(don'?t need.{0,20}service animal|no service animal|not.{0,10}service animal|don'?t have.{0,10}dog)\b/, tag: 'service animal' },
+    { pattern: /\b(not.{0,10}substance|no substance use|don'?t drink|don'?t use drugs|not an addict|no alcohol|not.{0,10}drinking|sober)\b/, tag: 'substance' },
+    { pattern: /\b(don'?t need.{0,15}caregiver|no caregiver|i'?m independent|can take care of myself)\b/, tag: 'caregiver' },
+    { pattern: /\b(not a woman|i'?m.{0,5}male|i'?m a man|not.{0,10}female)\b/, tag: 'women' },
+    { pattern: /\b(don'?t.{0,15}peer support|don'?t want group|not.{0,10}support group|prefer individual)\b/, tag: 'peer support' },
+  ];
+
+  return NEGATIVE_MAP
+    .filter(({ pattern }) => pattern.test(userTexts))
+    .map(({ tag }) => tag);
+}
+
+// ─── Exclusion filter ─────────────────────────────────────────────────────────
+// Removes resources whose tags contain any of the exclusion strings
+
+function applyExclusions(resources: RawResource[], exclusions: string[]): RawResource[] {
+  if (!exclusions.length) return resources;
+  return resources.filter(r => {
+    const tagString = (r.tags ?? []).join(' ').toLowerCase();
+    const titleDesc = `${r.title} ${r.description}`.toLowerCase();
+    return !exclusions.some(ex => tagString.includes(ex) || titleDesc.includes(ex));
+  });
+}
+
 // ─── System prompt builder ────────────────────────────────────────────────────
 
-function buildSystemPrompt(step: string, bridgeContext?: BridgeContext): string {
+function buildSystemPrompt(
+  step: string,
+  bridgeContext?: BridgeContext,
+  userIntent?: UserIntent,
+  exclusionTags?: string[],
+): string {
   let prompt = TRIAGE_SYSTEM_PROMPT;
 
-  // Inject location context — dynamic state if detected, MVP fallback to PA
+  // Inject location context
   const locationStr = bridgeContext?.userState ?? CARLISLE_PA_CONTEXT;
   const stateLabel  = bridgeContext?.userState ?? 'their state (detect from chat if mentioned)';
   prompt += `\n\nUSER LOCATION: Veteran is in ${locationStr}. State Track MUST match ${stateLabel} exactly. Never show resources from other states.`;
@@ -196,9 +291,25 @@ function buildSystemPrompt(step: string, bridgeContext?: BridgeContext): string 
     prompt += `\nReference these conditions by name when asking clarifying questions.`;
   }
 
+  // Inject user intent from progressive profiling tap card
+  if (userIntent && userIntent !== 'health_query') {
+    const intentLabels: Record<string, string> = {
+      negative_feedback: 'The veteran is correcting or refining previous results — acknowledge what is being removed.',
+      cross_domain: 'The veteran has expressed interest outside the health domain. Acknowledge it warmly and suggest the right page. Do not force health resources.',
+      preference_signal: 'The veteran is signaling they like the current direction. Continue in the same vein.',
+      chitchat: 'The veteran is being conversational. Respond naturally without forcing resource recommendations.',
+    };
+    prompt += `\n\nINTENT SIGNAL: ${intentLabels[userIntent] ?? ''}`;
+  }
+
+  // Inject active exclusion tags
+  if (exclusionTags?.length) {
+    prompt += `\n\nACTIVE EXCLUSIONS: The veteran has explicitly said they do NOT need resources related to: ${exclusionTags.join(', ')}. Do NOT include any resources with these tags.`;
+  }
+
   // Step-specific overrides
   if (step === 'quick_triage') {
-    prompt += `\n\nCURRENT TASK: Ask your 3 standard clarifying questions in a single reply. Be warm but brief (3–4 sentences max before the questions). Close with a friendly, professional offer to hear more.`;
+    prompt += `\n\nCURRENT TASK: Ask your 3 clarifying questions in a single warm reply. Be conversational and brief. 3 questions max — no exceptions.`;
   } else if (step === 'assess') {
     prompt += `\n\nCURRENT TASK: Based on the full conversation, output the JSON assessment. No prose outside the JSON object.`;
   }
@@ -429,8 +540,18 @@ function sanitizeAiMessage(raw: string): string {
 export async function POST(request: NextRequest) {
   try {
     const body: TriageRequest = await request.json();
-    const { messages = [], step, category, userMessage, bridgeContext: rawBridgeContext, userState: bodyUserState } = body;
-    // Merge top-level userState (from client) into bridgeContext so applyScoring + buildSystemPrompt both see it
+    const {
+      messages = [],
+      step,
+      category,
+      userMessage,
+      bridgeContext: rawBridgeContext,
+      userState: bodyUserState,
+      userIntent: bodyUserIntent,
+      clientExclusionTags = [],
+    } = body;
+
+    // Merge top-level userState into bridgeContext
     const bridgeContext: BridgeContext | undefined = rawBridgeContext
       ? { ...rawBridgeContext, userState: rawBridgeContext.userState ?? bodyUserState }
       : (bodyUserState ? { conditions: [], userState: bodyUserState } : undefined);
@@ -445,7 +566,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(getCrisisResponse());
     }
 
-    // Assess step: MongoDB-FIRST (primary source) + Grok for aiMessage/fallback
+    // Classify intent from latest user message
+    const detectedIntent: UserIntent = bodyUserIntent ?? classifyIntent(userMessage ?? '');
+
+    // Build session-level exclusion tags (conversation history + client thumbs-down)
+    const sessionExclusions = [
+      ...parseNegativeContext(messages),
+      ...(clientExclusionTags ?? []),
+    ];
+    const exclusionTags = Array.from(new Set(sessionExclusions));
+    if (exclusionTags.length) console.log('[SymptomTriage] Active exclusions:', exclusionTags);
+    if (detectedIntent !== 'health_query') console.log('[SymptomTriage] Intent:', detectedIntent);
+
+    // ── Assess step: MongoDB-FIRST + Grok for aiMessage/fallback ─────────────
     if (step === 'assess') {
       const allUserTexts = [
         userMessage ?? '',
@@ -456,48 +589,67 @@ export async function POST(request: NextRequest) {
       const crossHints  = detectCrossDomainIntent(allUserTexts);
       if (crossHints.length > 0) console.log('[SymptomTriage] Cross-domain intents detected:', crossHints);
 
-      // Enrich bridgeContext with chat-detected state (bridge value wins)
       const detectedState = bridgeContext?.userState ?? userProfile?.state ?? null;
       const fetchBridge = detectedState
         ? { ...(bridgeContext ?? { conditions: [] }), userState: detectedState }
         : bridgeContext;
       console.log('[SymptomTriage] Detected state for geo filter:', detectedState ?? 'none');
 
-      // ── 1. Query MongoDB FIRST (via Resource Intelligence Engine) ────────────────
-      const dbResults  = await fetchDomainResources(HEALTH_CONFIG, kws, fetchBridge);
-      const dbVa    = dbResults['va']    ?? [];
-      const dbNgo   = dbResults['ngo']   ?? [];
-      const dbState = dbResults['state'] ?? [];
+      // Tier 1: full query (state + keywords)
+      const dbResults = await fetchDomainResources(HEALTH_CONFIG, kws, fetchBridge);
+      let dbVa    = applyExclusions(dbResults['va']    ?? [], exclusionTags);
+      let dbNgo   = applyExclusions(dbResults['ngo']   ?? [], exclusionTags);
+      let dbState = applyExclusions(dbResults['state'] ?? [], exclusionTags);
+      let dbTotal = dbVa.length + dbNgo.length + dbState.length;
+
+      // Tier 2: drop state filter if < 10 results
+      if (dbTotal < 10 && detectedState) {
+        console.log('[SymptomTriage] Relaxing to Tier 2 (drop state filter), total was:', dbTotal);
+        const relaxedBridge = { ...(fetchBridge ?? { conditions: [] }), userState: null as unknown as string };
+        const t2 = await fetchDomainResources(HEALTH_CONFIG, kws, relaxedBridge);
+        const t2Va = applyExclusions(t2['va'] ?? [], exclusionTags);
+        const t2Ngo = applyExclusions(t2['ngo'] ?? [], exclusionTags);
+        const t2State = applyExclusions(t2['state'] ?? [], exclusionTags);
+        if (t2Va.length + t2Ngo.length + t2State.length > dbTotal) {
+          dbVa = t2Va; dbNgo = t2Ngo; dbState = t2State;
+          dbTotal = dbVa.length + dbNgo.length + dbState.length;
+        }
+      }
+
+      // Tier 3: drop keywords, subcategory-only fetch
+      if (dbTotal < 10) {
+        console.log('[SymptomTriage] Relaxing to Tier 3 (drop keywords), total was:', dbTotal);
+        const t3 = await fetchDomainResources(HEALTH_CONFIG, [], fetchBridge);
+        const t3Va = applyExclusions(t3['va'] ?? [], exclusionTags);
+        const t3Ngo = applyExclusions(t3['ngo'] ?? [], exclusionTags);
+        const t3State = applyExclusions(t3['state'] ?? [], exclusionTags);
+        if (t3Va.length + t3Ngo.length + t3State.length > dbTotal) {
+          dbVa = t3Va; dbNgo = t3Ngo; dbState = t3State;
+        }
+      }
+
       const mongoHas = dbVa.length + dbNgo.length + dbState.length > 0;
 
-      // ── 2. Call Grok for aiMessage prose + last-resort resources (if DB empty) ─
-      const systemPrompt = buildSystemPrompt('assess', bridgeContext);
-      const aiResponse   = await callGrokAI(messages, systemPrompt);
+      const assessPrompt = buildSystemPrompt('assess', bridgeContext, detectedIntent, exclusionTags);
+      const aiResponse   = await callGrokAI(messages, assessPrompt);
 
       let aiMessage  = '';
       let grokVa:    RawResource[] = [];
       let grokNgo:   RawResource[] = [];
       let grokState: RawResource[] = [];
       let severity   = 'moderate';
+      let grokExclusions: string[] = [];
 
       if (aiResponse) {
         try {
-          const stripped = aiResponse
-            .replace(/```json\s*/gi, '')
-            .replace(/```\s*/g, '')
-            .trim();
+          const stripped = aiResponse.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
           const jsonMatch = stripped.match(/\{[\s\S]*\}/);
           if (jsonMatch) {
             const parsed = JSON.parse(jsonMatch[0]);
-
-            if (parsed.severity === 'crisis') {
-              return NextResponse.json(getCrisisResponse());
-            }
-
+            if (parsed.severity === 'crisis') return NextResponse.json(getCrisisResponse());
             severity  = parsed.severity ?? 'moderate';
             aiMessage = sanitizeAiMessage(String(parsed.aiMessage ?? ''));
-
-            // Capture Grok resource arrays ONLY as fallback when MongoDB is empty
+            if (Array.isArray(parsed.exclusionTags)) grokExclusions = parsed.exclusionTags as string[];
             if (!mongoHas) {
               grokVa    = Array.isArray(parsed.vaResources)    ? parsed.vaResources    : [];
               grokNgo   = Array.isArray(parsed.ngoResources)   ? parsed.ngoResources   : [];
@@ -509,20 +661,23 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // ── 3. Resolve final resource source: MongoDB preferred, Grok as fallback ──
-      const finalVa    = mongoHas ? dbVa    : grokVa;
-      const finalNgo   = mongoHas ? dbNgo   : grokNgo;
-      const finalState = mongoHas ? dbState : grokState;
-      const hasRes     = finalVa.length + finalNgo.length + finalState.length > 0;
+      const allExclusions = Array.from(new Set([...exclusionTags, ...grokExclusions]));
+      const finalVa    = mongoHas ? applyExclusions(dbVa, allExclusions) : applyExclusions(grokVa, allExclusions);
+      const finalNgo   = mongoHas ? applyExclusions(dbNgo, allExclusions) : applyExclusions(grokNgo, allExclusions);
+      const finalState = mongoHas ? applyExclusions(dbState, allExclusions) : applyExclusions(grokState, allExclusions);
+      const hasRes = finalVa.length + finalNgo.length + finalState.length > 0;
 
       if (hasRes) {
         const scored = applyScoring(finalVa, finalNgo, finalState, bridgeContext, kws, userProfile);
         if (!aiMessage) {
           const ct = bridgeContext?.conditions?.length
             ? bridgeContext.conditions.slice(0, 2).map(c => c.condition).join(' and ')
-            : 'your conditions';
-          const stateNote = detectedState ? ` I've also pulled programs available in your area.` : '';
-          aiMessage = `Alright — I found some solid options for you based on your ${ct} and everything you shared.${stateNote} Take a look and feel free to ask me to adjust anything. This is not medical advice. Discuss with your VA provider or primary doctor.`;
+            : kws.slice(0, 2).join(' and ') || 'your situation';
+          const stateNote = detectedState ? ` I also pulled programs available in your area.` : '';
+          const exclusionNote = allExclusions.length
+            ? ` I've removed ${allExclusions.join(', ')} resources based on what you told me.`
+            : '';
+          aiMessage = `Here are your top-matched resources based on ${ct}.${exclusionNote}${stateNote} Feel free to ask me to refine further. This is not medical advice. Discuss with your VA provider or primary doctor.`;
         }
         return NextResponse.json({
           aiMessage,
@@ -536,16 +691,15 @@ export async function POST(request: NextRequest) {
           },
           keywords: scored.keywords,
           crossDomainHints: crossHints,
+          activeExclusions: allExclusions,
         });
       }
-
-      // ── 4. MongoDB + Grok both empty → static fallback ────────────────────────────
       return NextResponse.json(getAssessFallback(bridgeContext));
     }
 
-    // quick_triage step (and legacy steps): conversational AI or static fallback
-    const systemPrompt = buildSystemPrompt(step ?? 'quick_triage', bridgeContext);
-    const aiResponse = await callGrokAI(messages, systemPrompt);
+    // ── quick_triage + legacy steps: conversational AI (temperature 0.5 for natural tone) ──
+    const systemPrompt = buildSystemPrompt(step ?? 'quick_triage', bridgeContext, detectedIntent, exclusionTags);
+    const aiResponse = await callGrokAI(messages, systemPrompt, 0.5);
 
     if (aiResponse) {
       // ── Detect "Grok jumped ahead" ──────────────────────────────────────

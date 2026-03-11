@@ -14,12 +14,34 @@ import {
   ShieldCheckIcon,
   HeartIcon,
   MapPinIcon,
+  ArrowTopRightOnSquareIcon,
 } from '@heroicons/react/24/outline';
 import { PhoneIcon as PhoneIconSolid } from '@heroicons/react/24/solid';
 import type { BridgeData, ConditionPayload } from '@/types/records-recon';
 import ResultsPanel, { type TriageResult, type ResourceRecommendation } from './symptom-finder/ResultsPanel';
 
 const SYMPTOM_PROFILE_KEY = 'vet1stop_symptom_profile';
+
+// ─── Progressive profiling — intent tap cards shown on first open ────────────
+const INTENT_CARDS = [
+  { label: 'Mental health support',       emoji: '🧠', seed: "I need help with mental health, PTSD, or emotional wellbeing." },
+  { label: 'Physical pain / injury',      emoji: '💪', seed: "I'm dealing with physical pain, an injury, or need rehab resources." },
+  { label: 'VA benefits & claims',        emoji: '📋', seed: "I want help navigating VA benefits, disability claims, or enrollment." },
+  { label: 'Managing a health condition', emoji: '⚕️', seed: "I'm managing a chronic health condition and need support resources." },
+  { label: 'Just exploring options',      emoji: '🔍', seed: "I'm a veteran exploring what health resources are available to me." },
+] as const;
+
+// ─── Cross-domain hint → page redirect mapping ───────────────────────────
+const CROSS_DOMAIN_MAP: Record<string, { page: string; label: string; href: string }> = {
+  education:       { page: 'Education',       label: 'Browse Education Resources', href: '/education' },
+  'gi-bill':       { page: 'Education',       label: 'Browse Education Resources', href: '/education' },
+  school:          { page: 'Education',       label: 'Browse Education Resources', href: '/education' },
+  careers:         { page: 'Careers',         label: 'Browse Career Resources',    href: '/careers'   },
+  employment:      { page: 'Careers',         label: 'Browse Career Resources',    href: '/careers'   },
+  business:        { page: 'Careers',         label: 'Browse Career Resources',    href: '/careers'   },
+  entrepreneurship:{ page: 'Careers',         label: 'Browse Career Resources',    href: '/careers'   },
+  housing:         { page: 'Local',           label: 'Find Local Resources',       href: '/local'     },
+};
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -44,6 +66,8 @@ interface RawTriageResponse {
   };
   suggestedQuestions?: string[];
   keywords?: string[];
+  crossDomainHints?: string[];
+  activeExclusions?: string[];
 }
 
 type WizardStep = 'idle' | 'chat' | 'loading' | 'results' | 'crisis';
@@ -170,6 +194,8 @@ export default function SymptomFinderWizard({ bridgeData = null }: SymptomFinder
   const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([]);
   const [isHandedOff, setIsHandedOff] = useState(false);
   const [chatExpanded, setChatExpanded] = useState(false);
+  const [showIntentCards, setShowIntentCards] = useState(false); // progressive profiling tap cards
+  const [crossDomainHints, setCrossDomainHints] = useState<string[]>([]);  // cross-domain redirect signals
 
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -273,6 +299,7 @@ _This is not medical advice. Discuss with your VA provider or primary doctor._`,
           userState: bridgeData?.userState ?? geoStateRef.current ?? undefined,
         }),
       });
+      // Note: userIntent is classified server-side from the message content
 
       if (!res.ok) throw new Error(`Server ${res.status}`);
       const data: RawTriageResponse = await res.json();
@@ -369,6 +396,11 @@ _This is not medical advice. Discuss with your VA provider or primary doctor._`,
         ]);
       }
 
+      // Capture cross-domain hints for redirect card
+      if (data.crossDomainHints?.length) {
+        setCrossDomainHints(data.crossDomainHints);
+      }
+
       setSuggestedQuestions(data.suggestedQuestions ?? []);
     } catch (err) {
       console.error('[SymptomFinderWizard] API error:', err);
@@ -447,18 +479,31 @@ _This is not medical advice. Discuss with your VA provider or primary doctor._`,
     setIsHandedOff(false);
     setChatExpanded(false);
     setErrorMsg(null);
+    setShowIntentCards(false);
+    setCrossDomainHints([]);
   }, []);
 
   const handleStartChat = useCallback(() => {
-    const openingMsg: TriageMessage = {
+    // Show progressive profiling intent cards instead of the 4-question wall
+    const greetingMsg: TriageMessage = {
       role: 'assistant',
-      content: `Copy that — let's get you the right resources. A few quick questions before I pull your options:\n\n**1.** Do you already have an active VA claim? *(Yes / No)*\n\n**2.** What state are you in? *(e.g., Pennsylvania, Texas — helps me find local VA programs)*\n\n**3.** Are you currently receiving VA care — and if so, are you satisfied with it? *(Yes / No / Not enrolled)*\n\n**4.** Anything else about your situation you'd like to share?\n\n_This is not medical advice. Discuss with your VA provider or primary doctor._`,
+      content: `Hey — I'm your Vet1Stop health navigator. **What brings you in today?**\n\n_Choose the option that best fits your situation:_`,
       timestamp: Date.now(),
     };
-    setMessages([openingMsg]);
+    setMessages([greetingMsg]);
     setStep('chat');
-    setSuggestedQuestions(['Yes, active VA claim', 'No VA claim yet', 'Not enrolled in VA healthcare']);
+    setShowIntentCards(true);
+    setSuggestedQuestions([]);
   }, []);
+
+  const handleIntentSelect = useCallback((seed: string) => {
+    setShowIntentCards(false);
+    const userMsg: TriageMessage = { role: 'user', content: seed, timestamp: Date.now() };
+    const newMessages = [...messages, userMsg];
+    setMessages(newMessages);
+    setSuggestedQuestions([]);
+    callTriageApi(newMessages, 'quick_triage', seed);
+  }, [messages, callTriageApi]);
 
   // Visible (non-suppressed) messages for rendering
   const visibleMessages = useMemo(
@@ -625,7 +670,59 @@ _This is not medical advice. Discuss with your VA provider or primary doctor._`,
                   </div>
                 )}
 
-                {suggestedQuestions.length > 0 && !isLoading && !isHandedOff && (
+                {/* Intent tap cards — progressive profiling (shown on first open) */}
+                {showIntentCards && !isLoading && (
+                  <div className="px-4 py-3 bg-white border-b border-gray-100">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {INTENT_CARDS.map((card) => (
+                        <button
+                          key={card.label}
+                          onClick={() => handleIntentSelect(card.seed)}
+                          className="flex items-center gap-2.5 px-3.5 py-3 rounded-xl border-2 border-[#1A2C5B]/15 bg-gradient-to-r from-blue-50 to-white text-left text-sm font-medium text-[#1A2C5B] hover:border-[#1A2C5B]/40 hover:from-blue-100 hover:to-blue-50 transition-all focus:outline-none focus:ring-2 focus:ring-blue-300 shadow-sm"
+                          aria-label={`Select: ${card.label}`}
+                        >
+                          <span className="text-xl flex-shrink-0" aria-hidden="true">{card.emoji}</span>
+                          <span>{card.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Cross-domain redirect card — appears when user mentions education/careers/housing */}
+                {crossDomainHints.length > 0 && !isHandedOff && (() => {
+                  const hint = crossDomainHints[0];
+                  const redirect = CROSS_DOMAIN_MAP[hint];
+                  if (!redirect) return null;
+                  return (
+                    <div className="mx-4 my-2 flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-3.5 py-3 shadow-sm">
+                      <div className="text-xl flex-shrink-0" aria-hidden="true">
+                        {hint === 'education' || hint === 'gi-bill' || hint === 'school' ? '🎓' : hint === 'housing' ? '🏠' : '💼'}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-amber-800 mb-1">
+                          Looks like you’re also interested in {redirect.page}.
+                        </p>
+                        <p className="text-xs text-amber-700 mb-2">I’ll keep finding health resources for you — but check out our {redirect.page} page for that.</p>
+                        <a
+                          href={redirect.href}
+                          className="inline-flex items-center gap-1 text-xs font-bold text-[#1A2C5B] hover:text-[#2563EB] transition-colors"
+                          aria-label={`Navigate to ${redirect.page} page`}
+                        >
+                          <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" />
+                          {redirect.label}
+                        </a>
+                      </div>
+                      <button
+                        onClick={() => setCrossDomainHints([])}
+                        className="text-amber-400 hover:text-amber-600 flex-shrink-0 text-lg leading-none"
+                        aria-label="Dismiss"
+                      >×</button>
+                    </div>
+                  );
+                })()}
+
+                {suggestedQuestions.length > 0 && !isLoading && !isHandedOff && !showIntentCards && (
                   <div className="flex flex-wrap gap-2 px-4 py-2 bg-white border-b border-gray-100">
                     {suggestedQuestions.map((q, idx) => (
                       <button
