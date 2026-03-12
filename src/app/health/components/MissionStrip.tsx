@@ -32,19 +32,6 @@ const ICON_LABELS: Record<string, string> = {
   'geriatric-care':   '🎖️',
 };
 
-// ─── Difficulty badge ─────────────────────────────────────────────────────────
-
-const DIFFICULTY_STYLES: Record<Mission['difficulty'], string> = {
-  easy:   'bg-green-100 text-green-800',
-  medium: 'bg-yellow-100 text-yellow-800',
-  hard:   'bg-red-100 text-red-800',
-};
-
-const DIFFICULTY_LABELS: Record<Mission['difficulty'], string> = {
-  easy:   'Beginner',
-  medium: 'Intermediate',
-  hard:   'Advanced',
-};
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -115,12 +102,9 @@ export default function MissionStrip({ onSelect }: MissionStripProps) {
                 <div className="h-1.5 w-full bg-gradient-to-r from-[#1A2C5B] to-[#2d4d99]" />
 
                 <div className="p-5 flex flex-col flex-1">
-                  {/* Icon + difficulty */}
-                  <div className="flex items-start justify-between mb-3">
+                  {/* Icon */}
+                  <div className="flex items-start mb-3">
                     <span className="text-2xl" role="img" aria-hidden="true">{iconEmoji}</span>
-                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${DIFFICULTY_STYLES[mission.difficulty]}`}>
-                      {DIFFICULTY_LABELS[mission.difficulty]}
-                    </span>
                   </div>
 
                   {/* Title + objective */}

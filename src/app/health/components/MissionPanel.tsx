@@ -120,8 +120,11 @@ export default function MissionPanel({ missionId, onClose }: MissionPanelProps) 
 
   function handleMarkComplete() {
     markStepComplete(mission.id, currentStep.id, totalSteps);
+    // Advance UI directly — do NOT call goToStep here because goToStep → setCurrentStep
+    // runs with a stale allProgress closure and overwrites completedSteps back to [].
     if (activeStepIdx < totalSteps - 1) {
-      goToStep(activeStepIdx + 1);
+      setActiveStepIdx(activeStepIdx + 1);
+      setCheckedItems(new Set());
     }
   }
 
@@ -394,7 +397,7 @@ export default function MissionPanel({ missionId, onClose }: MissionPanelProps) 
                                   className="inline-flex items-center gap-1 text-xs font-semibold text-[#B22234] hover:text-red-700 transition-colors focus:outline-none focus:underline"
                                   aria-label={`Call ${ngo.title}: ${ngo.phone}`}
                                 >
-                                  <PhoneOutline className="h-3 w-3" aria-hidden="true" />
+                                  <PhoneIcon className="h-3 w-3" aria-hidden="true" />
                                   {ngo.phone}
                                 </a>
                               )}
