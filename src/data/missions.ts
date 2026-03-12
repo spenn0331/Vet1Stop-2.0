@@ -23,6 +23,8 @@ export interface MissionStep {
   order: number;
   ngoPartners: MissionNGO[];
   recordsReconDeeplink?: boolean;
+  /** Strike 9 — Vet1Stop platform tip pointing to a specific tool (Records Recon, Symptom Finder, Sea Bag) */
+  vet1stopTip?: string;
 }
 
 export interface Mission {
@@ -82,6 +84,7 @@ export const MISSIONS: Mission[] = [
         tips: ['Request records before separating — access gets harder after you\'re out.'],
         estimatedTimeMinutes: 20,
         recordsReconDeeplink: true,
+        vet1stopTip: 'Upload your records to Vet1Stop Records Recon — it automatically extracts conditions, dates, and service-connection language. Your Evidence Report is print-ready to share with your VSO.',
         ngoPartners: [
           { title: 'Veterans of Foreign Wars (VFW)', description: 'Free VSO assistance with records requests and VA claims documentation.', url: 'https://www.vfw.org/', phone: '1-816-756-3390' },
         ],
@@ -112,6 +115,7 @@ export const MISSIONS: Mission[] = [
         ],
         actionItems: ['Call VA appointment line: 1-866-606-8198 or use My HealtheVet', 'Prepare list of current medications and top 3 health concerns', 'Request mental health screening at first visit'],
         estimatedTimeMinutes: 25,
+        vet1stopTip: 'After enrolling, use Vet1Stop Symptom Finder to match your conditions to VA, NGO, and state resources beyond the VA system — many veterans miss free community programs.',
         ngoPartners: [
           { title: 'My HealtheVet', description: 'VA\'s patient portal for scheduling, prescriptions, and health records — 24/7 access.', url: 'https://www.myhealth.va.gov/' },
           { title: 'Vet Centers', description: 'Community-based VA counseling with shorter wait times than main facilities.', url: 'https://www.vetcenter.va.gov/', phone: '1-877-927-8387' },
@@ -160,6 +164,7 @@ export const MISSIONS: Mission[] = [
         actionItems: ['Review the PCL-5 PTSD checklist at va.gov', 'Note which symptoms you\'ve experienced in the past month', 'Identify one trusted person to discuss concerns with'],
         warnings: ['If you\'re having thoughts of harming yourself or others — call 988 Press 1 now. Do not wait.'],
         estimatedTimeMinutes: 15,
+        vet1stopTip: 'Use Vet1Stop Symptom Finder to describe your mental health concerns — it matches you to VA, NGO, and state programs tailored to PTSD, anxiety, and trauma.',
         ngoPartners: [
           { title: 'Veterans Crisis Line', description: 'Free, confidential 24/7 support. Call 988 Press 1, text 838255.', url: 'https://www.veteranscrisisline.net/', phone: '988 (Press 1)' },
           { title: 'NAMI (National Alliance on Mental Illness)', description: 'Free peer-led support groups and mental health navigation for veterans.', url: 'https://www.nami.org/', phone: '1-800-950-6264' },
@@ -468,6 +473,7 @@ export const MISSIONS: Mission[] = [
         ],
         actionItems: ['Request a formal pain assessment at your next VA primary care visit', 'Ask specifically for a Pain Specialty team referral', 'Ask if your condition qualifies for a service-connected disability rating'],
         recordsReconDeeplink: true,
+        vet1stopTip: 'Run Records Recon to surface pain diagnoses, treatment history, and service-connection language — bring your Evidence Report when asking about a disability rating.',
         estimatedTimeMinutes: 20,
         ngoPartners: [
           { title: 'Paralyzed Veterans of America', description: 'Advocacy and peer support for veterans with chronic pain and mobility limitations.', url: 'https://pva.org/', phone: '1-800-424-8200' },
@@ -629,100 +635,121 @@ export const MISSIONS: Mission[] = [
   },
 
   // ─────────────────────────────────────────────────────────────────────────
-  // MISSION 7 — Preventive Care & Wellness
+  // MISSION 7 — Know Your Rating: VA Benefits Navigation
+  // Legal: 38 CFR §14.629-630 — Vet1Stop is informational ONLY, not a VSO.
   // ─────────────────────────────────────────────────────────────────────────
   {
-    id: 'preventive-wellness',
-    title: 'Preventive Care & Wellness',
-    description: 'A comprehensive guide to preventive healthcare and healthy lifestyle strategies for veterans.',
-    objective: 'Establish proactive health habits and stay current on screenings before problems develop.',
-    targetAudience: ['All veterans', 'Transitioning service members', 'Veterans with health risk factors'],
-    tags: ['preventive health', 'wellness', 'nutrition', 'physical activity', 'sleep', 'screenings'],
-    estimatedDuration: 90,
-    difficulty: 'easy',
+    id: 'va-claims-navigation',
+    title: 'Know Your Rating: VA Benefits Navigation',
+    description: 'Educational guide to understanding the VA rating system and connecting with free, authorized help — informational only, not claims advice.',
+    objective: 'Understand how VA ratings work, gather your evidence, and connect with accredited VSOs who can help at no cost.',
+    targetAudience: ['Veterans with low or stalled ratings', 'Veterans 5+ years post-service', 'First-time claimants', 'Veterans with multiple SC conditions'],
+    tags: ['va claims', 'disability rating', 'vso', 'benefits', 'c&p exam', 'appeals', 'nexus', 'pact act', 'supplemental claim'],
+    estimatedDuration: 100,
+    difficulty: 'medium',
     featured: true,
-    icon: 'wellness',
+    icon: 'benefits-nav',
     steps: [
       {
-        id: 'step-7-1', title: 'Essential Preventive Screenings', order: 1,
-        description: 'The screenings veterans need based on age, gender, and service history.',
+        id: 'step-7-1', title: 'Understanding the VA Rating System', order: 1,
+        description: 'Learn how VA combined ratings work and why your total may be lower than expected.',
         keyPoints: [
-          'General: blood pressure (annual), cholesterol, diabetes screening, colorectal cancer (45+)',
-          'Service-specific: burn pit registry (OEF/OIF), Agent Orange registry (Vietnam-era), TBI screening',
-          'Mental health: PTSD, depression, and suicide risk screening at every VA primary care visit',
-          'PACT Act (2022) expanded toxic exposure benefits — enroll in burn pit registry if eligible',
+          'The VA uses "whole person" math — NOT addition. 10% rating leaves 90% eligible for additional ratings.',
+          'Example: 10% PTSD + 10% lumbar + 0% knee = 19% combined → rounds to 20%, not 20% simple sum.',
+          'Bilateral factor: conditions on both sides of the body (bilateral knees) earn an extra percentage bonus.',
+          'TDIU: you can receive 100% compensation rate if SC conditions prevent substantial employment.',
+          'Ratings can be increased anytime your condition worsens — no statute of limitations on claims.',
         ],
-        actionItems: ['Schedule your annual wellness visit with VA primary care', 'Request any service-specific screenings relevant to your era/deployment', 'Enroll in the Airborne Hazards and Open Burn Pit Registry at va.gov if eligible'],
-        tips: ['Many serious conditions are caught only in routine screenings — don\'t skip your annual visit.'],
+        actionItems: ['Find your current combined rating at va.gov or eBenefits', 'Use the VA Combined Ratings Calculator at va.gov/disability/about-disability-ratings', 'List each service-connected condition and its current rating'],
+        tips: ['Even if you accepted your initial rating years ago, you can seek an increase anytime your condition worsens or new evidence emerges.'],
+        vet1stopTip: 'Use Records Recon to scan your VA records — it surfaces condition severity language and dates that inform what to raise with your VSO.',
+        estimatedTimeMinutes: 20,
+        ngoPartners: [
+          { title: 'DAV (Disabled American Veterans)', description: 'Free accredited claims agents who explain your rating and identify potential increases at no cost.', url: 'https://www.dav.org/', phone: '1-877-426-2838' },
+          { title: 'VA Disability Ratings', description: 'Official VA explanation of combined ratings and compensation levels.', url: 'https://www.va.gov/disability/about-disability-ratings/' },
+        ],
+      },
+      {
+        id: 'step-7-2', title: 'Gathering Your Evidence', order: 2,
+        description: 'Understand what types of evidence support a higher rating and where to find yours.',
+        keyPoints: [
+          'Service treatment records: proof your condition began or was aggravated during service',
+          'Buddy statements: fellow service members document what they witnessed — valid lay evidence',
+          'Nexus letter: independent medical opinion linking a current diagnosis to service — strongest private evidence',
+          '"Continuity of symptomatology": evidence your condition was continuous from service to present',
+          'Private medical records showing current diagnosis and functional impact round out your package',
+        ],
+        actionItems: ['Request service treatment records via milConnect or SF-180', 'List current medical conditions and their service connection', 'Consider a nexus letter if past C&P exams have been unfavorable'],
+        tips: ['You do NOT need all evidence before meeting your VSO. A good VSO identifies what\'s missing and can file an Intent to File immediately.'],
+        warnings: ['Vet1Stop is an informational resource — not a VSO or legal advisor. For official claims assistance, connect with an accredited VSO at no cost.'],
+        vet1stopTip: 'Run Records Recon before your VSO meeting. Your Evidence Report surfaces condition history and service-connection language — ready to print and share.',
+        recordsReconDeeplink: true,
+        estimatedTimeMinutes: 25,
+        ngoPartners: [
+          { title: 'REE Medical', description: 'Independent nexus letters (IMOs) from licensed physicians for veterans seeking disability evidence.', url: 'https://reemedical.com/' },
+          { title: 'Trajector Medical', description: 'Medical evidence and nexus letter services for veterans pursuing rating increases.', url: 'https://trajectormedical.com/' },
+        ],
+      },
+      {
+        id: 'step-7-3', title: 'Connect with a Free Accredited VSO', order: 3,
+        description: 'Free accredited VSOs are authorized by VA to file and manage claims — always use them first.',
+        keyPoints: [
+          'VSOs are legally accredited by VA to represent you at absolutely no cost',
+          'DAV, VFW, American Legion, and AMVETS all offer free claims assistance nationwide',
+          'State and county VSOs often provide faster, more local support',
+          'Never pay a third party to file a VA disability claim — accredited VSOs do this every day for free',
+          'A VSO can file an Intent to File (ITF) to lock in your effective date today while you gather evidence',
+        ],
+        actionItems: ['Find an accredited VSO at va.gov/ogc/apps/accreditation/index.asp', 'Contact DAV or your state VSO for a free claim review', 'Ask your VSO to file an Intent to File immediately to lock your start date'],
+        tips: ['An ITF locks today as your start date — even if it takes months to complete, back pay goes to this date.'],
+        warnings: ['Vet1Stop is an informational resource — not a VSO or legal advisor. For official claims assistance, use an accredited VSO.'],
+        estimatedTimeMinutes: 20,
+        ngoPartners: [
+          { title: 'DAV (Disabled American Veterans)', description: 'Largest free VSO in the US — accredited claims agents handle VA disability claims at no cost.', url: 'https://www.dav.org/', phone: '1-877-426-2838' },
+          { title: 'VFW Benefits Assistance', description: 'Free claims assistance and VSO representation for veterans and families.', url: 'https://www.vfw.org/assistance/va-claims-separation-benefits', phone: '1-816-756-3390' },
+          { title: 'American Legion Claims Audit', description: 'Free review of your current rating for errors or missed conditions.', url: 'https://www.legion.org/serviceofficers' },
+          { title: 'NVLSP', description: 'Free legal representation for complex benefit claims and appeals.', url: 'https://www.nvlsp.org/' },
+        ],
+      },
+      {
+        id: 'step-7-4', title: 'The C&P Exam: What to Expect', order: 4,
+        description: 'Compensation & Pension exams determine your rating — describe your worst days, not your best.',
+        keyPoints: [
+          'The C&P exam is NOT a treatment visit — the examiner assesses how your condition limits daily function.',
+          'Describe your WORST days. Frequency and functional impact matter more than average days.',
+          'Common mistake: veterans downplay symptoms. "I manage fine" is a rating-killer — VA rates the condition, not your resilience.',
+          'You can bring documentation, buddy statements, and nexus letters to the exam.',
+          'A poor exam result can be challenged with a private nexus letter or a request for a new exam.',
+        ],
+        actionItems: ['Write how your condition affects daily work, sleep, relationships, and activity — before the exam', 'Bring your Records Recon Evidence Report to avoid recalling everything from memory', 'Note if your condition has worsened since your last exam'],
+        tips: ['At your C&P exam: be honest, be specific, describe your worst days. Never say "I manage fine."'],
+        warnings: ['Vet1Stop is an informational resource — not a VSO or legal advisor.'],
+        vet1stopTip: 'Bring your Records Recon Evidence Report to your C&P exam — it organizes your condition history and dates so you don\'t have to recall everything on the spot.',
+        estimatedTimeMinutes: 20,
+        ngoPartners: [
+          { title: 'VA PACT Act Resource Center', description: 'Presumptive conditions for toxic exposure — many combat vets qualify for additional ratings they never filed.', url: 'https://www.va.gov/resources/the-pact-act-and-your-va-benefits/' },
+          { title: 'Trajector Medical', description: 'C&P exam preparation and independent medical opinion services.', url: 'https://trajectormedical.com/' },
+        ],
+      },
+      {
+        id: 'step-7-5', title: 'Your Appeals & Next Options', order: 5,
+        description: 'If your rating is denied or too low, clear legal paths exist — understand them before the deadline.',
+        keyPoints: [
+          'Supplemental Claim: submit new evidence. No time limit, can be filed anytime.',
+          'Higher-Level Review (HLR): senior VA rater reviews your case. No new evidence — argue legal error.',
+          'Board of Veterans Appeals (BVA): formal appeal with hearing option. Takes longer but more thorough.',
+          'CAVC (Court of Appeals): federal court — requires a VA-accredited attorney.',
+          'Veterans have 1 year from decision to choose a review lane without losing their effective date.',
+        ],
+        actionItems: ['Review your rating decision letter within 1 year of receiving it', 'File a Supplemental Claim immediately if you have new evidence', 'Contact NVLSP or a VA-accredited attorney for complex appeals'],
+        tips: ['Mark the date you receive your rating decision — you have exactly 1 year to appeal without resetting your effective date.'],
+        warnings: ['Vet1Stop is an informational resource — not a VSO or legal advisor. For official appeals help, contact an accredited representative.'],
         estimatedTimeMinutes: 15,
         ngoPartners: [
-          { title: 'VA Whole Health Program', description: 'Preventive care, wellness coaching, and integrative health at VA facilities.', url: 'https://www.va.gov/wholehealth/' },
-          { title: 'Burn Pits 360', description: 'Advocacy and resources for veterans affected by burn pit exposure under the PACT Act.', url: 'https://burnpits360.org/' },
-        ],
-      },
-      {
-        id: 'step-7-2', title: "Nutrition for Veterans' Health", order: 2,
-        description: "Evidence-based nutritional guidance tailored to veterans' unique health concerns.",
-        keyPoints: [
-          'Anti-inflammatory eating (berries, fatty fish, olive oil, turmeric) reduces PTSD symptoms and pain',
-          'Limiting caffeine after noon and alcohol near bedtime directly improves sleep quality',
-          'VA MOVE! offers free registered dietitian counseling and nutrition classes',
-          'Consistent meal timing stabilizes mood and energy — skipping meals worsens PTSD symptoms',
-        ],
-        actionItems: ['Ask your VA provider for a referral to VA MOVE! or a registered dietitian', 'Try one dietary swap this week: replace a processed snack with a whole-food option', 'Track meals for 3 days to identify energy and mood patterns'],
-        estimatedTimeMinutes: 20,
-        ngoPartners: [
-          { title: 'VA MOVE! Program', description: 'Free evidence-based weight management combining nutrition and fitness at VA facilities.', url: 'https://www.move.va.gov/' },
-          { title: 'Team Red White & Blue', description: 'Nutrition workshops and wellness programming alongside physical fitness for veterans.', url: 'https://www.teamrwb.org/' },
-        ],
-      },
-      {
-        id: 'step-7-3', title: 'Physical Activity for Veterans', order: 3,
-        description: 'Safe, effective exercise recommendations that accommodate common veteran conditions.',
-        keyPoints: [
-          'Goal: 150 min moderate aerobic per week + 2 days strength training',
-          'For musculoskeletal injuries: swimming, cycling, elliptical minimize joint stress',
-          'For PTSD and mental health: outdoor activities, yoga, and tai chi have measurable symptom reduction',
-          'VA adaptive sports programs are free for veterans with service-connected mobility limitations',
-        ],
-        actionItems: ['Ask your VA provider about a safe exercise plan for your conditions', 'Look up your nearest VA adaptive sports program if mobility is a barrier', 'Find a local Team RWB chapter for group activity and accountability'],
-        estimatedTimeMinutes: 20,
-        ngoPartners: [
-          { title: 'Team Red White & Blue', description: 'Physical and social activities for veterans — chapters in every state, free to join.', url: 'https://www.teamrwb.org/' },
-          { title: 'VA Adaptive Sports Program', description: 'Free adaptive sports and recreation for veterans with service-connected disabilities.', url: 'https://www.va.gov/adaptive-sports/' },
-        ],
-      },
-      {
-        id: 'step-7-4', title: 'Stress Management & Mental Wellness', order: 4,
-        description: 'Evidence-based techniques for managing chronic stress and building resilience.',
-        keyPoints: [
-          'Box breathing (4-4-4-4 counts) activates the parasympathetic nervous system within seconds',
-          'MBSR (Mindfulness-Based Stress Reduction) has the strongest evidence base for veteran stress',
-          'VA offers a free Mindfulness Coach app and Whole Health classes on stress management',
-          'Social connection is one of the strongest protective factors against PTSD and chronic stress',
-        ],
-        actionItems: ['Download the free VA Mindfulness Coach app', 'Practice box breathing once today (4 counts in, hold, out, hold)', 'Ask your VA provider about MBSR groups at your facility'],
-        estimatedTimeMinutes: 20,
-        ngoPartners: [
-          { title: 'Cohen Veterans Network', description: 'Mental health and stress management on a sliding scale nationwide.', url: 'https://www.cohenveteransnetwork.org/', phone: '1-888-523-6936' },
-          { title: 'Give An Hour', description: 'Free counseling from volunteer licensed professionals, including stress management.', url: 'https://giveanhour.org/' },
-        ],
-      },
-      {
-        id: 'step-7-5', title: 'Sleep Hygiene for Veterans', order: 5,
-        description: 'Proven strategies to improve sleep — one of the highest-impact health interventions for veterans.',
-        keyPoints: [
-          '70–80% of veterans with PTSD have sleep problems — improving sleep improves nearly all other symptoms',
-          'Consistent wake time (even weekends) is the single most effective sleep habit',
-          'Bedroom optimization: 65–68°F, dark, and device-free — measurably effective',
-          'Image Rehearsal Therapy (IRT) is VA\'s evidence-based treatment for combat nightmares',
-        ],
-        actionItems: ['Set a consistent wake time and hold it for 2 weeks straight', 'Eliminate screens 60 min before bed this week', 'Download the free VA CBT-I Coach app for guided sleep improvement', 'Ask about Image Rehearsal Therapy if nightmares are present'],
-        tips: ['You cannot catch up on sleep. Consistent wake timing rewires your sleep drive better than sleeping in on weekends.'],
-        estimatedTimeMinutes: 15,
-        ngoPartners: [
-          { title: 'VA Whole Health Program', description: 'Sleep hygiene coaching, mindfulness, and stress reduction programs at VA facilities.', url: 'https://www.va.gov/wholehealth/' },
-          { title: 'National Sleep Foundation', description: 'Evidence-based sleep resources, self-assessments, and improvement guides.', url: 'https://www.sleepfoundation.org/' },
+          { title: 'NVLSP', description: 'Free legal services for veterans in BVA and CAVC appeals.', url: 'https://www.nvlsp.org/' },
+          { title: 'CCK Law', description: 'VA-accredited law firm specializing in veteran disability appeals — no upfront cost.', url: 'https://cck-law.com/', phone: '1-800-544-9144' },
+          { title: 'Berry Law Firm', description: 'Veteran-founded law firm focused on VA disability claims and appeals.', url: 'https://berrylawfirm.com/', phone: '1-888-883-2483' },
+          { title: 'Hill & Ponton', description: 'Veteran disability attorneys specializing in appeals and rating increases.', url: 'https://www.hillandponton.com/', phone: '1-888-477-2363' },
         ],
       },
     ],

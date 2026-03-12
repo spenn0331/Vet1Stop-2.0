@@ -83,6 +83,8 @@ export interface ScoringContext {
     era?: string;
     vaDissatisfied?: boolean;
   };
+  /** Strike 9A — true when user explicitly wants outdoor/creative therapy; disables recreational penalty */
+  allowRecreational?: boolean;
 }
 
 export interface ResourceInput {
@@ -251,6 +253,64 @@ function scoreOnboardingPenalty(resource: ResourceInput, context: ScoringContext
   return 0;
 }
 
+// ─── Strike 9A: Recreational penalty (-20 pts) ────────────────────────────────
+// Penalizes resources whose PRIMARY identity is recreational/creative therapy
+// when the user has not signaled an interest in outdoor or art-based activities.
+// Clinical PTSD/pain/hearing resources will not be affected.
+
+const RECREATIONAL_PRIMARY_TAGS = [
+  'fishing', 'hunting', 'camping', 'hiking', 'kayaking', 'rafting',
+  'outdoor therapy', 'adventure therapy', 'equine therapy', 'equine',
+  'art therapy', 'music therapy', 'creative arts', 'horticultural therapy',
+  'surf therapy', 'fly fishing', 'outdoor recreation',
+];
+
+/** Returns -20 if the resource is primarily recreational AND the user hasn't asked for it */
+function scoreRecreationalPenalty(resource: ResourceInput, context: ScoringContext): number {
+  if (context.allowRecreational) return 0;
+  const haystack = [
+    resource.title,
+    resource.description,
+    ...(resource.tags ?? []),
+  ].join(' ').toLowerCase();
+  const hits = RECREATIONAL_PRIMARY_TAGS.filter(tag => haystack.includes(tag)).length;
+  if (hits >= 2) return -20;
+  return 0;
+}
+
+// ─── Strike 9B: Condition coverage bonus (+0/+8/+15/+25 pts) ──────────────────
+// Rewards resources that address MULTIPLE of the user's specific conditions.
+// WWP (PTSD + physical + TBI) beats a single-condition fishing org.
+
+function scoreCoverageBonus(resource: ResourceInput, context: ScoringContext): number {
+  const { keywords } = context;
+  if (!keywords.length) return 0;
+
+  const haystack = [
+    resource.title,
+    resource.description,
+    ...(resource.tags ?? []),
+  ].join(' ').toLowerCase();
+
+  let distinctMatches = 0;
+  for (const kw of keywords) {
+    const normalizedKw = kw.toLowerCase();
+    let hit = false;
+    if (haystack.includes(normalizedKw)) {
+      hit = true;
+    } else {
+      const relatedTags = KEYWORD_TAG_MAP[normalizedKw] ?? [];
+      if (relatedTags.some(tag => haystack.includes(tag))) hit = true;
+    }
+    if (hit) distinctMatches++;
+  }
+
+  if (distinctMatches >= 4) return 25;
+  if (distinctMatches === 3) return 15;
+  if (distinctMatches === 2) return 8;
+  return 0;
+}
+
 // ─── whyMatches builder (Fix E — per-resource keyword hits) ───────────────────────
 
 function buildWhyMatches(
@@ -302,16 +362,18 @@ function buildWhyMatches(
 // ─── Main scoring function ───────────────────────────────────────────────────
 
 export function scoreResource(resource: ResourceInput, context: ScoringContext): ScoredResource {
-  const kwScore        = scoreKeywordRelevance(resource, context);
-  const vetScore       = scoreVeteranCentric(resource);
-  const freeScore      = scoreFreeAccessible(resource);
-  const geoScore  = hasGeoBonus(resource, context.location) ? 10 : 0;
-  const ratScore       = scoreRating(resource);
-  const freshBonus     = scoreFreshness(resource);
-  const popPenalty     = scorePopulationPenalty(resource);
-  const onboardPenalty = scoreOnboardingPenalty(resource, context);
+  const kwScore           = scoreKeywordRelevance(resource, context);
+  const vetScore          = scoreVeteranCentric(resource);
+  const freeScore         = scoreFreeAccessible(resource);
+  const geoScore          = hasGeoBonus(resource, context.location) ? 10 : 0;
+  const ratScore          = scoreRating(resource);
+  const freshBonus        = scoreFreshness(resource);
+  const popPenalty        = scorePopulationPenalty(resource);
+  const onboardPenalty    = scoreOnboardingPenalty(resource, context);
+  const recreationalPenalty = scoreRecreationalPenalty(resource, context); // Strike 9A
+  const coverageBonus     = scoreCoverageBonus(resource, context);          // Strike 9B
 
-  const rawScore = kwScore + vetScore + freeScore + geoScore + ratScore + freshBonus + popPenalty + onboardPenalty;
+  const rawScore = kwScore + vetScore + freeScore + geoScore + ratScore + freshBonus + popPenalty + onboardPenalty + recreationalPenalty + coverageBonus;
   const score = Math.min(100, Math.max(0, rawScore));
   const matchPercent = score;
 
@@ -343,6 +405,13 @@ export function scoreAndSortResources(
 
 // ─── Context builder from triage answers ─────────────────────────────────────
 
+/** Strike 9A — keywords that indicate the user WANTS outdoor/creative therapy */
+const RECREATIONAL_INTEREST_SIGNALS = [
+  'outdoor', 'fishing', 'hunting', 'camping', 'hiking', 'adventure',
+  'nature therapy', 'art therapy', 'equine', 'music therapy', 'creative',
+  'kayak', 'fly fish', 'surf therapy',
+];
+
 export function buildScoringContext(opts: {
   conditions: string[];
   hasVaClaim: boolean;
@@ -356,6 +425,11 @@ export function buildScoringContext(opts: {
     .map(c => c.toLowerCase().trim())
     .filter(Boolean);
 
+  // Strike 9A: detect if the user has signaled interest in outdoor/creative therapy
+  const allowRecreational = opts.conditions.some(c =>
+    RECREATIONAL_INTEREST_SIGNALS.some(s => c.toLowerCase().includes(s))
+  );
+
   return {
     keywords,
     hasVaClaim: opts.hasVaClaim,
@@ -363,6 +437,7 @@ export function buildScoringContext(opts: {
     preferences: opts.preferences ?? [],
     severityWeights: opts.severityWeights,
     userProfile: opts.userProfile,
+    allowRecreational,
   };
 }
 

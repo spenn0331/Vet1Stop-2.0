@@ -169,7 +169,7 @@ async function callGrokModel(
       model,
       messages: [{ role: 'system', content: systemPrompt }, ...messages],
       temperature,
-      max_tokens: 2000,
+      max_tokens: 4000,      // Strike 9D: bumped from 2000 → 4000 for resource pool JSON
     }),
   });
 
@@ -264,6 +264,31 @@ function applyExclusions(resources: RawResource[], exclusions: string[]): RawRes
     const titleDesc = `${r.title} ${r.description}`.toLowerCase();
     return !exclusions.some(ex => tagString.includes(ex) || titleDesc.includes(ex));
   });
+}
+
+// D-lite: Match Grok's selected titles back to full DB records.
+// Grok re-ranks our MongoDB pool; title is the lookup key.
+// Hallucinated resources (outside pool) are discarded. Unselected records appended as fallback.
+function matchPoolByTitles(
+  grokResources: RawResource[],
+  dbPool: RawResource[],
+  exclusions: string[],
+): RawResource[] {
+  const poolMap = new Map<string, RawResource>(
+    dbPool.map(r => [r.title.toLowerCase().trim(), r])
+  );
+  const matched: RawResource[] = [];
+  const matchedKeys = new Set<string>();
+  for (const gr of grokResources) {
+    const key = (gr.title ?? '').toLowerCase().trim();
+    const rec = poolMap.get(key);
+    if (rec && !matchedKeys.has(key)) { matched.push(rec); matchedKeys.add(key); }
+  }
+  for (const rec of dbPool) {
+    const key = rec.title.toLowerCase().trim();
+    if (!matchedKeys.has(key)) matched.push(rec);
+  }
+  return applyExclusions(matched, exclusions);
 }
 
 // ─── Contextual handoff message builder ──────────────────────────────────────
@@ -370,12 +395,16 @@ function buildContextualHandoffMessage(
 
 // ─── System prompt builder ────────────────────────────────────────────────────
 
+/** Compact resource shape injected into Grok prompt for D-lite pool re-ranking */
+interface CompactPool { title: string; description: string; tags: string[]; isFree?: boolean; rating?: number; }
+
 function buildSystemPrompt(
   step: string,
   bridgeContext?: BridgeContext,
   userIntent?: UserIntent,
   exclusionTags?: string[],
   isRefinement = false,
+  resourcePool?: { va: CompactPool[]; ngo: CompactPool[]; state: CompactPool[] },
 ): string {
   let prompt = TRIAGE_SYSTEM_PROMPT;
 
@@ -421,6 +450,13 @@ function buildSystemPrompt(
     } else {
       prompt += `\n\nCURRENT TASK: Based on the full conversation, output the JSON assessment. No prose outside the JSON object.\n\naiMessage CRITICAL REQUIREMENTS (2-3 sentences max):\n- Open with a rotating phrase: "Copy that —" / "Got it —" / "Understood —" / "Noted —"\n- Reference what the veteran said was MOST important TO THEM in their actual words — not just the records conditions list\n- If they mentioned PTSD, sleep, fitness, motivation, weight — name those specifically\n- If they said 100% P&T, acknowledge it (affects benefit access)\n- If they expressed VA dissatisfaction, note you've prioritized NGO/community alternatives\n- If they mentioned cross-domain interests (entrepreneur, school), briefly note you're flagging for the right page\n- NEVER say "Based on" or "I found some solid options" or repeat the same opener twice\n- End with a natural invitation to refine: e.g. "If any of these don't match your situation, just tell me and I'll adjust." — vary the phrasing each time, keep it conversational`;
     }
+  }
+
+  // D-lite: inject MongoDB resource pool for Grok to select + re-rank from
+  if (step === 'assess' && resourcePool) {
+    const fmtPool = (items: CompactPool[]) =>
+      items.map(r => `  - "${r.title}": ${(r.description ?? '').slice(0, 110)} [tags: ${(r.tags ?? []).slice(0, 6).join(', ')}]${r.isFree ? ' [FREE]' : ''}`).join('\n');
+    prompt += `\n\n--- RESOURCE POOL (STRICT SELECTION REQUIRED) ---\nFor vaResources, ngoResources, and stateResources in your JSON output you MUST select ONLY from the resources listed below using their EXACT titles. Do NOT invent resources outside this pool. Prioritize clinical relevance to the veteran's specific conditions over general wellness.\n\nVA POOL (${resourcePool.va.length}):\n${fmtPool(resourcePool.va)}\n\nNGO POOL (${resourcePool.ngo.length}):\n${fmtPool(resourcePool.ngo)}\n\nSTATE POOL (${resourcePool.state.length}):\n${fmtPool(resourcePool.state)}`;
   }
 
   return prompt;
@@ -471,12 +507,13 @@ function applyScoring(
   // Strike 4D: Dynamic score cutoff — scales with bridge condition count to prevent flooding
   // More conditions = higher bar required = fewer but more precise results
   const bridgeCount = bridgeContext?.conditions?.length ?? 0;
-  const SCORE_CUTOFF =
+  const SCORE_CUTOFF =                                              // Strike 9C
     bridgeCount >= 31 ? 65 :
     bridgeCount >= 16 ? 58 :
-    bridgeCount >=  6 ? 48 :
-                        35;
-  console.log(`[SymptomTriage] Score cutoff: ${SCORE_CUTOFF} (bridge conditions: ${bridgeCount})`);
+    bridgeCount >=  6 ? 55 :                // raised from 48 → 55 for multi-condition profiles
+    allConditions.length >= 3 ? 55 :        // also raise when chat provides 3+ conditions
+                                35;
+  console.log(`[SymptomTriage] Score cutoff: ${SCORE_CUTOFF} (bridge: ${bridgeCount}, total: ${allConditions.length})`);
 
   const scoreTrack = (resources: RawResource[]) => {
     const scored = scoreAndSortResources(
@@ -753,8 +790,16 @@ export async function POST(request: NextRequest) {
       const mongoHas = dbVa.length + dbNgo.length + dbState.length > 0;
       console.log(`[MongoDB] post-exclusion → va=${dbVa.length} ngo=${dbNgo.length} state=${dbState.length} | exclusions=[${exclusionTags.join(', ')}]`);
 
+      // D-lite: Build compact pool from MongoDB results for Grok clinical re-ranking
+      const poolForGrok = mongoHas ? {
+        va:    dbVa.slice(0, 20).map(r => ({ title: r.title, description: (r.description ?? '').slice(0, 110), tags: (r.tags ?? []).slice(0, 8), isFree: r.isFree, rating: r.rating })),
+        ngo:   dbNgo.slice(0, 40).map(r => ({ title: r.title, description: (r.description ?? '').slice(0, 110), tags: (r.tags ?? []).slice(0, 8), isFree: r.isFree, rating: r.rating })),
+        state: dbState.slice(0, 15).map(r => ({ title: r.title, description: (r.description ?? '').slice(0, 110), tags: (r.tags ?? []).slice(0, 8), isFree: r.isFree, rating: r.rating })),
+      } : undefined;
+      console.log(`[D-lite] Pool → va=${poolForGrok?.va.length ?? 0} ngo=${poolForGrok?.ngo.length ?? 0} state=${poolForGrok?.state.length ?? 0}`);
+
       const assessStart  = Date.now();
-      const assessPrompt = buildSystemPrompt('assess', bridgeContext, detectedIntent, exclusionTags, isRefinement);
+      const assessPrompt = buildSystemPrompt('assess', bridgeContext, detectedIntent, exclusionTags, isRefinement, poolForGrok);
       const aiResponse   = await callGrokAI(messages, assessPrompt);
       console.log(`[Grok] assess response: ${aiResponse ? `✓ ${aiResponse.length} chars` : '✗ empty'} | timing=${Date.now()-assessStart}ms`);
 
@@ -775,7 +820,8 @@ export async function POST(request: NextRequest) {
             severity  = parsed.severity ?? 'moderate';
             aiMessage = sanitizeAiMessage(String(parsed.aiMessage ?? ''));
             if (Array.isArray(parsed.exclusionTags)) grokExclusions = parsed.exclusionTags as string[];
-            if (!mongoHas) {
+            // D-lite: capture Grok's pool selections (or Grok-only resources when no MongoDB)
+            if (poolForGrok || !mongoHas) {
               grokVa    = Array.isArray(parsed.vaResources)    ? parsed.vaResources    : [];
               grokNgo   = Array.isArray(parsed.ngoResources)   ? parsed.ngoResources   : [];
               grokState = Array.isArray(parsed.stateResources) ? parsed.stateResources : [];
@@ -787,9 +833,18 @@ export async function POST(request: NextRequest) {
       }
 
       const allExclusions = Array.from(new Set([...exclusionTags, ...grokExclusions]));
-      const finalVa    = mongoHas ? applyExclusions(dbVa, allExclusions) : applyExclusions(grokVa, allExclusions);
-      const finalNgo   = mongoHas ? applyExclusions(dbNgo, allExclusions) : applyExclusions(grokNgo, allExclusions);
-      const finalState = mongoHas ? applyExclusions(dbState, allExclusions) : applyExclusions(grokState, allExclusions);
+      // D-lite: when pool was injected, match Grok's clinical selections back to full DB records
+      let finalVa: RawResource[], finalNgo: RawResource[], finalState: RawResource[];
+      if (poolForGrok && (grokVa.length + grokNgo.length + grokState.length > 0)) {
+        finalVa    = matchPoolByTitles(grokVa,    dbVa,    allExclusions);
+        finalNgo   = matchPoolByTitles(grokNgo,   dbNgo,   allExclusions);
+        finalState = matchPoolByTitles(grokState, dbState, allExclusions);
+        console.log(`[D-lite] Match-back → va=${finalVa.length} ngo=${finalNgo.length} state=${finalState.length}`);
+      } else {
+        finalVa    = mongoHas ? applyExclusions(dbVa,    allExclusions) : applyExclusions(grokVa,    allExclusions);
+        finalNgo   = mongoHas ? applyExclusions(dbNgo,   allExclusions) : applyExclusions(grokNgo,   allExclusions);
+        finalState = mongoHas ? applyExclusions(dbState, allExclusions) : applyExclusions(grokState, allExclusions);
+      }
       const hasRes = finalVa.length + finalNgo.length + finalState.length > 0;
 
       if (hasRes) {

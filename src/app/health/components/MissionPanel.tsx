@@ -20,6 +20,7 @@ import {
   DocumentMagnifyingGlassIcon,
   ExclamationTriangleIcon,
   LightBulbIcon,
+  BoltIcon,
 } from '@heroicons/react/24/outline';
 import {
   CheckCircleIcon as CheckCircleSolid,
@@ -302,6 +303,17 @@ export default function MissionPanel({ missionId, onClose }: MissionPanelProps) 
                 {currentStep.tips.map((t, i) => (
                   <p key={i} className="text-sm text-blue-900 leading-relaxed">{t}</p>
                 ))}
+              </div>
+            )}
+
+            {/* Vet1Stop Platform Tip (Strike 9) */}
+            {currentStep.vet1stopTip && (
+              <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <BoltIcon className="h-4 w-4 text-emerald-600 flex-shrink-0" aria-hidden="true" />
+                  <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">Vet1Stop Tip</span>
+                </div>
+                <p className="text-sm text-emerald-900 leading-relaxed">{currentStep.vet1stopTip}</p>
               </div>
             )}
 

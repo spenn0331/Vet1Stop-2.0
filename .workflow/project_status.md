@@ -13,7 +13,46 @@
 
 ---
 
-## 🎯 Current Status: Strike 8 Complete — Mission Briefings + System Unification
+## 🎯 Current Status: Strike 9 Complete — Resource Intelligence Overhaul + Mission Expansion
+**As of Mar 11, 2026:** Strike 9 delivers four major upgrades: (A/B/C) Scoring engine precision (recreational penalty, coverage multiplier, raised cutoff), (D-lite) Grok AI re-ranks from our own MongoDB pool instead of hallucinating, Browse search synonym expansion fixes vocabulary gaps, Mission Briefings get `vet1stopTip` platform callouts, and the preventive-wellness mission is replaced with a legally-compliant VA Claims Navigation mission.
+
+### ✅ Strike 9 — Resource Intelligence Overhaul + Mission Expansion (Mar 11, 2026)
+
+**Problem solved:** Recreational NGOs (fishing, equine therapy) outscored clinical PTSD/pain orgs. Browse search couldn't find "outdoors" matching fishing NGOs. Grok hallucinated resources instead of using our 133-NGO database. Mission Briefings lacked Vet1Stop tool integration tips.
+
+**Scoring engine (`src/lib/resources-scoring.ts`):**
+- **Strike 9A — Recreational Penalty (-20 pts):** `scoreRecreationalPenalty()` penalizes resources whose primary identity is recreational (fishing, equine, art therapy, etc.) when user hasn't signaled outdoor preference. `allowRecreational` flag in `ScoringContext` disables penalty when user asks for outdoor therapy. `buildScoringContext()` auto-detects from keywords.
+- **Strike 9B — Coverage Multiplier (+0/+8/+15/+25 pts):** `scoreCoverageBonus()` rewards resources matching 2/3/4+ of the veteran's distinct conditions. WWP (PTSD + physical + TBI) beats single-condition orgs.
+- `RECREATIONAL_INTEREST_SIGNALS` constant auto-sets `allowRecreational` when conditions include "outdoor", "fishing", etc.
+
+**Assess pipeline (`src/app/api/health/symptom-triage/route.ts`):**
+- **Strike 9C — Raised Cutoff:** `bridgeCount >= 6` cutoff raised from 48 → 55. Also raises to 55 when `allConditions.length >= 3`. Eliminates recreational orgs that scored ~50 via veteran tag + free + 1 keyword.
+- **Strike 9D-lite — Grok Pool Re-ranking:** After MongoDB fetch, builds compact pool (top 20 VA / 40 NGO / 15 State) and injects it into the Grok `assess` prompt via `buildSystemPrompt()`. Grok selects clinical best-fits from OUR data (not hallucinated). `matchPoolByTitles()` matches Grok's title selections back to full DB records. `CompactPool` interface added. `max_tokens` bumped 2000 → 4000.
+
+**Browse search (`src/app/api/health/browse/route.ts`):**
+- `SYNONYM_MAP` (35 terms): "outdoors" → fishing/hunting/camping/hiking, "pain" → chronic pain/PT/musculoskeletal, etc. Solves vocabulary gap between user search terms and resource tags.
+- `expandSearchTerms()` expands search before building `$or` query across all synonym variants.
+- When search is active and `sortBy` is default, sort switches to `rating: -1, priority: 1` (best-rated first).
+- Atlas text index setup instructions added to file header comments.
+
+**Mission Briefings (`src/data/missions.ts`, `src/app/health/components/MissionPanel.tsx`):**
+- `vet1stopTip?: string` added to `MissionStep` interface.
+- Tips added to key steps: step-1-2 (Records Recon), step-1-4 (Symptom Finder), step-2-1 (Symptom Finder), step-5-2 (Records Recon).
+- `MissionPanel.tsx`: new emerald `⚡ Vet1Stop Tip` callout block renders between Tips and Action Items. Uses `BoltIcon`.
+- `preventive-wellness` mission **replaced** with `va-claims-navigation` (38 CFR §14.629-630 compliant):
+  - 5 steps: VA Rating System, Gathering Evidence, Free VSO Connect, C&P Exam Prep, Appeals Options
+  - Resources: DAV, VFW, AmLegion, NVLSP, REE Medical, Trajector, CCK Law, Berry Law, Hill & Ponton
+  - vet1stopTips on steps 1, 2, 4 (all tied to Records Recon)
+  - Legal disclaimers on steps 2, 3, 4, 5
+
+**Pending next sprint:**
+- MongoDB Atlas text index creation (manual step — instructions in `browse/route.ts` header)
+- End-to-end test of D-lite pool injection with real Grok 4 API call
+- Expand `SYNONYM_MAP` based on observed search queries
+
+---
+
+## 🎯 Previous Status: Strike 8 Complete — Mission Briefings + System Unification
 **As of Mar 11, 2026:** Strike 8 delivers Mission Briefings — structured, step-by-step health mission plans with per-step NGO partner cards, action checklists, Records Recon deeplinks, and localStorage progress tracking. Unifies the old orphaned PathwaySelector system under `missions.ts` as the single source of truth.
 
 ### ✅ Strike 8 — Mission Briefings + Unification (Mar 11, 2026)
