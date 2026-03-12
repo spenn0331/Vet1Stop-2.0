@@ -109,11 +109,15 @@ function toRaw(doc: Record<string, unknown>): RawResource {
  *   1. Keyword + subcategory filter (up to 20 docs)
  *   2. If < 3 results: relax keyword filter (subcategory only)
  *   3. State track: also applies optional geoFilter, relaxes to state-only if dry
+ *
+ * exclusionTags (optional): applied as a MongoDB $nin on the tags array at query
+ * level — reduces the raw pool BEFORE scoring so excluded categories never inflate counts.
  */
 export async function fetchDomainResources(
   config: DomainConfig,
   keywords: string[],
   bridgeContext?: BridgeContext,
+  exclusionTags?: string[],
 ): Promise<TrackResults> {
   const results: TrackResults = {};
 
@@ -135,6 +139,16 @@ export async function fetchDomainResources(
       ],
     } : {};
 
+    // Exclusion pre-filter: $nin on tags array — applied at query level to reduce raw pool
+    const exclusionFilter: Record<string, unknown> | null =
+      exclusionTags && exclusionTags.length > 0
+        ? { tags: { $nin: exclusionTags.map(t => t.toLowerCase()) } }
+        : null;
+
+    if (exclusionFilter) {
+      console.log(`[ResourceFetcher] Exclusion pre-filter active: ${exclusionTags!.join(', ')}`);
+    }
+
     for (const track of config.tracks) {
       const subcatFilter = { subcategory: track.subcategory };
 
@@ -147,29 +161,34 @@ export async function fetchDomainResources(
       // If the user's state is explicitly known, never fall back to wrong-state resources
       const userStateKnown = track.id === 'state' && !!bridgeContext?.userState;
 
-      // Query 1: keywords + subcategory + geo
+      // Query 1: keywords + subcategory + geo + exclusion pre-filter
       const strictParts: Record<string, unknown>[] = [];
       if (searchPat) strictParts.push(keywordFilter);
       strictParts.push(subcatFilter);
       if (effectiveGeo) strictParts.push(effectiveGeo);
+      if (exclusionFilter) strictParts.push(exclusionFilter);
       const strictQuery = strictParts.length > 1 ? { $and: strictParts } : subcatFilter;
 
       let docs = await coll.find(strictQuery).sort({ rating: -1 }).limit(20)
         .toArray() as Record<string, unknown>[];
 
       if (docs.length < 3) {
-        // Query 2: relax keywords, keep geo filter
+        // Query 2: relax keywords, keep geo + exclusion filters
         const relaxParts: Record<string, unknown>[] = [subcatFilter];
         if (effectiveGeo) relaxParts.push(effectiveGeo);
+        if (exclusionFilter) relaxParts.push(exclusionFilter);
         const relaxedQuery = relaxParts.length > 1 ? { $and: relaxParts } : subcatFilter;
         docs = await coll.find(relaxedQuery).sort({ rating: -1 }).limit(20)
           .toArray() as Record<string, unknown>[];
       }
 
       if (docs.length < 3 && !userStateKnown) {
-        // Query 3 (last resort): subcategory only — only when state is unknown
+        // Query 3 (last resort): subcategory + exclusion only — only when state is unknown
         // When state IS known but has 0 resources, return [] rather than wrong-state results
-        docs = await coll.find(subcatFilter).sort({ rating: -1 }).limit(20)
+        const lastResortParts: Record<string, unknown>[] = [subcatFilter];
+        if (exclusionFilter) lastResortParts.push(exclusionFilter);
+        const lastResortQuery = lastResortParts.length > 1 ? { $and: lastResortParts } : subcatFilter;
+        docs = await coll.find(lastResortQuery).sort({ rating: -1 }).limit(20)
           .toArray() as Record<string, unknown>[];
       }
 

@@ -1,103 +1,82 @@
 "use client";
 
-import React, { useEffect } from 'react';
-import { useParams } from 'next/navigation';
-import { usePathway, PathwayProvider } from '@/context/PathwayContext';
-import PathwayNavigator from '../../components/pathway/PathwayNavigator';
-import PathwayStep from '../../components/pathway/PathwayStep';
+/**
+ * /health/pathways/[id]/page.tsx
+ * Route-based mission page — opens MissionPanel for the given mission ID.
+ * Supports both new mission IDs (e.g. "chronic-pain") and legacy pathway IDs
+ * (e.g. "pathway-5") via LEGACY_ID_MAP.
+ */
+
+import React, { useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeftIcon } from '@heroicons/react/24/outline';
-import Link from 'next/link';
-import { SectionHeader } from '@/components/SectionHeader';
+import { getMissionById } from '@/data/missions';
+import { LEGACY_ID_MAP } from '@/services/mock-pathways-service';
+import MissionPanel from '../../components/MissionPanel';
+import MissionHub from '../../components/MissionHub';
 
 export default function PathwayPage() {
-  return (
-    <PathwayProvider>
-      <PathwayContent />
-    </PathwayProvider>
-  );
-}
+  const params   = useParams();
+  const router   = useRouter();
+  const rawId    = params.id as string;
 
-function PathwayContent() {
-  const params = useParams();
-  const pathwayId = params.id as string;
-  const { startPathway, activePath, isLoading, error } = usePathway();
+  // Resolve legacy pathway IDs to new mission IDs
+  const missionId = LEGACY_ID_MAP[rawId] ?? rawId;
+  const mission   = getMissionById(missionId);
 
-  useEffect(() => {
-    if (pathwayId) {
-      startPathway(pathwayId);
-    }
-  }, [pathwayId, startPathway]);
+  const [panelOpen, setPanelOpen] = useState(true);
+
+  function handleClose() {
+    setPanelOpen(false);
+    router.push('/health#missions');
+  }
 
   return (
-    <div className="container max-w-6xl mx-auto px-4 py-8">
-      <Link
-        href="/health"
-        className="inline-flex items-center text-[#1A2C5B] font-medium mb-6 hover:text-blue-800"
-      >
-        <ArrowLeftIcon className="mr-2 h-5 w-5" />
-        Back to Health Resources
-      </Link>
+    <main className="bg-white min-h-screen" role="main">
+      {/* Back nav */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
+        <button
+          onClick={() => router.push('/health#missions')}
+          className="inline-flex items-center text-sm font-semibold text-[#1A2C5B] hover:text-blue-700 transition-colors focus:outline-none focus:underline"
+          aria-label="Back to all missions"
+        >
+          <ArrowLeftIcon className="mr-1.5 h-4 w-4" aria-hidden="true" />
+          All Missions
+        </button>
+      </div>
 
-      <SectionHeader
-        title="Health Journey"
-        subtitle="Follow this step-by-step guide to navigate your healthcare needs"
-        className="mb-6"
-      />
-
-      {isLoading ? (
-        <div className="animate-pulse">
-          <div className="h-8 w-64 bg-gray-200 rounded mb-4"></div>
-          <div className="h-4 w-full bg-gray-200 rounded mb-6"></div>
-          <div className="h-64 w-full bg-gray-200 rounded mb-4"></div>
-        </div>
-      ) : error ? (
-        <div className="bg-red-50 p-6 rounded-lg">
-          <p className="text-red-600">Error: {error.message}</p>
-          <p className="text-red-600 mt-2">Please try again later or select a different health journey.</p>
-        </div>
-      ) : activePath ? (
-        <div>
-          <div className="bg-blue-50 rounded-lg p-6 mb-6">
-            <h2 className="text-2xl font-semibold text-[#1A2C5B] mb-2">
-              {activePath.title}
-            </h2>
-            <p className="text-gray-700 mb-4">
-              {activePath.description}
-            </p>
-            
-            {activePath.targetAudience && activePath.targetAudience.length > 0 && (
-              <div className="mb-4">
-                <span className="text-sm font-medium text-gray-700">Best for: </span>
-                <span className="text-sm text-gray-600">
-                  {activePath.targetAudience.join(', ')}
-                </span>
-              </div>
-            )}
-            
-            {activePath.estimatedDuration && (
-              <div>
-                <span className="text-sm font-medium text-gray-700">Estimated time: </span>
-                <span className="text-sm text-gray-600">
-                  {activePath.estimatedDuration} minutes
-                </span>
-              </div>
-            )}
-          </div>
-          
-          <PathwayNavigator />
-          <PathwayStep />
-        </div>
-      ) : (
-        <div className="bg-yellow-50 p-6 rounded-lg">
-          <p className="text-yellow-700">Pathway not found. Please select a valid health journey.</p>
-          <Link 
-            href="/health" 
-            className="text-[#1A2C5B] font-medium mt-2 inline-block hover:underline"
-          >
-            Return to Health Resources
-          </Link>
+      {/* Mission not found */}
+      {!mission && (
+        <div className="max-w-xl mx-auto px-4 py-16 text-center">
+          <p className="text-lg font-semibold text-gray-700 mb-2">Mission not found.</p>
+          <p className="text-sm text-gray-500 mb-6">
+            The mission &ldquo;{rawId}&rdquo; does not exist. Browse all missions below.
+          </p>
+          <MissionHub />
         </div>
       )}
-    </div>
+
+      {/* Inline mission strip (background) so user sees context */}
+      {mission && (
+        <div className="opacity-30 pointer-events-none select-none" aria-hidden="true">
+          <MissionHub />
+        </div>
+      )}
+
+      {/* MissionPanel overlay — open immediately on page load */}
+      {mission && panelOpen && (
+        <MissionPanel
+          missionId={missionId}
+          onClose={handleClose}
+        />
+      )}
+
+      {/* If panel was closed, show full hub */}
+      {mission && !panelOpen && (
+        <div className="max-w-7xl mx-auto px-4 py-8">
+          <MissionHub />
+        </div>
+      )}
+    </main>
   );
 }

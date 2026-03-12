@@ -21,6 +21,7 @@ import NGOSpotlight from './components/NGOSpotlight';
 import HealthBrowseSection from './components/HealthBrowseSection';
 import SmartBridgeBanner from './components/SmartBridgeBanner';
 import AutoFillButton from '@/components/shared/AutoFillButton';
+import MissionHub from './components/MissionHub';
 
 export const metadata: Metadata = {
   title: 'Health Resources | Vet1Stop',
@@ -188,6 +189,9 @@ export default function HealthPage() {
           </div>
         </div>
       </section>
+
+      {/* ─── Mission Briefings ─── */}
+      <MissionHub />
 
       {/* ─── NGO Spotlight ─── */}
       <NGOSpotlight />

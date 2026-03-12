@@ -714,8 +714,11 @@ export async function POST(request: NextRequest) {
         : bridgeContext;
       console.log('[SymptomTriage] Detected state for geo filter:', detectedState ?? 'none');
 
-      // Tier 1: full query (state + keywords)
-      const dbResults = await fetchDomainResources(HEALTH_CONFIG, kws, fetchBridge);
+      // exclusionTags passed to fetchDomainResources for $nin pre-filter at MongoDB query level
+      const fetchExclusions = exclusionTags.length > 0 ? exclusionTags : undefined;
+
+      // Tier 1: full query (state + keywords + exclusion pre-filter)
+      const dbResults = await fetchDomainResources(HEALTH_CONFIG, kws, fetchBridge, fetchExclusions);
       let dbVa    = applyExclusions(dbResults['va']    ?? [], exclusionTags);
       let dbNgo   = applyExclusions(dbResults['ngo']   ?? [], exclusionTags);
       let dbState = applyExclusions(dbResults['state'] ?? [], exclusionTags);
@@ -725,7 +728,7 @@ export async function POST(request: NextRequest) {
       if (dbTotal < 10 && detectedState) {
         console.log('[SymptomTriage] Relaxing to Tier 2 (drop state filter), total was:', dbTotal);
         const relaxedBridge = { ...(fetchBridge ?? { conditions: [] }), userState: null as unknown as string };
-        const t2 = await fetchDomainResources(HEALTH_CONFIG, kws, relaxedBridge);
+        const t2 = await fetchDomainResources(HEALTH_CONFIG, kws, relaxedBridge, fetchExclusions);
         const t2Va = applyExclusions(t2['va'] ?? [], exclusionTags);
         const t2Ngo = applyExclusions(t2['ngo'] ?? [], exclusionTags);
         const t2State = applyExclusions(t2['state'] ?? [], exclusionTags);
@@ -738,7 +741,7 @@ export async function POST(request: NextRequest) {
       // Tier 3: drop keywords, subcategory-only fetch
       if (dbTotal < 10) {
         console.log('[SymptomTriage] Relaxing to Tier 3 (drop keywords), total was:', dbTotal);
-        const t3 = await fetchDomainResources(HEALTH_CONFIG, [], fetchBridge);
+        const t3 = await fetchDomainResources(HEALTH_CONFIG, [], fetchBridge, fetchExclusions);
         const t3Va = applyExclusions(t3['va'] ?? [], exclusionTags);
         const t3Ngo = applyExclusions(t3['ngo'] ?? [], exclusionTags);
         const t3State = applyExclusions(t3['state'] ?? [], exclusionTags);

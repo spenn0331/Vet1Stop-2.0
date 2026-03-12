@@ -41,6 +41,7 @@ import {
   scoreAndSortResources,
   buildScoringContext,
 } from '@/lib/resources-scoring';
+import { getMissionStepsForModal } from '@/data/missions';
 
 // ─── localStorage / sessionStorage keys ─────────────────────────────────────
 const SEA_BAG_KEY         = 'vet1stop_sea_bag';
@@ -126,84 +127,41 @@ interface PathwayStep {
   cta?: { label: string; href: string };
 }
 
-/**
- * Hardcoded 4-step pathway content for each pathway label (Phase 1 MVP).
- * Language: "Many veterans find this helps with motivation" style only.
- * No clinical advice, no diagnosis language.
- */
-const PATHWAY_STEPS: Record<string, PathwayStep[]> = {
-  'Back Pain to Shape': [
-    {
-      icon: <CheckCircleSolid className="h-5 w-5 text-green-500" />,
-      title: 'Step 1 — Triage Complete',
-      body: "You've already done the hardest part. Many veterans find that simply naming what's going on — back pain, limited mobility, the ache that never goes away — is the first real step. Your matched resources are loaded above.",
-    },
-    {
-      icon: <BookmarkSolid className="h-5 w-5 text-[#EAB308]" />,
-      title: 'Step 2 — Save Your Top Picks',
-      body: "Review your VA and NGO cards. Many veterans find that saving 2–3 resources to their Sea Bag keeps them from losing track. Tap 'Save to Sea Bag' on any card that feels right for where you are right now — not where you think you should be.",
-    },
-    {
-      icon: <MapPinIcon className="h-5 w-5 text-[#1A2C5B]" />,
-      title: 'Step 3 — Local Fitness (VOB Teaser)',
-      body: "Veteran-Owned Businesses near Carlisle, PA offer adaptive fitness, yoga, and peer movement programs. Many veterans find working out alongside fellow vets removes the 'gym anxiety' entirely. Our Local VOB Directory (coming soon) will list Carlisle-area options — check back.",
-    },
-    {
-      icon: <UserGroupIcon className="h-5 w-5 text-[#B22234]" />,
-      title: 'Step 4 — Buddy Check-In',
-      body: "Many veterans find accountability makes all the difference — even one text to a battle buddy changes follow-through. The VA's Whole Health peer coach program requires no appointment to start a conversation.",
-      cta: { label: 'Connect with Peer Support →', href: 'https://www.va.gov/wholehealth/' },
-    },
-  ],
-  'Sleep & Recovery Track': [
-    {
-      icon: <CheckCircleSolid className="h-5 w-5 text-green-500" />,
-      title: 'Step 1 — Triage Complete',
-      body: "Sleep issues are one of the most common — and most overlooked — health challenges veterans face. Many veterans find that naming the pattern (waking at 0200, hypervigilance, nightmares) helps providers actually respond. Your matched resources are above.",
-    },
-    {
-      icon: <BookmarkSolid className="h-5 w-5 text-[#EAB308]" />,
-      title: 'Step 2 — Save Your Top Picks',
-      body: "Many veterans find that the VA's MOVE! program and Whole Health sleep resources work best when bookmarked and revisited. Save any card above that addresses sleep, stress, or recovery.",
-    },
-    {
-      icon: <MapPinIcon className="h-5 w-5 text-[#1A2C5B]" />,
-      title: 'Step 3 — Local Yoga / Mindfulness',
-      body: "Peer-led yoga and mindfulness programs near Carlisle have shown strong results for sleep cycles. Many veterans find group sessions less clinical than individual therapy as a starting point. Local VOB Directory coming soon.",
-    },
-    {
-      icon: <UserGroupIcon className="h-5 w-5 text-[#B22234]" />,
-      title: 'Step 4 — Buddy Check-In',
-      body: "Many veterans find that telling one person they're working on sleep — even casually — creates enough accountability to follow through. The Veterans Crisis Line is also available for non-crisis support conversations.",
-      cta: { label: 'Veterans Crisis Line Support →', href: 'https://www.veteranscrisisline.net/' },
-    },
-  ],
+// Step icons by index — reused across all modal pathways
+const STEP_ICONS = [
+  <CheckCircleSolid key="0" className="h-5 w-5 text-green-500" />,
+  <BookmarkSolid    key="1" className="h-5 w-5 text-[#EAB308]" />,
+  <MapPinIcon       key="2" className="h-5 w-5 text-[#1A2C5B]" />,
+  <UserGroupIcon    key="3" className="h-5 w-5 text-[#B22234]" />,
+];
+
+// Map PathwayModal label → mission ID from missions registry
+const LABEL_TO_MISSION_ID: Record<string, string> = {
+  'Back Pain to Shape':          'chronic-pain',
+  'Sleep & Recovery Track':      'preventive-wellness',
+  'Military-to-VA Transition':   'transitioning-healthcare',
+  'Mental Health & PTSD':        'mental-health-ptsd',
 };
 
-// Fallback steps for any pathway label not in PATHWAY_STEPS
-const DEFAULT_PATHWAY_STEPS: PathwayStep[] = [
-  {
-    icon: <CheckCircleSolid className="h-5 w-5 text-green-500" />,
-    title: 'Step 1 — Triage Complete',
-    body: "You've mapped your conditions to real resources. Many veterans find this first step is the most important — now you have a clear starting point.",
-  },
-  {
-    icon: <BookmarkSolid className="h-5 w-5 text-[#EAB308]" />,
-    title: 'Step 2 — Save Your Top Picks',
-    body: "Tap 'Save to Sea Bag' on the cards above that feel most relevant. Many veterans find that having 2–3 saved resources makes it easier to follow through.",
-  },
-  {
-    icon: <MapPinIcon className="h-5 w-5 text-[#1A2C5B]" />,
-    title: 'Step 3 — Find Local Resources',
-    body: "Our Local VOB Directory (coming soon) will surface veteran-owned businesses near Carlisle, PA. Many veterans find that local, peer-led options reduce the barrier to showing up.",
-  },
-  {
-    icon: <UserGroupIcon className="h-5 w-5 text-[#B22234]" />,
-    title: 'Step 4 — Buddy Check-In',
-    body: "Many veterans find accountability is the missing piece. Let one person know what you're working toward — the VA's Whole Health peer coaches can help.",
-    cta: { label: 'VA Whole Health →', href: 'https://www.va.gov/wholehealth/' },
-  },
-];
+/**
+ * Build PathwayStep array from real mission data.
+ * Falls back to chronic-pain if label doesn't match.
+ */
+function getPathwayStepsForLabel(label: string): PathwayStep[] {
+  const missionId = LABEL_TO_MISSION_ID[label] ?? 'mental-health-ptsd';
+  const raw = getMissionStepsForModal(missionId);
+  if (!raw) {
+    return [
+      { icon: STEP_ICONS[0], title: 'Step 1 — Triage Complete', body: "You've mapped your conditions to real resources. Many veterans find this first step is the most important — now you have a clear starting point." },
+      { icon: STEP_ICONS[1], title: 'Step 2 — Save Your Top Picks', body: "Tap 'Save to Sea Bag' on the cards above that feel most relevant." },
+    ];
+  }
+  return raw.map((s, i) => ({
+    icon: STEP_ICONS[i % STEP_ICONS.length],
+    title: s.title,
+    body: s.body,
+  }));
+}
 
 // ─── Trending resources (hardcoded, browse mode only) ────────────────────────
 
@@ -331,7 +289,7 @@ interface PathwayModalProps {
 }
 
 function PathwayModal({ label, onClose }: PathwayModalProps) {
-  const steps = PATHWAY_STEPS[label] ?? DEFAULT_PATHWAY_STEPS;
+  const steps = getPathwayStepsForLabel(label);
 
   // Close on Escape key
   useEffect(() => {

@@ -4,16 +4,45 @@
 - **Repo**: [github.com/spenn0331/Vet1Stop-2.0](https://github.com/spenn0331/Vet1Stop-2.0) (branch: `main`)
 - **Local Path**: `c:\Users\penny\Desktop\Vet1Stop`
 - **Primary Goal**: MVP Launch (Q2 2026)
-- **Current Phase**: Phase 1 Health MVP — Strike 7 AI Intelligence Overhaul Complete
-- **Dev Server**: `npm run dev` → http://localhost:3000
-- **Last Active Development**: Mar 10, 2026
+- **Current Phase**: Phase 1 Health MVP — Strike 8 Mission Briefings + Unification Complete
+- **Dev Server**: `npm run dev` → http://localhost:3001
+- **Last Active Development**: Mar 11, 2026
 - **Recovery Date**: Feb 14, 2026 (restored from git commit `863a42cd`)
 - **Latest Commits**: `6dd06daf` (Strike 7 AI overhaul), `66c05afe` (NGO filters), `623375c3` (NGO spotlight placeholders)
-- **Pending**: End-to-end testing of Strike 7 in browser preview
+- **Pending**: End-to-end browser test of Mission Briefings panel + pathway route `/health/pathways/[id]`
 
 ---
 
-## 🎯 Current Status: Strike 7 Complete — AI Intelligence Overhaul
+## 🎯 Current Status: Strike 8 Complete — Mission Briefings + System Unification
+**As of Mar 11, 2026:** Strike 8 delivers Mission Briefings — structured, step-by-step health mission plans with per-step NGO partner cards, action checklists, Records Recon deeplinks, and localStorage progress tracking. Unifies the old orphaned PathwaySelector system under `missions.ts` as the single source of truth.
+
+### ✅ Strike 8 — Mission Briefings + Unification (Mar 11, 2026)
+
+**New files created:**
+- `src/data/missions.ts` — 8 full missions × 5 steps × NGO partners each (875 lines). Single source of truth. Exports: `MISSIONS`, `getMissionById`, `getFeaturedMissions`, `getMissionMatch`, `getMissionStepsForModal`.
+- `src/hooks/useMissionProgress.ts` — localStorage-backed progress hook. Key: `vet1stop_mission_progress`. Methods: `markStepComplete`, `setCurrentStep`, `resetMission`, `isStepComplete`, `hasStarted`.
+- `src/app/health/components/MissionStrip.tsx` — 4-card featured grid (expand to all 8). Difficulty badges, NGO partner chips, progress bar if started, "Resume Step N" CTA.
+- `src/app/health/components/MissionPanel.tsx` — right-side drawer (desktop) / bottom sheet (mobile). Step timeline tabs, key points, tips/warnings callouts, action checklist, NGO partner cards with Sea Bag save, Records Recon deeplink, 988 crisis footer.
+- `src/app/health/components/MissionHub.tsx` — thin client wrapper managing `activeMissionId` state.
+
+**Files modified:**
+- `src/app/health/page.tsx` — `<MissionHub />` inserted between Tool Nav and NGO Spotlight.
+- `src/app/health/components/SmartBridgeBanner.tsx` — added `getMissionMatch()` → mission suggestion chip shows under bridge alert when conditions match a mission's tags.
+- `src/app/health/components/symptom-finder/ResultsPanel.tsx` — `PATHWAY_STEPS` / `DEFAULT_PATHWAY_STEPS` replaced with `getMissionStepsForModal()` converter. Pathway labels now map to real mission IDs.
+- `src/lib/resource-intelligence/resource-fetcher.ts` — `fetchDomainResources()` gains optional `exclusionTags?: string[]` parameter → applied as `$nin` filter at MongoDB query level before results are returned.
+- `src/app/api/health/symptom-triage/route.ts` — all 3 `fetchDomainResources()` call sites now pass `fetchExclusions` for pre-filter at query level.
+- `src/services/mock-pathways-service.ts` — replaced 8-stub array with `MISSIONS → Pathway` type converter. `getMockPathways()` now returns fully populated real data. `LEGACY_ID_MAP` for old `pathway-N` URL compatibility.
+- `src/app/health/pathways/[id]/page.tsx` — rewritten to use `MissionPanel` directly. No more `PathwayContext` API dependency. Supports legacy and new IDs. Falls back to `MissionHub` if not found.
+- `src/app/health/components/ResourcePathwaysSection.tsx` — replaced `PathwaySelector` system with thin `MissionHub` wrapper.
+
+**Architecture decisions:**
+- `missions.ts` is now the canonical data source for all 8 health pathways. `PathwayContext` / `PathwaySelector` / `PathwayNavigator` / `PathwayStep` components are still present but superseded — will be removed in a future cleanup sprint.
+- Sea Bag key: `vet1stop_sea_bag` (shared between MissionPanel and ResultsPanel).
+- Mission progress key: `vet1stop_mission_progress` (separate from `pathway_progress_*` legacy keys).
+
+---
+
+## 🎯 Previous Status: Strike 7 Complete — AI Intelligence Overhaul
 **As of Mar 10, 2026:** Strike 7 delivers a full intelligence overhaul of the Symptom Finder AI and Health Browse section: cold-start progressive profiling, intent classification, negative exclusion filtering, 3-tier query relaxation, thumbs up/down preference learning, and cross-domain redirect cards.
 
 ### ✅ Strike 7 — AI Intelligence Overhaul (Mar 10, 2026) — Commit `6dd06daf`
