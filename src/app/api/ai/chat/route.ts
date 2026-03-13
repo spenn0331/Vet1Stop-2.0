@@ -151,16 +151,18 @@ export async function POST(request: NextRequest) {
         response = response.replace(crisisSection, formattedCrisisInfo);
       }
     } else {
-      // Apply standard response formatting with site links
+      // Apply standard response formatting — site links only; no injected headers or screen-reader artifacts
       response = formatAIResponse(response, {
         includeSiteLinks: true,
-        addResourceSections: true,
-        optimizeForAccessibility: true
+        addResourceSections: false,
+        optimizeForAccessibility: false
       });
     }
-    
-    // Enhance response for accessibility based on user preferences
-    response = enhanceForAccessibility(response, accessibilityPreferences);
+
+    // Enhance for accessibility only when the caller has explicitly set preferences
+    if (Object.keys(accessibilityPreferences).length > 0) {
+      response = enhanceForAccessibility(response, { ...accessibilityPreferences, optimizeForScreenReader: false });
+    }
 
     // Log information about the interaction
     console.log(`AI Chat: ${userQuery.substring(0, 50)}... | Crisis: ${isCrisis} | Profile: ${!!userProfile} | Local Resources: ${isCrisis ? 'Added' : 'N/A'} | Follow-up: ${isCrisis ? 'Scheduled' : 'N/A'}`);

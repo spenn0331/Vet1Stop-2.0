@@ -18,8 +18,15 @@ Talk like a real person, not a corporate helpdesk. Think of yourself as a sharp,
 CORE RULES:
 - Be honest. If you don't know something, say so. Never invent phone numbers, VA form numbers, benefit dollar amounts, or resource names.
 - You are NOT a VSO, attorney, or medical provider. If someone asks for official claims filing help or a medical diagnosis, be clear about that and point them to the right people.
-- Keep responses conversational in length. Don't write essays unless the question genuinely calls for it.
 - Match the energy of the conversation. If someone opens with "hey" just say hey back.
+
+RESPONSE FORMAT — CRITICAL:
+You are in a CHAT WIDGET, not a document editor. Keep responses SHORT and conversational.
+- 2-4 sentences for simple questions or casual conversation
+- A short paragraph + a 2-3 item list MAXIMUM for resource questions
+- NEVER write essay-length structured responses with multiple named sections
+- NO markdown section headers (## Heading) in your replies — plain conversational text only
+- If you have a lot to say, pick the most important 2-3 things and offer to share more
 
 ABOUT VET1STOP — 7 sections:
 
@@ -48,13 +55,15 @@ ABOUT VET1STOP — 7 sections:
 7. SOCIAL (coming soon)
    Connect with other veterans — events, groups, community discussions
 
-SMART ROUTING — when to suggest Vet1Stop tools vs. just answering:
-• Symptoms, health issues, "where do I get care for X" → suggest the Health page Symptom Finder for deep resource matching
-• Medical records, disability evidence, nexus letters, C&P prep → suggest Records Recon on the Health page
-• VA rating questions, want to increase rating, first-time claim, benefits navigation → mention the "Know Your Rating" Mission Briefing on the Health page
-• General veteran knowledge (how GI Bill works, what's a VSO, PACT Act, etc.) → just answer directly, no need to redirect
-• Life, recreation, housing, leisure → mention Life & Leisure (coming soon) but still try to help with what you know
-• Completely off-topic personal questions → just be a good conversationalist
+SMART ROUTING — MANDATORY tool mentions for these topics:
+• Any health symptom, sleep issue, pain, mental health, or "where do I get care" question → You MUST mention: "Our Health page has a Symptom Finder that matches your specific situation to VA programs AND NGO resources — way more targeted than a general search." Then give 1-2 quick general tips.
+• Medical records, disability evidence, nexus letters, C&P prep → You MUST mention Records Recon on the Health page — it extracts service-connection language from uploaded records.
+• VA rating, disability claim, first-time filer → You MUST mention the "Know Your Rating" Mission Briefing on the Health page — it walks through the full claims process step by step.
+• Education (GI Bill, school, training) → answer directly + mention Education section is coming soon on Vet1Stop
+• Jobs/careers → answer directly + mention Careers section is coming soon
+• General veteran knowledge (PACT Act, VSO, etc.) → just answer directly, no redirect needed
+• Life, recreation, housing, leisure → answer directly, mention Life & Leisure is coming soon
+• Off-topic or casual conversation → just be a good conversationalist, no routing needed
 
 CRISIS PROTOCOL — NON-NEGOTIABLE:
 If anyone expresses suicidal thoughts, wanting to end their life, self-harm, or a mental health crisis, lead immediately with:
@@ -233,241 +242,6 @@ function getResourceRecommendationsForConcern(concern: string): string {
   }
   
   return recommendations;
-}
-
-/**
- * Get navigation guidance based on the current page and target page
- */
-function getNavigationGuidance(currentPage: string, targetPage: string): string {
-  if (currentPage === targetPage) {
-    return `You're already on the ${targetPage} page. `;
-  }
-  
-  // Find the target page in our site structure
-  const targetPageInfo = siteStructure.pages.find(page => 
-    page.name.toLowerCase() === targetPage.toLowerCase());
-  
-  if (!targetPageInfo) {
-    return `To navigate to the ${targetPage} page, look for it in the main navigation menu at the top of the page. `;
-  }
-  
-  return `To navigate to the ${targetPageInfo.name} page from the ${currentPage} page, click on "${targetPageInfo.name}" in the main navigation menu at the top of the page. ${targetPageInfo.description} `;
-}
-
-/**
- * Build a trauma-informed prompt addition based on the issue topic
- */
-function getTraumaInformedGuidance(issueTopic?: string): string {
-  if (!issueTopic) return '';
-  
-  const sensitiveTopics = ['ptsd', 'trauma', 'suicide', 'depression', 'anxiety', 'substance abuse', 'military sexual trauma', 'mst', 'combat', 'grief', 'loss'];
-  
-  let isTraumaSensitive = false;
-  
-  // Check if the issue involves a trauma-sensitive topic
-  for (const topic of sensitiveTopics) {
-    if (issueTopic.toLowerCase().includes(topic)) {
-      isTraumaSensitive = true;
-      break;
-    }
-  }
-  
-  if (isTraumaSensitive) {
-    return `\n\nThis conversation involves trauma-sensitive topics. Use a trauma-informed approach:` +
-      `\n- ${veteranInteractionGuidelines.trauma_informed_approach.join('\n- ')}` +
-      `\n\nFor immediate crisis support, always provide the Veterans Crisis Line information: Call 988 then Press 1, text 838255, or chat at VeteransCrisisLine.net/Chat.`;
-  }
-  
-  return '';
-}
-
-/**
- * Build service era-specific guidance based on user profile
- */
-function getServiceEraGuidance(era?: string): string {
-  if (!era) return '';
-  
-  // Normalize the era name
-  const normalizedEra = era.toLowerCase();
-  
-  // Check against our known eras
-  for (const [knownEra, guidance] of Object.entries(veteranInteractionGuidelines.service_era_awareness)) {
-    if (normalizedEra.includes(knownEra.toLowerCase())) {
-      return `\n\nService Era Considerations: ${guidance}`;
-    }
-  }
-  
-  return '';
-}
-
-/**
- * Build a system prompt for the AI based on the feature and context
- */
-export function buildSystemPrompt(feature: string, context: PromptContext): string {
-  // Get site knowledge
-  const siteKnowledge = getSiteKnowledge();
-  
-  // Base system prompt that applies to all features
-  let systemPrompt = SYSTEM_PROMPTS.CHATBOT_BASE;
-  systemPrompt += `You should use the following Vet1Stop site knowledge to provide accurate, specific guidance:\n\n${siteKnowledge}\n\n`;
-  
-  // Veteran interaction guidelines
-  systemPrompt += `When interacting with veterans, follow these principles:\n- ${veteranInteractionGuidelines.general_principles.join('\n- ')}\n\n`;
-  
-  // Feature-specific prompt additions
-  switch (feature) {
-    case 'chat':
-      systemPrompt += `As a chatbot, your goal is to provide friendly, informative guidance to veterans navigating the platform. `;
-      systemPrompt += `Focus on helping veterans find resources, understand benefits, and connect with support services. `;
-      systemPrompt += `Always maintain a respectful, empathetic tone and acknowledge the veteran's service when appropriate. `;
-      systemPrompt += `If a veteran appears to be in crisis, prioritize directing them to immediate help resources like the Veterans Crisis Line.`;
-      
-      // Add trauma-informed guidance if we have an issue topic
-      if (context.issueTopic) {
-        systemPrompt += getTraumaInformedGuidance(context.issueTopic);
-      }
-      break;
-      
-    case 'recommend':
-      systemPrompt += `Your task is to provide personalized resource recommendations based on the veteran's profile, interests, and needs. `;
-      systemPrompt += `Focus on relevance and actionability - suggest resources the veteran can access immediately. `;
-      systemPrompt += `Explain why each resource might be helpful for their specific situation.`;
-      
-      // Add specific resource recommendations if we have an issue topic
-      if (context.issueTopic) {
-        const recommendations = getResourceRecommendationsForConcern(context.issueTopic);
-        systemPrompt += `\n\nFor concerns about ${context.issueTopic}, recommend these specific Vet1Stop resources:\n${recommendations}`;
-      }
-      break;
-      
-    case 'summarize':
-      systemPrompt += `Your role is to provide clear, concise summaries of veteran-related information. `;
-      systemPrompt += `Highlight the most important points, especially eligibility criteria, application processes, and contact information. `;
-      systemPrompt += `Make the information accessible and actionable for veterans who may be overwhelmed by details.`;
-      break;
-      
-    case 'voice':
-      systemPrompt += `As a voice assistant, your responses should be concise and direct. `;
-      systemPrompt += `Focus on providing clear navigation assistance and quick answers to veteran questions. `;
-      systemPrompt += `Use simple language and avoid long explanations that would be difficult to process in audio format.`;
-      break;
-      
-    case 'form':
-      systemPrompt += `Your job is to help veterans complete forms and applications effectively. `;
-      systemPrompt += `Provide clear guidance on fields, required documentation, and submission processes. `;
-      systemPrompt += `Be patient with questions and offer explanations for complex terminology or requirements.`;
-      break;
-      
-    default:
-      // Default case if feature is not recognized
-      systemPrompt += `Provide helpful, respectful assistance to veterans using the Vet1Stop platform.`;
-  }
-  
-  // Add context-aware modifications to the prompt
-  if (context.userProfile) {
-    systemPrompt += `\n\nUser context: `;
-    
-    if (context.userProfile.name) {
-      systemPrompt += `The veteran's name is ${context.userProfile.name}. `;
-    }
-    
-    if (context.userProfile.branch) {
-      systemPrompt += `They served in the ${context.userProfile.branch}. `;
-    }
-    
-    if (context.userProfile.era) {
-      systemPrompt += `Their service era is ${context.userProfile.era}. ${getServiceEraGuidance(context.userProfile.era)}`;
-    }
-    
-    if (context.userProfile.rank) {
-      systemPrompt += `Their rank was ${context.userProfile.rank}. `;
-    }
-    
-    if (context.userProfile.yearsOfService) {
-      systemPrompt += `They served for ${context.userProfile.yearsOfService} years. `;
-    }
-    
-    if (context.userProfile.location) {
-      systemPrompt += `They are located in ${context.userProfile.location}. `;
-    }
-    
-    if (context.userProfile.conditions && context.userProfile.conditions.length > 0) {
-      systemPrompt += `They have mentioned these health conditions: ${context.userProfile.conditions.join(', ')}. `;
-    }
-    
-    if (context.userProfile.interests && context.userProfile.interests.length > 0) {
-      systemPrompt += `Their interests include: ${context.userProfile.interests.join(', ')}.`;
-    }
-  }
-  
-  if (context.currentPage && context.issueTopic) {
-    // Add navigation guidance if we have both a current page and issue topic
-    const recommendedPages = [];
-    
-    // Simple mapping of concerns to pages
-    if (context.issueTopic.toLowerCase().includes('ptsd') || 
-        context.issueTopic.toLowerCase().includes('mental health') ||
-        context.issueTopic.toLowerCase().includes('healthcare')) {
-      recommendedPages.push('Health');
-    }
-    if (context.issueTopic.toLowerCase().includes('education') || 
-        context.issueTopic.toLowerCase().includes('school') ||
-        context.issueTopic.toLowerCase().includes('gi bill')) {
-      recommendedPages.push('Education');
-    }
-    if (context.issueTopic.toLowerCase().includes('job') || 
-        context.issueTopic.toLowerCase().includes('employ') ||
-        context.issueTopic.toLowerCase().includes('career')) {
-      recommendedPages.push('Careers');
-    }
-    
-    if (recommendedPages.length > 0 && !recommendedPages.includes(context.currentPage)) {
-      systemPrompt += `\n\nNavigation guidance: ${getNavigationGuidance(context.currentPage, recommendedPages[0])}`;
-    } else {
-      systemPrompt += `\n\nThe user is currently on the ${context.currentPage} page of Vet1Stop.`;
-    }
-  } else if (context.currentPage) {
-    systemPrompt += `\n\nThe user is currently on the ${context.currentPage} page of Vet1Stop.`;
-  }
-  
-  if (context.additionalContext) {
-    systemPrompt += `\n\nAdditional context: ${context.additionalContext}`;
-  }
-  
-  return systemPrompt;
-}
-
-/**
- * Build a user prompt based on the context and current query
- */
-export function buildUserPrompt(context: PromptContext): string {
-  if (!context.currentQuery) {
-    return "How can I help you with Vet1Stop's veteran resources today?";
-  }
-  
-  return context.currentQuery;
-}
-
-/**
- * Build a complete prompt object with system and user messages
- */
-export function buildCompletePrompt(feature: string, context: PromptContext): { role: string; content: string }[] {
-  const systemPrompt = buildSystemPrompt(feature, context);
-  const userPrompt = buildUserPrompt(context);
-  
-  const messages = [
-    { role: 'system', content: systemPrompt },
-  ];
-  
-  // Add conversation history if available
-  if (context.conversationHistory && context.conversationHistory.length > 0) {
-    messages.push(...context.conversationHistory);
-  } else {
-    // If no history, just add the current user prompt
-    messages.push({ role: 'user', content: userPrompt });
-  }
-  
-  return messages;
 }
 
 /**
