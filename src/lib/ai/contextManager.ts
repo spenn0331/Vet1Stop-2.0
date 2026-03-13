@@ -99,7 +99,7 @@ export function getConversationContext(): ConversationContext {
   }
 
   try {
-    const storedContext = localStorage.getItem('vet1stop_ai_context');
+    const storedContext = sessionStorage.getItem('vet1stop_ai_context');
     if (storedContext) {
       return JSON.parse(storedContext);
     }
@@ -124,7 +124,7 @@ export function saveConversationContext(context: ConversationContext): void {
   }
 
   try {
-    localStorage.setItem('vet1stop_ai_context', JSON.stringify(context));
+    sessionStorage.setItem('vet1stop_ai_context', JSON.stringify(context));
   } catch (error) {
     console.error('Error saving conversation context:', error);
   }
@@ -200,7 +200,7 @@ export function clearConversationContext(): void {
   }
 
   try {
-    localStorage.removeItem('vet1stop_ai_context');
+    sessionStorage.removeItem('vet1stop_ai_context');
   } catch (error) {
     console.error('Error clearing conversation context:', error);
   }

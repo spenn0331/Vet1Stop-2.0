@@ -50,7 +50,7 @@ export default function useAIChat(initialUserProfile?: UserProfile, currentPage?
       // Add a welcome message if no existing conversation
       const welcomeMessage: ChatMessage = {
         role: 'assistant',
-        content: 'Hello! I\'m the Vet1Stop AI Assistant. How can I help you find veteran resources today?',
+        content: 'Hey — what\'s going on? Ask me anything, or let me know what you\'re looking for and I\'ll point you in the right direction.',
         id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         timestamp: Date.now()
       };
@@ -165,7 +165,7 @@ export default function useAIChat(initialUserProfile?: UserProfile, currentPage?
     // Add a welcome message
     const welcomeMessage: ChatMessage = {
       role: 'assistant',
-      content: 'Hello! I\'m the Vet1Stop AI Assistant. How can I help you find veteran resources today?',
+      content: 'Hey — what\'s going on? Ask me anything, or let me know what you\'re looking for and I\'ll point you in the right direction.',
       id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       timestamp: Date.now()
     };
