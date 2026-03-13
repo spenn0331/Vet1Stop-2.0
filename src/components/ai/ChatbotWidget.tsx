@@ -6,11 +6,9 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import { Bot, User, X, RotateCcw, Send, Mic, Info, MessageSquare } from 'lucide-react';
 import useAIChat, { ChatMessage } from '@/hooks/useAIChat';
-import useVoiceCommand from '@/hooks/useVoiceCommand';
 
 interface ChatbotWidgetProps {
   userProfile?: any;
@@ -37,48 +35,24 @@ const ChatbotWidget: React.FC<ChatbotWidgetProps> = ({
   const [isOpen, setIsOpen] = useState(false);
   const [inputValue, setInputValue] = useState('');
   const [showVoiceUI, setShowVoiceUI] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
 
-  const router = useRouter();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const recognitionRef = useRef<any>(null);
 
   const { messages, isLoading, error, sendMessage, clearChat } = useAIChat(userProfile, currentPage);
 
-  const { isListening, transcript, startListening, stopListening, error: voiceError } = useVoiceCommand({
-    continuous: false,
-    onCommand: (result) => {
-      if (result.intent === 'navigation' && result.action === 'navigate') {
-        const target = result.parameters?.target;
-        if (target) { router.push(`/${target}`); setShowVoiceUI(false); }
-      }
-      if (result.intent === 'search' && result.action === 'find_resources') {
-        const query = result.parameters?.keywords || '';
-        const category = result.parameters?.category || '';
-        if (category) { router.push(`/${category}?search=${query}`); setShowVoiceUI(false); }
-      }
-      if (result.intent === 'info') {
-        sendMessage(result.transcript);
-        setShowVoiceUI(false);
-      }
-    },
-  });
-
-  // Auto-scroll to bottom on every new message or loading state change
+  // Auto-scroll on every new message or loading state change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
 
   // Focus input when panel opens
   useEffect(() => {
-    if (isOpen && !showVoiceUI) {
-      setTimeout(() => inputRef.current?.focus(), 80);
-    }
+    if (isOpen && !showVoiceUI) setTimeout(() => inputRef.current?.focus(), 80);
   }, [isOpen, showVoiceUI]);
-
-  // Mirror voice transcript into input
-  useEffect(() => {
-    if (showVoiceUI && transcript) setInputValue(transcript);
-  }, [transcript, showVoiceUI]);
 
   const fmtTime = (ts: number) =>
     new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -88,9 +62,63 @@ const ChatbotWidget: React.FC<ChatbotWidgetProps> = ({
     if (inputValue.trim()) { sendMessage(inputValue); setInputValue(''); }
   };
 
+  // ── Voice dictation (inline SpeechRecognition — no external service) ──────
+  const startListening = () => {
+    const SR =
+      (window as any).SpeechRecognition ||
+      (window as any).webkitSpeechRecognition;
+
+    if (!SR) {
+      setVoiceError('Speech recognition requires Chrome or Edge. Type your message instead.');
+      setShowVoiceUI(true);
+      return;
+    }
+
+    const r = new SR();
+    r.lang = 'en-US';
+    r.interimResults = true;
+    r.maxAlternatives = 1;
+    r.continuous = false;
+
+    r.onstart = () => { setIsListening(true); setVoiceError(null); };
+    r.onend   = () => setIsListening(false);
+
+    r.onerror = (e: any) => {
+      setIsListening(false);
+      const msgs: Record<string, string> = {
+        network:        'Network unavailable — speech works best on HTTPS. Type instead.',
+        'no-speech':    'No speech detected — speak clearly and try again.',
+        'not-allowed':  'Mic blocked — enable microphone access in browser/OS settings.',
+        'audio-capture':'No microphone found — check your device settings.',
+      };
+      if (e.error !== 'aborted') setVoiceError(msgs[e.error] ?? `Mic error: ${e.error}`);
+    };
+
+    r.onresult = (e: any) => {
+      const text = Array.from(e.results)
+        .map((res: any) => res[0].transcript)
+        .join('');
+      setInputValue(text);
+    };
+
+    recognitionRef.current = r;
+    try {
+      r.start();
+      setShowVoiceUI(true);
+    } catch {
+      setVoiceError('Could not access microphone.');
+      setShowVoiceUI(true);
+    }
+  };
+
+  const stopListening = () => {
+    try { recognitionRef.current?.stop(); } catch { /* ignore */ }
+    setIsListening(false);
+  };
+
   const toggleVoice = () => {
-    if (showVoiceUI) { stopListening(); setShowVoiceUI(false); }
-    else { setShowVoiceUI(true); startListening(); }
+    if (showVoiceUI) { stopListening(); setShowVoiceUI(false); setVoiceError(null); }
+    else { startListening(); }
   };
 
   // ── AI bubble — react-markdown with prose typography ──────────────────────
