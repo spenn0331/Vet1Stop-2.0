@@ -359,14 +359,58 @@ const SYNONYM_MAP: Record<string, string[]> = {
   'reservist':              ['benefits', 'healthcare', 'mental health', 'peer support'],
 };
 
+// Stopwords stripped before word-overlap synonym matching
+const STOP_WORDS = new Set([
+  'a', 'an', 'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
+  'of', 'with', 'by', 'my', 'i', 'me', 'we', 'you', 'he', 'she', 'it',
+  'is', 'am', 'are', 'was', 'be', 'been', 'have', 'has', 'had', 'do',
+  'does', 'did', 'as', 'up', 'so', 'if', 'no', 'go', 'from', 'into',
+  'too', 'just', 'can', 'will', 'would', 'could', 'should', 'may',
+  'not', 'get', 'got', 'also', 'some', 'any', 'how', 'what', 'when',
+  'where', 'why', 'who', 'its', 'their', 'there', 'then', 'that',
+  'this', 'these', 'those', 'im', 'ive', 'dont', 'cant', 'wont',
+]);
+
+function getSignificantWords(phrase: string): string[] {
+  return phrase
+    .toLowerCase()
+    .replace(/[''`]/g, '')  // strip apostrophes so "can't" → "cant"
+    .split(/[\s\-,]+/)
+    .filter(w => w.length >= 2 && !STOP_WORDS.has(w));
+}
+
 /**
  * Expands a search term using SYNONYM_MAP and returns all variants for $or matching.
  * Always includes the original term.
+ *
+ * Two-pass expansion:
+ *   1. Exact key lookup  — "tinnitus" → [hearing aids, audiology…]
+ *   2. Word-overlap (≥80%) — "ringing in my ears" matches "ringing in ears" key
+ *      because their significant words {ringing, ears} are identical.
+ *      This makes filler words like "my", "in", "the" invisible to the matcher.
  */
 function expandSearchTerms(term: string): string[] {
   const lower = term.toLowerCase().trim();
-  const synonyms = SYNONYM_MAP[lower] ?? [];
-  return Array.from(new Set([lower, ...synonyms]));
+  const terms = new Set<string>([lower]);
+
+  // 1. Exact key match (fast path)
+  (SYNONYM_MAP[lower] ?? []).forEach(s => terms.add(s));
+
+  // 2. Word-overlap: handles inserted filler words
+  const inputWords = new Set(getSignificantWords(lower));
+  if (inputWords.size > 0) {
+    for (const [key, synonyms] of Object.entries(SYNONYM_MAP)) {
+      if (key === lower) continue;
+      const keyWords = getSignificantWords(key);
+      if (keyWords.length === 0) continue;
+      const matched = keyWords.filter(w => inputWords.has(w)).length;
+      if (matched / keyWords.length >= 0.8) {
+        synonyms.forEach(s => terms.add(s));
+      }
+    }
+  }
+
+  return Array.from(terms);
 }
 
 const DB_NAME = process.env.MONGODB_DB || 'vet1stop';
@@ -424,10 +468,44 @@ export async function GET(req: NextRequest) {
     else                           sort = { priority: 1, rating: -1 }; // browse default: priority order
 
     const skip = (page - 1) * limit;
-    const [resources, total] = await Promise.all([
-      col.find(query).sort(sort).skip(skip).limit(limit).toArray(),
-      col.countDocuments(query),
-    ]);
+
+    // When a search term is active, use aggregation to boost title-prefix matches.
+    // Without this, searching "ree" surfaces all "free"-tagged resources above
+    // REE Medical because they share the "ree" substring but outrank it by rating.
+    let resources: Record<string, unknown>[];
+    let total: number;
+
+    if (search.trim()) {
+      const escapedSearch = search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const aggResult = await col.aggregate([
+        { $match: query },
+        { $addFields: {
+          _tb: {
+            $switch: {
+              branches: [
+                { case: { $regexMatch: { input: '$title', regex: `^${escapedSearch}`, options: 'i' } }, then: 10 },
+                { case: { $regexMatch: { input: '$title', regex: escapedSearch,        options: 'i' } }, then: 5  },
+              ],
+              default: 0,
+            },
+          },
+        }},
+        { $sort: { _tb: -1, ...sort } },
+        { $facet: {
+          resources: [{ $skip: skip }, { $limit: limit }, { $unset: '_tb' }],
+          meta:      [{ $count: 'total' }],
+        }},
+      ]).toArray();
+
+      const facet = aggResult[0] as { resources: Record<string, unknown>[]; meta: { total: number }[] } | undefined;
+      resources = facet?.resources ?? [];
+      total     = facet?.meta?.[0]?.total ?? 0;
+    } else {
+      [resources, total] = await Promise.all([
+        col.find(query).sort(sort).skip(skip).limit(limit).toArray() as Promise<Record<string, unknown>[]>,
+        col.countDocuments(query),
+      ]);
+    }
 
     return NextResponse.json({
       resources,
