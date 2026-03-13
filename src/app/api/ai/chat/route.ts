@@ -164,6 +164,16 @@ export async function POST(request: NextRequest) {
       response = enhanceForAccessibility(response, { ...accessibilityPreferences, optimizeForScreenReader: false });
     }
 
+    // Strip any accessibility artifacts that leak from old conversation history mimicry
+    response = response
+      .replace(/\s*\(Section Heading\)/gi, '')
+      .replace(/\[List starts\]\n?/gi, '')
+      .replace(/\[List ends\]\s*[-–]?\s*/gi, '')
+      .replace(/\[pointing finger\]\s*/gi, '')
+      .replace(/\[checkmark\]\s*/gi, '')
+      .replace(/\[warning\]\s*/gi, '')
+      .trim();
+
     // Log information about the interaction
     console.log(`AI Chat: ${userQuery.substring(0, 50)}... | Crisis: ${isCrisis} | Profile: ${!!userProfile} | Local Resources: ${isCrisis ? 'Added' : 'N/A'} | Follow-up: ${isCrisis ? 'Scheduled' : 'N/A'}`);
 

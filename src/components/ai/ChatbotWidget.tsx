@@ -158,9 +158,18 @@ const ChatbotWidget: React.FC<ChatbotWidgetProps> = ({
   
   // Convert text with site links to clickable links
   const formatMessageWithLinks = (content: string) => {
+    // Strip accessibility artifacts that may appear from old conversation history
+    let formattedContent = content
+      .replace(/\s*\(Section Heading\)/gi, '')
+      .replace(/\[List starts\]\n?/gi, '')
+      .replace(/\[List ends\]\s*[-\u2013]?\s*/gi, '')
+      .replace(/\[pointing finger\]\s*/gi, '')
+      .replace(/\[checkmark\]\s*/gi, '')
+      .replace(/\[warning\]\s*/gi, '');
+
     // Replace site page references with clickable links
     const sitePageRegex = /\b(Health|Education|Careers|Life and Leisure|Local|Shop|Social)\s+page\b/gi;
-    let formattedContent = content.replace(sitePageRegex, (match) => {
+    formattedContent = formattedContent.replace(sitePageRegex, (match) => {
       const page = match.replace(/\s+page$/i, '').toLowerCase().replace(/\s+and\s+/i, '-');
       return `<a href="/${page}" class="text-blue-600 hover:underline">${match}</a>`;
     });
@@ -204,17 +213,21 @@ const ChatbotWidget: React.FC<ChatbotWidgetProps> = ({
     return (
       <div className={`flex w-full mb-4 ${isUser ? 'justify-end' : 'justify-start'}`}>
         <div 
-          className={`rounded-lg px-4 py-3 ${isUser ? 'max-w-[85%]' : 'max-w-[90%]'} ${
+          className={`rounded-lg px-4 py-3 min-w-0 ${
+            isUser ? 'max-w-[85%]' : 'max-w-[90%]'
+          } ${
             isUser 
               ? 'bg-blue-100 text-blue-900' 
               : 'bg-gray-100 text-gray-900'
           }`}
+          style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}
         >
           {isUser ? (
-            <div className="text-sm">{message.content}</div>
+            <div className="text-sm" style={{ wordBreak: 'break-word' }}>{message.content}</div>
           ) : (
             <div 
               className="text-sm message-content" 
+              style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}
               dangerouslySetInnerHTML={{ __html: formatMessageWithLinks(message.content) }}
             />
           )}
@@ -290,7 +303,7 @@ const ChatbotWidget: React.FC<ChatbotWidgetProps> = ({
           </div>
           
           {/* Messages container */}
-          <div className="flex-1 p-4 overflow-y-auto" style={{ scrollBehavior: 'smooth' }}>
+          <div className="flex-1 p-4 overflow-y-auto overflow-x-hidden" style={{ scrollBehavior: 'smooth' }}>
             {/* Add custom CSS for message content */}
             <style jsx global>{`
               .message-content h1, .message-content h2, .message-content h3 {
