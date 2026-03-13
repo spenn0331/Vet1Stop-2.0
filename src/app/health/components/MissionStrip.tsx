@@ -30,6 +30,7 @@ const ICON_LABELS: Record<string, string> = {
   'recovery':         '🌱',
   'wellness':         '🛡️',
   'geriatric-care':   '🎖️',
+  'benefits-nav':     '⚖️',
 };
 
 

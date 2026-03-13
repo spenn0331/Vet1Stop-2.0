@@ -442,7 +442,7 @@ export const MISSIONS: Mission[] = [
     tags: ['chronic pain', 'pain management', 'rehabilitation', 'back pain', 'injury', 'complementary health'],
     estimatedDuration: 90,
     difficulty: 'medium',
-    featured: true,
+    featured: false,
     icon: 'pain-management',
     steps: [
       {
