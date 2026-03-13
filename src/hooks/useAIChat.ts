@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { chat, Message } from '@/lib/ai/grokService';
+import type { Message } from '@/lib/ai/grokService';
 import {
   getConversationContext,
   addMessageToContext,
@@ -103,9 +103,23 @@ export default function useAIChat(initialUserProfile?: UserProfile, currentPage?
       
       // Get context for API call
       const context = getConversationContext();
-      
-      // Send to API
-      const response = await chat(context.messages);
+
+      // Send to the server-side AI route (avoids CORS failure from browser → x.ai directly)
+      const res = await fetch('/api/ai/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: context.messages,
+          currentPage,
+          userProfile,
+        }),
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Server error: ${res.status}`);
+      }
+      const data = await res.json();
+      const response: string = data.response;
       
       // Create assistant message
       const assistantMessage: ChatMessage = {

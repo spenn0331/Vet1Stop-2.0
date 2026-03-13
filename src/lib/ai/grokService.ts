@@ -60,7 +60,7 @@ async function sendRequest(
 
   try {
     // For actual API calls using personal API key
-    const apiKey = process.env.NEXT_PUBLIC_GROK_API_KEY || '';
+    const apiKey = process.env.GROK_API_KEY || process.env.NEXT_PUBLIC_GROK_API_KEY || '';
     
     if (!apiKey) {
       console.error('No API key provided for Grok service');
