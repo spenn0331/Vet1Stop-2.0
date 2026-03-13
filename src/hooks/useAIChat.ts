@@ -56,10 +56,7 @@ export default function useAIChat(initialUserProfile?: UserProfile, currentPage?
       };
       
       setMessages([welcomeMessage]);
-      addMessageToContext({
-        role: 'assistant',
-        content: welcomeMessage.content
-      });
+      // Welcome message is UI-only — NOT added to API context so the AI never mimics it
     }
     
     // Update user profile from context if available
@@ -171,10 +168,7 @@ export default function useAIChat(initialUserProfile?: UserProfile, currentPage?
     };
     
     setMessages([welcomeMessage]);
-    addMessageToContext({
-      role: 'assistant',
-      content: welcomeMessage.content
-    });
+    // Welcome message is UI-only — NOT added to API context
   }, [userProfile, currentPage]);
 
   return {

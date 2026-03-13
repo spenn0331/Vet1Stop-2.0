@@ -79,7 +79,7 @@ async function sendRequest(
         messages,
         model: config.model,
         temperature: options.temperature || 0.7,
-        max_tokens: options.max_tokens || 1000,
+        max_tokens: options.max_tokens || 500,
         stream: options.stream || false,
       } as ChatCompletionRequest),
     });

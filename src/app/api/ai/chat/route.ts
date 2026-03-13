@@ -168,10 +168,10 @@ export async function POST(request: NextRequest) {
     response = response
       .replace(/\s*\(Section Heading\)/gi, '')
       .replace(/\[List starts\]\n?/gi, '')
-      .replace(/\[List ends\]\s*[-–]?\s*/gi, '')
-      .replace(/\[pointing finger\]\s*/gi, '')
-      .replace(/\[checkmark\]\s*/gi, '')
-      .replace(/\[warning\]\s*/gi, '')
+      .replace(/\[List ends\]\s*[-\u2013]?\s*/gi, '')
+      .replace(/\s*\(link to [^)]+\)/gi, '')
+      .replace(/\[(?:pointing finger|checkmark|warning|phone|email|link|mobile phone|exclamation)\]\s*/gi, '')
+      .replace(/^[-•*]\s*$/gm, '')
       .trim();
 
     // Log information about the interaction

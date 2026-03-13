@@ -156,83 +156,149 @@ const ChatbotWidget: React.FC<ChatbotWidgetProps> = ({
     });
   };
   
-  // Convert text with site links to clickable links
-  const formatMessageWithLinks = (content: string) => {
-    // Strip accessibility artifacts that may appear from old conversation history
-    let formattedContent = content
+  // Render AI message content: strips artifacts, handles markdown lists/headers/links cleanly
+  const formatMessageWithLinks = (content: string): string => {
+    // Strip all accessibility artifacts including (link to url) patterns
+    let text = content
       .replace(/\s*\(Section Heading\)/gi, '')
       .replace(/\[List starts\]\n?/gi, '')
       .replace(/\[List ends\]\s*[-\u2013]?\s*/gi, '')
-      .replace(/\[pointing finger\]\s*/gi, '')
-      .replace(/\[checkmark\]\s*/gi, '')
-      .replace(/\[warning\]\s*/gi, '');
+      .replace(/\s*\(link to [^)]+\)/gi, '')
+      .replace(/\[(?:pointing finger|checkmark|warning|phone|email|link|mobile phone|exclamation)\]\s*/gi, '');
 
-    // Replace site page references with clickable links
-    const sitePageRegex = /\b(Health|Education|Careers|Life and Leisure|Local|Shop|Social)\s+page\b/gi;
-    formattedContent = formattedContent.replace(sitePageRegex, (match) => {
-      const page = match.replace(/\s+page$/i, '').toLowerCase().replace(/\s+and\s+/i, '-');
-      return `<a href="/${page}" class="text-blue-600 hover:underline">${match}</a>`;
-    });
-    
-    // Replace section references with clickable links
-    const sectionRegex = /(Mental Health Resources|PTSD Support|VA Programs|Education Benefits|Career Services)\s+section/gi;
-    formattedContent = formattedContent.replace(sectionRegex, (match) => {
-      const section = match.replace(/\s+section$/i, '').toLowerCase().replace(/\s+/g, '-');
-      const page = section.includes('mental') || section.includes('ptsd') || section.includes('va') ? 'health' : 
-                  section.includes('education') ? 'education' : 
-                  section.includes('career') ? 'careers' : 'home';
-      return `<a href="/${page}#${section}" class="text-blue-600 hover:underline">${match}</a>`;
-    });
-    
-    // Format markdown-style links [text](url)
-    const markdownLinkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
-    formattedContent = formattedContent.replace(markdownLinkRegex, '<a href="$2" class="text-blue-600 hover:underline" target="_blank" rel="noopener noreferrer">$1</a>');
-    
-    // Format headings for better readability
-    formattedContent = formattedContent.replace(/###\s+(.+)$/gm, '<h3 class="font-bold text-lg mt-3 mb-1">$1</h3>');
-    formattedContent = formattedContent.replace(/##\s+(.+)$/gm, '<h2 class="font-bold text-xl mt-4 mb-2">$1</h2>');
-    formattedContent = formattedContent.replace(/#\s+(.+)$/gm, '<h1 class="font-bold text-2xl mt-4 mb-2">$1</h1>');
-    
-    // Format lists for better readability
-    formattedContent = formattedContent.replace(/^\d+\.\s+(.+)$/gm, '<div class="ml-4 mb-2">• $1</div>');
-    formattedContent = formattedContent.replace(/^-\s+(.+)$/gm, '<div class="ml-4 mb-2">• $1</div>');
-    
-    // Format bold text
-    formattedContent = formattedContent.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-    
-    // Add paragraph breaks
-    formattedContent = formattedContent.replace(/\n\n/g, '<br/><br/>');
-    
-    return formattedContent;
+    // Markdown links [text](url) → <a>
+    text = text.replace(
+      /\[([^\]]+)\]\(([^)]+)\)/g,
+      '<a href="$2" class="ai-link" target="_blank" rel="noopener noreferrer">$1</a>'
+    );
+
+    // Site page references → links
+    text = text.replace(
+      /\b(Health|Education|Careers|Life and Leisure|Local|Shop|Social)\s+page\b/gi,
+      (match) => {
+        const page = match.replace(/\s+page$/i, '').toLowerCase().replace(/\s+and\s+/i, '-');
+        return `<a href="/${page}" class="ai-link">${match}</a>`;
+      }
+    );
+
+    // Process line by line — handle lists, headers, empty lines
+    const lines = text.split('\n');
+    const segments: string[] = [];
+    let listItems: string[] = [];
+
+    const flushList = () => {
+      if (listItems.length > 0) {
+        segments.push(`<ul class="ai-list">${listItems.join('')}</ul>`);
+        listItems = [];
+      }
+    };
+
+    for (const rawLine of lines) {
+      const line = rawLine.trimEnd();
+
+      // Skip lone bullet with no content
+      if (/^[\s]*[-•*]\s*$/.test(line)) continue;
+
+      // Bullet item
+      const bulletMatch = line.match(/^[\s]*[-•*]\s+(.+)/);
+      if (bulletMatch && bulletMatch[1].trim()) {
+        listItems.push(`<li class="ai-li"><span class="ai-dot">·</span><span>${bulletMatch[1]}</span></li>`);
+        continue;
+      }
+
+      flushList();
+
+      // Numbered item
+      const numberedMatch = line.match(/^[\s]*(\d+)\.\s+(.+)/);
+      if (numberedMatch) {
+        segments.push(`<div class="ai-num-row"><span class="ai-num">${numberedMatch[1]}.</span><span>${numberedMatch[2]}</span></div>`);
+        continue;
+      }
+
+      // Header (## ### #) → bold label, NOT h2/h3 inside a chat bubble
+      const headerMatch = line.match(/^#{1,3}\s+(.+)/);
+      if (headerMatch) {
+        segments.push(`<div class="ai-hdr">${headerMatch[1]}</div>`);
+        continue;
+      }
+
+      // Empty line → small spacer
+      if (!line.trim()) {
+        if (segments.length > 0) segments.push('<div class="ai-gap"></div>');
+        continue;
+      }
+
+      segments.push(`<div class="ai-p">${line}</div>`);
+    }
+
+    flushList();
+
+    let result = segments.join('');
+    result = result.replace(/\*\*([^*<\n]+)\*\*/g, '<strong>$1</strong>');
+    return result;
   };
 
-  // Message bubble component
+  // Premium message bubble
   const MessageBubble = ({ message }: { message: ChatMessage }) => {
     const isUser = message.role === 'user';
-    
+
+    if (isUser) {
+      return (
+        <div className="flex justify-end mb-3">
+          <div
+            style={{
+              maxWidth: '78%',
+              backgroundColor: '#1A2C5B',
+              color: 'white',
+              borderRadius: '18px 18px 4px 18px',
+              padding: '10px 14px',
+              fontSize: '0.875rem',
+              lineHeight: '1.55',
+              wordBreak: 'break-word',
+              overflowWrap: 'break-word',
+            }}
+          >
+            <div>{message.content}</div>
+            <div style={{ fontSize: '0.68rem', opacity: 0.55, textAlign: 'right', marginTop: '5px' }}>
+              {formatTimestamp(message.timestamp)}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     return (
-      <div className={`flex w-full mb-4 ${isUser ? 'justify-end' : 'justify-start'}`}>
-        <div 
-          className={`rounded-lg px-4 py-3 min-w-0 ${
-            isUser ? 'max-w-[85%]' : 'max-w-[90%]'
-          } ${
-            isUser 
-              ? 'bg-blue-100 text-blue-900' 
-              : 'bg-gray-100 text-gray-900'
-          }`}
-          style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}
+      <div className="flex items-start gap-2 mb-3">
+        <div
+          style={{
+            width: '28px', height: '28px', borderRadius: '50%',
+            backgroundColor: '#1A2C5B', display: 'flex',
+            alignItems: 'center', justifyContent: 'center',
+            flexShrink: 0, marginTop: '2px',
+          }}
         >
-          {isUser ? (
-            <div className="text-sm" style={{ wordBreak: 'break-word' }}>{message.content}</div>
-          ) : (
-            <div 
-              className="text-sm message-content" 
-              style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}
+          <ChatBubbleLeftRightIcon style={{ width: '13px', height: '13px', color: 'white' }} />
+        </div>
+        <div style={{ maxWidth: '85%', minWidth: 0 }}>
+          <div
+            style={{
+              backgroundColor: '#F3F4F6',
+              borderRadius: '4px 18px 18px 18px',
+              padding: '10px 14px',
+              fontSize: '0.875rem',
+              lineHeight: '1.55',
+              color: '#1F2937',
+              wordBreak: 'break-word',
+              overflowWrap: 'break-word',
+            }}
+          >
+            <div
+              className="message-content"
               dangerouslySetInnerHTML={{ __html: formatMessageWithLinks(message.content) }}
             />
-          )}
-          <div className="text-xs text-gray-500 mt-2 text-right">
-            {formatTimestamp(message.timestamp)}
+            <div style={{ fontSize: '0.68rem', color: '#9CA3AF', textAlign: 'right', marginTop: '5px' }}>
+              {formatTimestamp(message.timestamp)}
+            </div>
           </div>
         </div>
       </div>
@@ -304,23 +370,19 @@ const ChatbotWidget: React.FC<ChatbotWidgetProps> = ({
           
           {/* Messages container */}
           <div className="flex-1 p-4 overflow-y-auto overflow-x-hidden" style={{ scrollBehavior: 'smooth' }}>
-            {/* Add custom CSS for message content */}
+            {/* Semantic CSS for AI message content */}
             <style jsx global>{`
-              .message-content h1, .message-content h2, .message-content h3 {
-                color: #1A2C5B;
-                margin-top: 0.75rem;
-                margin-bottom: 0.5rem;
-              }
-              .message-content a {
-                color: #2563EB;
-                text-decoration: none;
-              }
-              .message-content a:hover {
-                text-decoration: underline;
-              }
-              .message-content strong {
-                font-weight: 600;
-              }
+              .message-content .ai-link { color: #2563EB; text-decoration: underline; text-underline-offset: 2px; }
+              .message-content .ai-link:hover { color: #1D4ED8; }
+              .message-content .ai-list { margin: 5px 0; padding: 0; list-style: none; }
+              .message-content .ai-li { display: flex; gap: 6px; margin: 2px 0; align-items: flex-start; }
+              .message-content .ai-dot { color: #1A2C5B; font-weight: 700; flex-shrink: 0; line-height: 1.55; }
+              .message-content .ai-num-row { display: flex; gap: 6px; margin: 2px 0; align-items: flex-start; }
+              .message-content .ai-num { color: #1A2C5B; font-weight: 600; flex-shrink: 0; min-width: 1.1em; }
+              .message-content .ai-hdr { font-weight: 600; color: #1A2C5B; margin-top: 10px; margin-bottom: 3px; }
+              .message-content .ai-gap { height: 6px; }
+              .message-content .ai-p { margin: 2px 0; }
+              .message-content strong { font-weight: 600; }
             `}</style>
             {messages
               .filter(msg => msg.role !== 'system')
@@ -329,12 +391,15 @@ const ChatbotWidget: React.FC<ChatbotWidgetProps> = ({
               ))}
             
             {isLoading && (
-              <div className="flex justify-start mb-4">
-                <div className="bg-gray-100 text-gray-900 rounded-lg px-4 py-2 max-w-[80%]">
-                  <div className="flex space-x-2">
-                    <div className="w-2 h-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '0s' }}></div>
-                    <div className="w-2 h-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                    <div className="w-2 h-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '0.4s' }}></div>
+              <div className="flex items-start gap-2 mb-3">
+                <div style={{ width:'28px',height:'28px',borderRadius:'50%',backgroundColor:'#1A2C5B',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginTop:'2px' }}>
+                  <ChatBubbleLeftRightIcon style={{ width:'13px',height:'13px',color:'white' }} />
+                </div>
+                <div style={{ backgroundColor:'#F3F4F6',borderRadius:'4px 18px 18px 18px',padding:'12px 16px' }}>
+                  <div className="flex gap-1.5 items-center">
+                    <div className="w-2 h-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '0s' }} />
+                    <div className="w-2 h-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '0.18s' }} />
+                    <div className="w-2 h-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '0.36s' }} />
                   </div>
                 </div>
               </div>
