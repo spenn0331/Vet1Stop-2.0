@@ -164,7 +164,7 @@ export async function POST(request: NextRequest) {
       response = enhanceForAccessibility(response, { ...accessibilityPreferences, optimizeForScreenReader: false });
     }
 
-    // Strip any accessibility artifacts that leak from old conversation history mimicry
+    // Strip accessibility artifacts and fix nested markdown issues
     response = response
       .replace(/\s*\(Section Heading\)/gi, '')
       .replace(/\[List starts\]\n?/gi, '')
@@ -172,6 +172,10 @@ export async function POST(request: NextRequest) {
       .replace(/\s*\(link to [^)]+\)/gi, '')
       .replace(/\[(?:pointing finger|checkmark|warning|phone|email|link|mobile phone|exclamation)\]\s*/gi, '')
       .replace(/^[-•*]\s*$/gm, '')
+      // Fix "1. ### Heading text:" → "1. **Heading text:**"
+      .replace(/^(\d+\.\s+)#{1,3}\s+(.+)/gm, '$1**$2**')
+      // Fix "- ### Heading text:" → "- **Heading text:**"
+      .replace(/^([-•*]\s+)#{1,3}\s+(.+)/gm, '$1**$2**')
       .trim();
 
     // Log information about the interaction
