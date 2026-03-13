@@ -62,9 +62,19 @@ export async function searchResources(params: ResourceSearchParams): Promise<Res
     // Build query filters
     const filter: any = {};
     
-    // Text search if keywords provided
+    // Keyword search using regex on title/description/tags (no text index required)
     if (params.keywords) {
-      filter.$text = { $search: params.keywords };
+      const words = params.keywords.trim().split(/\s+/).filter(Boolean);
+      const regexParts = words.map(w => ({ $or: [
+        { title:       { $regex: w, $options: 'i' } },
+        { description: { $regex: w, $options: 'i' } },
+        { tags:        { $regex: w, $options: 'i' } },
+      ]}));
+      if (regexParts.length === 1) {
+        Object.assign(filter, regexParts[0]);
+      } else {
+        filter.$and = regexParts;
+      }
     }
     
     // Category filter

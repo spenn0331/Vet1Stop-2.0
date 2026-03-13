@@ -39,7 +39,7 @@ export type AIFeature = 'chat' | 'recommend' | 'summarize' | 'voice' | 'form';
 // Configuration
 const config = {
   apiUrl: 'https://api.x.ai/v1/chat/completions',
-  model: 'grok-3-latest',
+  model: 'grok-4',
   useMocks: process.env.NEXT_PUBLIC_USE_MOCK_AI === 'true', // Use real API when set to false
 };
 
