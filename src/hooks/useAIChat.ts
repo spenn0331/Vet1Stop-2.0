@@ -22,9 +22,11 @@ export interface ResourceCard {
   description: string;
   category?: string;
   subcategory?: string;
-  website?: string;
+  url?: string;
   phone?: string;
   resourceType?: string;
+  rating?: number;
+  isFree?: boolean;
 }
 
 export interface ChatMessage extends Message {

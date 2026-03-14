@@ -16,46 +16,6 @@ import { scheduleFollowUp, processFollowUpResponse } from '@/lib/ai/followUpServ
 import { enhanceForAccessibility } from '@/lib/ai/accessibilityService';
 import { formatAIResponse } from '@/lib/ai/responseFormatter';
 
-/**
- * Hard-cap AI responses to maxSentences. Preserves lists and the final
- * follow-up question. Falls back gracefully if parsing is ambiguous.
- */
-function truncateToMaxSentences(text: string, maxSentences: number): string {
-  // Don't truncate short responses
-  const trimmed = text.trim();
-  // Split on sentence-ending punctuation followed by whitespace or end-of-string
-  // Preserve list items (lines starting with - or *) as single units
-  const lines = trimmed.split('\n');
-  const sentences: string[] = [];
-
-  for (const line of lines) {
-    const l = line.trim();
-    if (!l) continue;
-    // List items count as 1 sentence unit each
-    if (l.startsWith('-') || l.startsWith('*') || l.startsWith('•') || /^\d+\./.test(l)) {
-      sentences.push(l);
-    } else {
-      // Split prose into sentences on . ! ? (not inside abbreviations)
-      const parts = l.match(/[^.!?]+[.!?]+(?:\s|$)|[^.!?]+$/g) || [l];
-      sentences.push(...parts.map(p => p.trim()).filter(Boolean));
-    }
-  }
-
-  if (sentences.length <= maxSentences) return trimmed;
-
-  // Keep up to maxSentences, but always try to keep the final follow-up question
-  const lastSentence = sentences[sentences.length - 1];
-  const isFollowUp = lastSentence.endsWith('?');
-  const keep = sentences.slice(0, maxSentences);
-
-  // If the last kept sentence isn't a follow-up but there's one at the end, swap last for it
-  if (isFollowUp && !keep[keep.length - 1].endsWith('?')) {
-    keep[keep.length - 1] = lastSentence;
-  }
-
-  return keep.join(' ').replace(/\s{2,}/g, ' ').trim();
-}
-
 export async function POST(request: NextRequest) {
   try {
     // Parse request body
@@ -183,11 +143,6 @@ export async function POST(request: NextRequest) {
       .replace(/^([-•*]\s+)#{1,3}\s+(.+)/gm, '$1**$2**')
       .trim();
 
-    // Hard-cap non-crisis responses at 3 sentences so the AI can't write walls of text
-    if (!isCrisis) {
-      response = truncateToMaxSentences(response, 3);
-    }
-
     // Log information about the interaction
     console.log(`AI Chat: ${userQuery.substring(0, 50)}... | Crisis: ${isCrisis} | Profile: ${!!userProfile} | Local Resources: ${isCrisis ? 'Added' : 'N/A'} | Follow-up: ${isCrisis ? 'Scheduled' : 'N/A'}`);
 
@@ -197,9 +152,12 @@ export async function POST(request: NextRequest) {
       description: r.description,
       category: r.category,
       subcategory: r.subcategory,
-      website: r.contact?.website,
-      phone: r.contact?.phone,
+      // Use top-level url/phone (real DB schema) with legacy contact fallback
+      url: r.url || r.contact?.website,
+      phone: r.phone || r.contact?.phone,
       resourceType: r.resourceType,
+      rating: r.rating,
+      isFree: r.isFree,
     }));
 
     return NextResponse.json({ 

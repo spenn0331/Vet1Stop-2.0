@@ -19,6 +19,10 @@ export interface Resource {
   category?: string;
   subcategory?: string;
   resourceType?: string;
+  // Top-level fields (actual DB schema from seed scripts)
+  url?: string;
+  phone?: string;
+  // Legacy nested contact (some older docs may use this)
   contact?: {
     phone?: string;
     email?: string;
@@ -35,7 +39,10 @@ export interface Resource {
   serviceBranch?: string[];
   tags?: string[];
   isFeatured?: boolean;
+  rating?: number;
+  isFree?: boolean;
   lastUpdated?: Date;
+  updatedAt?: Date;
 }
 
 /**
@@ -141,6 +148,10 @@ export async function searchResources(params: ResourceSearchParams): Promise<Res
       category: doc.category,
       subcategory: doc.subcategory,
       resourceType: doc.resourceType,
+      // url/phone are top-level in real seed docs
+      url: doc.url,
+      phone: doc.phone,
+      // legacy nested contact fallback
       contact: doc.contact,
       location: doc.location,
       eligibility: doc.eligibility,
@@ -148,7 +159,10 @@ export async function searchResources(params: ResourceSearchParams): Promise<Res
       serviceBranch: doc.serviceBranch,
       tags: doc.tags,
       isFeatured: doc.isFeatured,
-      lastUpdated: doc.lastUpdated
+      rating: doc.rating,
+      isFree: doc.isFree,
+      lastUpdated: doc.lastUpdated,
+      updatedAt: doc.updatedAt,
     }));
     
     return mappedResults;

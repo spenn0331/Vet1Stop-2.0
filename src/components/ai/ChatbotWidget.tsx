@@ -178,10 +178,19 @@ const ChatbotWidget: React.FC<ChatbotWidgetProps> = ({
           )}
           <p className="text-sm font-semibold text-gray-900 leading-snug mb-0.5">{r.title}</p>
           <p className="text-xs text-gray-500 leading-snug line-clamp-2">{r.description}</p>
-          {(r.website || r.phone) && (
-            <div className="flex items-center gap-3 mt-2">
-              {r.website && (
-                <a href={r.website} target="_blank" rel="noopener noreferrer"
+          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+            {r.isFree && (
+              <span className="text-[0.6rem] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-full"
+                style={{ backgroundColor: '#E8F5E9', color: '#2E7D32' }}>Free</span>
+            )}
+            {r.rating && (
+              <span className="text-[0.6rem] text-amber-600 font-medium">★ {r.rating.toFixed(1)}</span>
+            )}
+          </div>
+          {(r.url || r.phone) && (
+            <div className="flex items-center gap-3 mt-1.5">
+              {r.url && (
+                <a href={r.url} target="_blank" rel="noopener noreferrer"
                   className="flex items-center gap-1 text-xs font-medium hover:opacity-80 transition"
                   style={{ color: '#1A2C5B' }}>
                   <ExternalLink size={10} />
