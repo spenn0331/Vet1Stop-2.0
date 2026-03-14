@@ -60,46 +60,26 @@ export async function POST(request: NextRequest) {
       console.log(`Crisis detected (${crisisFlag}). Follow-up scheduled for user ${userId}`);
     }
     
-    // Check if there's already a system message
-    let chatMessages: Message[] = [...messages];
-    const hasSystemMessage = chatMessages.some(
-      (message) => message.role === 'system'
-    );
+    // Always build a fresh server-side system prompt.
+    // Strip any system message the client sends — client sessionStorage can hold
+    // stale/poisoned prompts from previous code versions and must never be trusted.
+    let chatMessages: Message[] = messages.filter((m) => m.role !== 'system');
 
-    // Build the enhanced system prompt
-    let systemPrompt = '';
-    if (!hasSystemMessage) {
-      // Start with base system prompt
-      systemPrompt = buildChatbotSystemPrompt(userProfile, currentPage);
-      
-      // Add crisis protocol if needed
-      if (isCrisis) {
-        systemPrompt = getCrisisPreamble() + '\n\n' + systemPrompt;
-      }
-      
-      // Add user profile context if available
-      const profileContext = getProfileForAIContext(userId);
-      if (profileContext) {
-        systemPrompt += `\n\nVeteran Information: ${profileContext}`;
-      }
-      
-      // Add system message to the beginning of messages
-      chatMessages.unshift({
-        role: 'system',
-        content: systemPrompt,
-      });
-    } else if (chatMessages[0].role === 'system') {
-      // Enhance existing system message
-      systemPrompt = chatMessages[0].content;
-      
-      // Add crisis protocol if needed and not already present
-      if (isCrisis && !systemPrompt.includes('Veterans Crisis Line')) {
-        systemPrompt = getCrisisPreamble() + '\n\n' + systemPrompt;
-      }
-      
-      // Update the system message
-      chatMessages[0].content = systemPrompt;
+    // Build fresh system prompt every request
+    let systemPrompt = buildChatbotSystemPrompt(userProfile, currentPage);
+
+    // Prepend crisis protocol if needed
+    if (isCrisis) {
+      systemPrompt = getCrisisPreamble() + '\n\n' + systemPrompt;
     }
+
+    // Add in-session profile context (extracted from prior messages this session)
+    const profileContext = getProfileForAIContext(userId);
+    if (profileContext) {
+      systemPrompt += `\n\nVeteRAN CONTEXT (use naturally): ${profileContext}`;
+    }
+
+    chatMessages.unshift({ role: 'system', content: systemPrompt });
     
     // Try to get relevant resources from MongoDB
     try {
