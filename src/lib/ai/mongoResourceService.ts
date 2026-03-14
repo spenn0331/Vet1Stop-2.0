@@ -62,19 +62,16 @@ export async function searchResources(params: ResourceSearchParams): Promise<Res
     // Build query filters
     const filter: any = {};
     
-    // Keyword search using regex on title/description/tags (no text index required)
+    // Keyword search using regex on title/description/tags.
+    // Uses $or so ANY matching word returns results (not $and which requires ALL words).
     if (params.keywords) {
       const words = params.keywords.trim().split(/\s+/).filter(Boolean);
-      const regexParts = words.map(w => ({ $or: [
+      const wordConditions = words.flatMap(w => [
         { title:       { $regex: w, $options: 'i' } },
         { description: { $regex: w, $options: 'i' } },
-        { tags:        { $regex: w, $options: 'i' } },
-      ]}));
-      if (regexParts.length === 1) {
-        Object.assign(filter, regexParts[0]);
-      } else {
-        filter.$and = regexParts;
-      }
+        { tags:        { $elemMatch: { $regex: w, $options: 'i' } } },
+      ]);
+      filter.$or = wordConditions;
     }
     
     // Category filter
@@ -102,24 +99,29 @@ export async function searchResources(params: ResourceSearchParams): Promise<Res
       filter.serviceBranch = { $in: [params.serviceBranch] };
     }
     
-    // Execute the query against all relevant collections
+    // Query collections — healthResources first (most relevant for chat),
+    // then broader collections for education/career/leisure queries.
     const collections = [
       'healthResources',
-      'educationResources', 
-      'lifeAndLeisureResources', 
-      'careerResources'
+      'educationResources',
+      'lifeAndLeisureResources',
+      'careerResources',
+      'resources',
     ];
-    
+
     let allResults: any[] = [];
-    
-    // Query each collection and combine results
+
     for (const collection of collections) {
-      const results = await db.collection(collection)
-        .find(filter)
-        .limit(params.limit || 5)
-        .toArray();
-      
-      allResults = [...allResults, ...results];
+      try {
+        const results = await db.collection(collection)
+          .find(filter)
+          .limit(params.limit || 3)
+          .toArray();
+        allResults = [...allResults, ...results];
+        if (allResults.length >= (params.limit || 3)) break;
+      } catch {
+        // Collection may not exist — skip silently
+      }
     }
     
     // Cast to any first to handle mixed document types
