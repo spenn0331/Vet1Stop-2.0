@@ -8,14 +8,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { chat, Message } from '@/lib/ai/grokService';
 import { buildChatbotSystemPrompt } from '@/lib/ai/promptBuilder';
-import { enhanceGeneralPrompt } from '@/lib/ai/contextEnhancer';
 import { getResourcesForQuery } from '@/lib/ai/mongoResourceService';
 import { updateProfileFromMessage, getProfileForAIContext } from '@/lib/ai/userProfileService';
 import { detectCrisis, enhanceMessageWithCrisisProtocol, getCrisisPreamble, CrisisFlag } from '@/lib/ai/crisisProtocol';
 import { getLocalResourcesFromProfile } from '@/lib/ai/localResourceService';
 import { scheduleFollowUp, processFollowUpResponse } from '@/lib/ai/followUpService';
-import { enhanceForAccessibility, formatCrisisInfoForAccessibility } from '@/lib/ai/accessibilityService';
-import { formatAIResponse, formatCrisisResponse } from '@/lib/ai/responseFormatter';
+import { enhanceForAccessibility } from '@/lib/ai/accessibilityService';
+import { formatAIResponse } from '@/lib/ai/responseFormatter';
 
 export async function POST(request: NextRequest) {
   try {
@@ -84,9 +83,6 @@ export async function POST(request: NextRequest) {
         systemPrompt += `\n\nVeteran Information: ${profileContext}`;
       }
       
-      // Enhance with topic-specific knowledge
-      systemPrompt = enhanceGeneralPrompt(systemPrompt, userQuery);
-      
       // Add system message to the beginning of messages
       chatMessages.unshift({
         role: 'system',
@@ -100,9 +96,6 @@ export async function POST(request: NextRequest) {
       if (isCrisis && !systemPrompt.includes('Veterans Crisis Line')) {
         systemPrompt = getCrisisPreamble() + '\n\n' + systemPrompt;
       }
-      
-      // Enhance with topic-specific knowledge
-      systemPrompt = enhanceGeneralPrompt(systemPrompt, userQuery);
       
       // Update the system message
       chatMessages[0].content = systemPrompt;
@@ -136,20 +129,6 @@ export async function POST(request: NextRequest) {
     // Enhance response with crisis protocol if needed
     if (isCrisis) {
       response = enhanceMessageWithCrisisProtocol(userQuery, response);
-      
-      // Apply crisis-specific formatting
-      response = formatCrisisResponse(response);
-      
-      // Format crisis information for accessibility
-      if (response.includes('Veterans Crisis Line')) {
-        const crisisSection = response.substring(
-          response.indexOf('Veterans Crisis Line'), 
-          response.indexOf('\n\n', response.indexOf('Veterans Crisis Line')) || response.length
-        );
-        
-        const formattedCrisisInfo = formatCrisisInfoForAccessibility(crisisSection);
-        response = response.replace(crisisSection, formattedCrisisInfo);
-      }
     } else {
       // Apply standard response formatting — site links only; no injected headers or screen-reader artifacts
       response = formatAIResponse(response, {

@@ -8,7 +8,6 @@
 import { getResourcesForQuery } from './mongoResourceService';
 import { updateProfileFromMessage, getProfileForAIContext } from './userProfileService';
 import { detectCrisis, getCrisisPreamble } from './crisisProtocol';
-import { enhanceGeneralPrompt } from './contextEnhancer';
 import { chat, Message } from './grokService';
 
 /**
@@ -170,9 +169,6 @@ The veteran is currently on the ${currentPage} page.`;
   if (resourcesContext) {
     systemPrompt += `\n\nRelevant Resources: ${resourcesContext}`;
   }
-  
-  // Enhance with topic-specific knowledge
-  systemPrompt = enhanceGeneralPrompt(systemPrompt, command);
   
   // Create messages
   const messages: Message[] = [

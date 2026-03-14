@@ -37,6 +37,7 @@ const ChatbotWidget: React.FC<ChatbotWidgetProps> = ({
   const [showVoiceUI, setShowVoiceUI] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [voiceError, setVoiceError] = useState<string | null>(null);
+  const [transcript, setTranscript] = useState('');
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -62,7 +63,7 @@ const ChatbotWidget: React.FC<ChatbotWidgetProps> = ({
     if (inputValue.trim()) { sendMessage(inputValue); setInputValue(''); }
   };
 
-  // ── Voice dictation (inline SpeechRecognition — no external service) ──────
+  // ── Voice dictation (inline SpeechRecognition — two-step: open overlay first, tap mic to start) ──
   const startListening = () => {
     const SR =
       (window as any).SpeechRecognition ||
@@ -70,9 +71,11 @@ const ChatbotWidget: React.FC<ChatbotWidgetProps> = ({
 
     if (!SR) {
       setVoiceError('Speech recognition requires Chrome or Edge. Type your message instead.');
-      setShowVoiceUI(true);
       return;
     }
+
+    setVoiceError(null);
+    setTranscript('');
 
     const r = new SR();
     r.lang = 'en-US';
@@ -86,9 +89,9 @@ const ChatbotWidget: React.FC<ChatbotWidgetProps> = ({
     r.onerror = (e: any) => {
       setIsListening(false);
       const msgs: Record<string, string> = {
-        network:        'Network unavailable — speech works best on HTTPS. Type instead.',
-        'no-speech':    'No speech detected — speak clearly and try again.',
-        'not-allowed':  'Mic blocked — enable microphone access in browser/OS settings.',
+        network:        'Speech recognition needs an internet connection. Check your connection and tap the mic to retry.',
+        'no-speech':    'No speech detected — speak clearly and tap the mic to try again.',
+        'not-allowed':  'Microphone blocked — enable mic access in your browser settings, then tap the mic to retry.',
         'audio-capture':'No microphone found — check your device settings.',
       };
       if (e.error !== 'aborted') setVoiceError(msgs[e.error] ?? `Mic error: ${e.error}`);
@@ -98,17 +101,12 @@ const ChatbotWidget: React.FC<ChatbotWidgetProps> = ({
       const text = Array.from(e.results)
         .map((res: any) => res[0].transcript)
         .join('');
+      setTranscript(text);
       setInputValue(text);
     };
 
     recognitionRef.current = r;
-    try {
-      r.start();
-      setShowVoiceUI(true);
-    } catch {
-      setVoiceError('Could not access microphone.');
-      setShowVoiceUI(true);
-    }
+    try { r.start(); } catch { setVoiceError('Could not start microphone. Tap to retry.'); }
   };
 
   const stopListening = () => {
@@ -116,8 +114,23 @@ const ChatbotWidget: React.FC<ChatbotWidgetProps> = ({
     setIsListening(false);
   };
 
-  const toggleVoice = () => {
-    if (showVoiceUI) { stopListening(); setShowVoiceUI(false); setVoiceError(null); }
+  // Clicking mic in input bar: just opens the overlay (no auto-start)
+  const openVoiceOverlay = () => {
+    setShowVoiceUI(true);
+    setVoiceError(null);
+    setTranscript('');
+  };
+
+  const closeVoiceOverlay = () => {
+    stopListening();
+    setShowVoiceUI(false);
+    setVoiceError(null);
+    setTranscript('');
+  };
+
+  // Big mic button inside overlay: toggle listening
+  const toggleListening = () => {
+    if (isListening) { stopListening(); }
     else { startListening(); }
   };
 
@@ -295,36 +308,49 @@ const ChatbotWidget: React.FC<ChatbotWidgetProps> = ({
           {/* Voice UI overlay */}
           {showVoiceUI && (
             <div className="absolute inset-0 bg-white/95 backdrop-blur-sm flex flex-col items-center justify-center p-6 z-10">
-              <div className="relative w-20 h-20 mb-5">
+              {/* Big mic button — tap to start / stop */}
+              <button
+                onClick={toggleListening}
+                aria-label={isListening ? 'Stop listening' : 'Start listening'}
+                className="relative w-20 h-20 mb-5 focus:outline-none group"
+              >
                 {isListening && (
-                  <div
+                  <span
                     className="absolute inset-0 rounded-full animate-ping opacity-30"
                     style={{ backgroundColor: '#1A2C5B' }}
                   />
                 )}
-                <div
-                  className="absolute inset-0 rounded-full flex items-center justify-center shadow-lg"
-                  style={{ backgroundColor: '#1A2C5B' }}
+                <span
+                  className="absolute inset-0 rounded-full flex items-center justify-center shadow-lg transition group-hover:brightness-110 group-active:scale-95"
+                  style={{ backgroundColor: isListening ? '#B22234' : '#1A2C5B' }}
                 >
                   <Mic size={28} color="white" />
-                </div>
-              </div>
-              <p className="font-semibold text-sm mb-3" style={{ color: '#1A2C5B' }}>
-                {isListening ? 'Listening…' : 'Tap mic to start'}
+                </span>
+              </button>
+
+              <p className="font-semibold text-sm mb-1" style={{ color: '#1A2C5B' }}>
+                {isListening ? 'Listening… tap to stop' : transcript ? 'Got it! Send or tap mic to redo' : 'Tap mic to start speaking'}
               </p>
+
               {transcript && (
-                <p className="text-sm text-gray-600 text-center mb-4 max-w-[240px] leading-relaxed">{transcript}</p>
+                <p className="text-sm text-gray-600 text-center mt-2 mb-3 max-w-[260px] leading-relaxed bg-gray-50 rounded-xl px-3 py-2 border border-gray-100">
+                  {transcript}
+                </p>
               )}
-              {voiceError && <p className="text-xs text-red-500 mb-3">{voiceError}</p>}
-              <div className="flex gap-2">
+
+              {voiceError && (
+                <p className="text-xs text-red-500 text-center mb-3 max-w-[260px] leading-relaxed">{voiceError}</p>
+              )}
+
+              <div className="flex gap-2 mt-2">
                 <button
-                  onClick={toggleVoice}
+                  onClick={closeVoiceOverlay}
                   className="px-4 py-2 text-sm font-medium rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 transition"
                 >
                   Cancel
                 </button>
                 <button
-                  onClick={() => { if (transcript) { sendMessage(transcript); setShowVoiceUI(false); stopListening(); } }}
+                  onClick={() => { if (transcript) { sendMessage(transcript); closeVoiceOverlay(); } }}
                   disabled={!transcript}
                   className="px-4 py-2 text-sm font-medium rounded-xl text-white transition disabled:opacity-40"
                   style={{ backgroundColor: '#1A2C5B' }}
@@ -342,7 +368,7 @@ const ChatbotWidget: React.FC<ChatbotWidgetProps> = ({
           >
             <button
               type="button"
-              onClick={toggleVoice}
+              onClick={openVoiceOverlay}
               aria-label="Voice input"
               className="p-2 rounded-full text-gray-400 hover:text-[#1A2C5B] hover:bg-gray-100 transition shrink-0"
             >

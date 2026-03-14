@@ -38,7 +38,7 @@ export default function useAIChat(initialUserProfile?: UserProfile, currentPage?
     
     // Load existing messages from context
     const context = getConversationContext();
-    if (context.messages.length > 0) {
+    if (context.messages.some(m => m.role !== 'system')) {
       const chatMessages = context.messages.map(msg => ({
         ...msg,
         id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,

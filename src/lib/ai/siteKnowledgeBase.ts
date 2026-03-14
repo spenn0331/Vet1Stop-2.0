@@ -14,55 +14,42 @@ export const siteStructure = {
     {
       name: 'Home',
       path: '/',
-      description: 'Main landing page with overview of all veteran resources and services.',
-      key_features: ['Resource categories', 'Latest updates', 'Quick access links', 'Hero video']
+      description: 'Main landing page with hero section, quick-access feature cards, and AI chat assistant.',
+      key_features: ['Hero section', 'Feature cards', 'AI chatbot (Grok-powered)', 'Navigation to all sections']
     },
     {
       name: 'Health',
       path: '/health',
-      description: 'Comprehensive healthcare information and resources for veterans.',
+      description: 'Full veteran health intelligence hub. The most feature-rich section of Vet1Stop.',
       key_features: [
-        'VA Healthcare Benefits',
-        'Mental Health Resources',
-        'Physical Health Services',
-        'Community Care Network',
-        'Wellness & Prevention',
-        'Caregiver Support',
-        'Pharmacy Services',
-        'Resource Finder Tool'
+        'Browse — search 200+ VA/federal/state/NGO health resources with filters',
+        'Symptom Finder — conversational AI triage → VA + NGO + State resource tabs',
+        'Records Recon — upload VA medical records, AI extracts service-connection evidence',
+        'Smart Bridge — Records Recon findings pre-fill Symptom Finder automatically',
+        'Mission Briefings — 8 guided step-by-step health plans with NGO partner cards',
+        'NGO Spotlight — featured veteran nonprofits with ratings and save-to-Sea-Bag',
+        'Sea Bag — saved resources persisted via localStorage'
       ],
       sub_sections: [
         {
-          name: 'VA Healthcare Benefits',
-          description: 'Information about VA health benefits, priority groups, and enrollment process.'
+          name: 'Browse',
+          description: 'Search and filter 200+ real health resources from MongoDB. Filters: subcategory, tags, sort. Thumbs up/down preference learning.'
         },
         {
-          name: 'Mental Health Resources',
-          description: 'Resources for PTSD, depression, anxiety, substance use, and military sexual trauma with Vet Centers spotlight.'
+          name: 'Symptom Finder',
+          description: 'AI chat wizard (Grok-4). User describes symptoms → AI triages → returns VA, NGO, and State resource tabs with scored matches. Smart Bridge receives Records Recon data.'
         },
         {
-          name: 'Physical Health Services',
-          description: 'Grid of physical health services with specialized program information and Whole Health approach.'
+          name: 'Records Recon',
+          description: 'Upload VA medical records PDFs → AI extracts conditions, service-connection language, and PACT Act flags → generates printable Evidence Report. Data bridges to Symptom Finder.'
         },
         {
-          name: 'Community Care Network',
-          description: 'Explains VA Community Care Network, eligibility, and accessing care outside VA facilities.'
+          name: 'Mission Briefings',
+          description: '8 missions: Healthcare Transition, Mental Health & PTSD, Women\'s Health, VA Claims Navigation, Chronic Pain, Substance Use Recovery, Aging Veterans, TBI & Neurological. Each has 5 steps with NGO partner cards, action checklists, and progress tracking.'
         },
         {
-          name: 'Wellness & Prevention',
-          description: 'Preventive services, program spotlights for conditions like diabetes, and Healthy Living Circle concept.'
-        },
-        {
-          name: 'Caregiver Support',
-          description: 'Program of Comprehensive Assistance for Family Caregivers, support resources, and self-care.'
-        },
-        {
-          name: 'Pharmacy Services',
-          description: 'Prescription benefits, ways to fill prescriptions, and My HealtheVet pharmacy services.'
-        },
-        {
-          name: 'Resource Finder Tool',
-          description: 'Interactive tool to find specific health resources based on needs and location.'
+          name: 'NGO Spotlight',
+          description: 'Featured nonprofit partner cards (WWP, Cohen Veterans, DAV, Give An Hour, Team RWB) with ratings, category tags, and save-to-Sea-Bag.'
         }
       ]
     },
@@ -152,10 +139,10 @@ export const siteStructure = {
 export const veteranInteractionGuidelines = {
   general_principles: [
     'Always maintain a respectful, empathetic tone',
-    'Acknowledge the veteran's service and sacrifice',
+    "Acknowledge the veteran's service and sacrifice",
     'Use clear, direct language without unnecessary jargon',
     'Provide specific, actionable information when possible',
-    'Recognize the diversity of veteran experiences - not all veterans have the same background or needs',
+    "Recognize the diversity of veteran experiences - not all veterans have the same background or needs",
     'For sensitive topics like mental health or disability, maintain a supportive, non-judgmental tone',
     'Use "you" language to speak directly to the veteran'
   ],
@@ -227,7 +214,7 @@ export const resourceRecommendationGuidelines = {
     'Official VA resources for benefits and services the VA directly provides',
     'Federal and state resources with verified information',
     'Established non-profit organizations with proven track records of serving veterans',
-    'Local resources based on the veteran's location',
+    "Local resources based on the veteran's location",
     'Peer support and community-based options'
   ],
   personalization_factors: [
