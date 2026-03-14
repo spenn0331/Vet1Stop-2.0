@@ -513,9 +513,11 @@ function applyScoring(
     bridgeCount >=  6 ? 55 :                // raised from 48 → 55 for multi-condition profiles
     allConditions.length >= 3 ? 55 :        // also raise when chat provides 3+ conditions
                                 35;
-  console.log(`[SymptomTriage] Score cutoff: ${SCORE_CUTOFF} (bridge: ${bridgeCount}, total: ${allConditions.length})`);
+  // NGOs have fewer VA-specific signals and naturally score lower — lower bar by 8 pts
+  const NGO_CUTOFF = Math.max(SCORE_CUTOFF - 8, 50);
+  console.log(`[SymptomTriage] Score cutoff: ${SCORE_CUTOFF} VA/State | ${NGO_CUTOFF} NGO (bridge: ${bridgeCount}, total: ${allConditions.length})`);
 
-  const scoreTrack = (resources: RawResource[]) => {
+  const scoreTrack = (resources: RawResource[], cutoff = SCORE_CUTOFF) => {
     const scored = scoreAndSortResources(
       resources.map((r): ResourceInput => ({
         title: r.title,
@@ -535,14 +537,14 @@ function applyScoring(
       ...s,
       location: typeof s.location === 'object' ? undefined : s.location,
     }));
-    const filtered = scored.filter(r => (r.score ?? 0) >= SCORE_CUTOFF);
+    const filtered = scored.filter(r => (r.score ?? 0) >= cutoff);
     const result    = filtered.length >= 3 ? filtered : scored.slice(0, 3);
     return result.slice(0, 25); // soft max — quality-driven, not forced (plan: best matches up to 25)
   };
 
   return {
     va:    scoreTrack(vaResources),
-    ngo:   scoreTrack(ngoResources),
+    ngo:   scoreTrack(ngoResources, NGO_CUTOFF),
     state: scoreTrack(stateResources.map(r => ({ ...r, location: r.location ?? 'Pennsylvania, PA' }))),
     keywords: scoringContext.keywords,
   };
@@ -789,6 +791,30 @@ export async function POST(request: NextRequest) {
 
       const mongoHas = dbVa.length + dbNgo.length + dbState.length > 0;
       console.log(`[MongoDB] post-exclusion → va=${dbVa.length} ngo=${dbNgo.length} state=${dbState.length} | exclusions=[${exclusionTags.join(', ')}]`);
+
+      // ── REFINEMENT FAST-PATH: skip Grok, return MongoDB+scoring in ~2-3s ──────────────
+      // Refinement calls only need updated exclusions applied — no Grok re-ranking required.
+      if (isRefinement && mongoHas) {
+        console.log('[SymptomTriage] Refinement fast-path — skipping Grok re-ranking');
+        const scored = applyScoring(dbVa, dbNgo, dbState, bridgeContext, kws, userProfile);
+        const aiMessage = buildContextualHandoffMessage(
+          userMessage ?? '', bridgeContext, detectedState, crossHints, exclusionTags, kws, true,
+        );
+        return NextResponse.json({
+          aiMessage,
+          nextStep: 'complete',
+          isCrisis: false,
+          severity: 'moderate',
+          recommendations: {
+            va:    scored.va.map(r    => ({ ...r, track: 'va'    as const })),
+            ngo:   scored.ngo.map(r   => ({ ...r, track: 'ngo'   as const })),
+            state: scored.state.map(r => ({ ...r, track: 'state' as const })),
+          },
+          keywords: scored.keywords,
+          crossDomainHints: crossHints.map(h => h.domain),
+          activeExclusions: exclusionTags,
+        });
+      }
 
       // D-lite: Build compact pool from MongoDB results for Grok clinical re-ranking
       const poolForGrok = mongoHas ? {

@@ -288,6 +288,7 @@ _This is not medical advice. Discuss with your VA provider or primary doctor._`,
     allMessages: TriageMessage[],
     triageStep: string,
     userMessage: string,
+    refinement = false,
   ) => {
     setIsLoading(true);
     setErrorMsg(null);
@@ -305,7 +306,7 @@ _This is not medical advice. Discuss with your VA provider or primary doctor._`,
           }
         : undefined;
 
-      console.log(`[Triage →] step=${triageStep} | bridge=${bridgeContext?.conditions?.length ?? 0} conditions | isRefinement=${isHandedOff} | msg="${userMessage.slice(0, 60)}${userMessage.length > 60 ? '…' : ''}" `);
+      console.log(`[Triage →] step=${triageStep} | bridge=${bridgeContext?.conditions?.length ?? 0} conditions | isRefinement=${refinement} | msg="${userMessage.slice(0, 60)}${userMessage.length > 60 ? '…' : ''}" `);
 
       const res = await fetch('/api/health/symptom-triage', {
         method: 'POST',
@@ -316,14 +317,14 @@ _This is not medical advice. Discuss with your VA provider or primary doctor._`,
           userMessage,
           bridgeContext,
           userState: bridgeData?.userState ?? geoStateRef.current ?? undefined,
-          isRefinement: isHandedOff,
+          isRefinement: refinement,
         }),
       });
       // Note: userIntent is classified server-side from the message content
 
       if (!res.ok) throw new Error(`Server ${res.status}`);
       const data: RawTriageResponse = await res.json();
-      console.log(`[Triage ←] VA=${data.recommendations?.va?.length ?? 0} NGO=${data.recommendations?.ngo?.length ?? 0} St=${data.recommendations?.state?.length ?? 0} | handedOff=${isHandedOff} | crossHints=${data.crossDomainHints?.join(',') ?? 'none'} | timing=${Date.now()-triageStart}ms`);
+      console.log(`[Triage ←] VA=${data.recommendations?.va?.length ?? 0} NGO=${data.recommendations?.ngo?.length ?? 0} St=${data.recommendations?.state?.length ?? 0} | isRefinement=${refinement} | crossHints=${data.crossDomainHints?.join(',') ?? 'none'} | timing=${Date.now()-triageStart}ms`);
 
       // Crisis path
       if (data.isCrisis) {
@@ -454,8 +455,10 @@ _This is not medical advice. Discuss with your VA provider or primary doctor._`,
     if (inputRef.current) inputRef.current.style.height = '42px';
     setSuggestedQuestions([]);
     const userTurns = newMessages.filter(m => m.role === 'user').length;
-    callTriageApi(newMessages, userTurns >= 3 ? 'assess' : 'quick_triage', text);
-  }, [userInput, isLoading, messages, callTriageApi]);
+    // Force 'assess' when results already shown — ensures refinements re-query MongoDB
+    const triageStep = (isHandedOff || userTurns >= 3) ? 'assess' : 'quick_triage';
+    callTriageApi(newMessages, triageStep, text, isHandedOff);
+  }, [userInput, isLoading, messages, callTriageApi, isHandedOff]);
 
   const handleSuggestedQuestion = useCallback((q: string) => {
     const userMsg: TriageMessage = { role: 'user', content: q, timestamp: Date.now() };

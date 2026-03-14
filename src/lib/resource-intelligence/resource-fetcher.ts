@@ -161,6 +161,9 @@ export async function fetchDomainResources(
       // If the user's state is explicitly known, never fall back to wrong-state resources
       const userStateKnown = track.id === 'state' && !!bridgeContext?.userState;
 
+      // NGO track gets a larger fetch pool — NGOs are more numerous and score lower
+      const FETCH_LIMIT = track.id === 'ngo' ? 50 : 20;
+
       // Query 1: keywords + subcategory + geo + exclusion pre-filter
       const strictParts: Record<string, unknown>[] = [];
       if (searchPat) strictParts.push(keywordFilter);
@@ -169,7 +172,7 @@ export async function fetchDomainResources(
       if (exclusionFilter) strictParts.push(exclusionFilter);
       const strictQuery = strictParts.length > 1 ? { $and: strictParts } : subcatFilter;
 
-      let docs = await coll.find(strictQuery).sort({ rating: -1 }).limit(20)
+      let docs = await coll.find(strictQuery).sort({ rating: -1 }).limit(FETCH_LIMIT)
         .toArray() as Record<string, unknown>[];
 
       if (docs.length < 3) {
@@ -178,7 +181,7 @@ export async function fetchDomainResources(
         if (effectiveGeo) relaxParts.push(effectiveGeo);
         if (exclusionFilter) relaxParts.push(exclusionFilter);
         const relaxedQuery = relaxParts.length > 1 ? { $and: relaxParts } : subcatFilter;
-        docs = await coll.find(relaxedQuery).sort({ rating: -1 }).limit(20)
+        docs = await coll.find(relaxedQuery).sort({ rating: -1 }).limit(FETCH_LIMIT)
           .toArray() as Record<string, unknown>[];
       }
 
@@ -188,7 +191,7 @@ export async function fetchDomainResources(
         const lastResortParts: Record<string, unknown>[] = [subcatFilter];
         if (exclusionFilter) lastResortParts.push(exclusionFilter);
         const lastResortQuery = lastResortParts.length > 1 ? { $and: lastResortParts } : subcatFilter;
-        docs = await coll.find(lastResortQuery).sort({ rating: -1 }).limit(20)
+        docs = await coll.find(lastResortQuery).sort({ rating: -1 }).limit(FETCH_LIMIT)
           .toArray() as Record<string, unknown>[];
       }
 
