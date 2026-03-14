@@ -48,6 +48,7 @@ export interface Resource {
 interface ResourceSearchParams {
   keywords?: string;
   category?: string;
+  subcategory?: string;
   resourceType?: string;
   state?: string;
   veteranType?: string;
@@ -79,6 +80,11 @@ export async function searchResources(params: ResourceSearchParams): Promise<Res
     }
     // NOTE: No category filter — seed docs use subcategory:'federal'/'ngo' not a category field.
     // Filtering by category would return 0 results.
+
+    // Subcategory filter (e.g. 'ngo', 'federal', 'state')
+    if (params.subcategory) {
+      filter.subcategory = params.subcategory;
+    }
     
     // Resource type filter
     if (params.resourceType) {
@@ -322,36 +328,70 @@ export async function getTopResourcesRaw(query: string): Promise<Resource[]> {
 
   console.log(`[AI Resources] getTopResourcesRaw called with: "${q.slice(0, 80)}"`);
 
+  // Helper: fetch 2 general + 1 NGO and return mixed top-3
+  async function mixedSearch(keywords: string): Promise<Resource[]> {
+    const [general, ngo] = await Promise.all([
+      searchResources({ keywords, limit: 2 }),
+      searchResources({ keywords, subcategory: 'ngo', limit: 1 }),
+    ]);
+    // Deduplicate by _id
+    const seen = new Set<string>();
+    return [...general, ...ngo].filter(r => {
+      if (seen.has(r._id)) return false;
+      seen.add(r._id);
+      return true;
+    }).slice(0, 3);
+  }
+
+  // Explicit NGO/non-federal request — filter to NGO subcategory only
+  const wantsNGO =
+    q.includes('ngo') || q.includes('non-profit') || q.includes('nonprofit') ||
+    q.includes('non-federal') || q.includes('not va') || q.includes('non va') ||
+    q.includes('non va') || q.includes('charity') || q.includes('organization') ||
+    q.includes('non-government') || q.includes('private');
+
+  if (wantsNGO) {
+    // Try to carry topic context from query words
+    const ngoKeywords = q.includes('ptsd') || q.includes('sleep') || q.includes('mental')
+      ? 'ptsd mental health counseling veterans support'
+      : q.includes('education') || q.includes('school')
+        ? 'education scholarship veterans'
+        : q.includes('job') || q.includes('career')
+          ? 'employment career veterans'
+          : 'veterans support counseling mental health';
+    return searchResources({ keywords: ngoKeywords, subcategory: 'ngo', limit: 3 });
+  }
+
   if (q.includes('ptsd') || q.includes('trauma') || q.includes('mental health') ||
       q.includes('anxiety') || q.includes('depression') || q.includes('stress') ||
       q.includes('sleep') || q.includes('insomnia') || q.includes('nightmare')) {
-    return searchResources({ keywords: 'ptsd trauma mental health sleep anxiety', limit: 3 });
+    return mixedSearch('ptsd trauma mental health sleep anxiety');
   }
 
   if (q.includes('education') || q.includes('gi bill') || q.includes('school') || q.includes('college') || q.includes('degree')) {
-    return searchResources({ keywords: 'education gi bill school college training', limit: 3 });
+    return mixedSearch('education gi bill school college training');
   }
 
   if (q.includes('job') || q.includes('career') || q.includes('employment') || q.includes('work') || q.includes('resume') || q.includes('hire')) {
-    return searchResources({ keywords: 'job career employment work resume veteran', limit: 3 });
+    return mixedSearch('job career employment work resume veteran');
   }
 
   if (q.includes('disability') || q.includes('rating') || q.includes('claim') || q.includes('c&p') || q.includes('nexus')) {
-    return searchResources({ keywords: 'disability rating claim benefits compensation', limit: 3 });
+    return mixedSearch('disability rating claim benefits compensation');
   }
 
   if (q.includes('benefits') || q.includes('va') || q.includes('eligib')) {
-    return searchResources({ keywords: 'benefits va claims disability compensation', limit: 3 });
+    return mixedSearch('benefits va claims disability compensation');
   }
 
   if (q.includes('health') || q.includes('medical') || q.includes('doctor') || q.includes('treatment') || q.includes('care') || q.includes('pain')) {
-    return searchResources({ keywords: 'healthcare medical treatment health', limit: 3 });
+    return mixedSearch('healthcare medical treatment health');
   }
 
   if (q.includes('housing') || q.includes('home') || q.includes('homeless') || q.includes('hud')) {
-    return searchResources({ keywords: 'housing home loan homeless veteran', limit: 3 });
+    return mixedSearch('housing home loan homeless veteran');
   }
 
-  // Generic fallback
-  return searchResources({ keywords: query, limit: 3 });
+  // Generic fallback — still try to include 1 NGO
+  return mixedSearch(query);
 }

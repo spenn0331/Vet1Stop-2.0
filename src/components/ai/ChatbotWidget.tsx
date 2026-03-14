@@ -164,51 +164,58 @@ const ChatbotWidget: React.FC<ChatbotWidgetProps> = ({
     else { startListening(); }
   };
 
-  // ── Inline resource card ─────────────────────────────────────────────────
-  const ResourceCardItem = ({ r }: { r: ResourceCard }) => (
-    <div className="rounded-xl border border-gray-100 bg-white shadow-sm overflow-hidden mb-2 last:mb-0">
-      <div className="flex">
-        <div className="w-1 shrink-0 rounded-l-xl" style={{ backgroundColor: '#1A2C5B' }} />
-        <div className="flex-1 px-3 py-2.5">
-          {(r.subcategory || r.category) && (
-            <span className="inline-block text-[0.6rem] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full mb-1.5"
-              style={{ backgroundColor: '#E8EEF8', color: '#1A2C5B' }}>
-              {r.subcategory || r.category}
-            </span>
-          )}
-          <p className="text-sm font-semibold text-gray-900 leading-snug mb-0.5">{r.title}</p>
-          <p className="text-xs text-gray-500 leading-snug line-clamp-2">{r.description}</p>
-          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-            {r.isFree && (
-              <span className="text-[0.6rem] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-full"
-                style={{ backgroundColor: '#E8F5E9', color: '#2E7D32' }}>Free</span>
-            )}
-            {r.rating && (
-              <span className="text-[0.6rem] text-amber-600 font-medium">★ {r.rating.toFixed(1)}</span>
-            )}
-          </div>
-          {(r.url || r.phone) && (
-            <div className="flex items-center gap-3 mt-1.5">
-              {r.url && (
-                <a href={r.url} target="_blank" rel="noopener noreferrer"
-                  className="flex items-center gap-1 text-xs font-medium hover:opacity-80 transition"
-                  style={{ color: '#1A2C5B' }}>
-                  <ExternalLink size={10} />
-                  Visit site
-                </a>
-              )}
-              {r.phone && (
-                <span className="flex items-center gap-1 text-xs text-gray-500">
-                  <Phone size={10} />
-                  {r.phone}
+  // ── Inline resource card — compact design ────────────────────────────────
+  const ResourceCardItem = ({ r }: { r: ResourceCard }) => {
+    // Truncate long phone/contact strings (e.g. "Varies by location; find local centers...")
+    const phoneDisplay = r.phone && r.phone.length > 36 ? r.phone.slice(0, 36) + '…' : r.phone;
+    const badgeColor = r.subcategory === 'ngo'
+      ? { bg: '#FFF3E0', text: '#E65100' }
+      : r.subcategory === 'state'
+        ? { bg: '#E8F5E9', text: '#2E7D32' }
+        : { bg: '#E8EEF8', text: '#1A2C5B' };
+
+    return (
+      <div className="rounded-lg border border-gray-100 bg-white shadow-sm overflow-hidden mb-1.5 last:mb-0">
+        <div className="flex">
+          <div className="w-0.5 shrink-0" style={{ backgroundColor: badgeColor.text }} />
+          <div className="flex-1 px-2.5 py-2">
+            <div className="flex items-center justify-between gap-2 mb-0.5">
+              {(r.subcategory || r.category) && (
+                <span className="text-[0.55rem] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-sm"
+                  style={{ backgroundColor: badgeColor.bg, color: badgeColor.text }}>
+                  {r.subcategory || r.category}
                 </span>
               )}
+              {r.isFree && (
+                <span className="text-[0.55rem] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-sm ml-auto"
+                  style={{ backgroundColor: '#E8F5E9', color: '#2E7D32' }}>Free</span>
+              )}
             </div>
-          )}
+            <p className="text-xs font-semibold text-gray-900 leading-snug">{r.title}</p>
+            <p className="text-[0.68rem] text-gray-400 leading-snug line-clamp-2 mt-0.5">{r.description}</p>
+            {(r.url || phoneDisplay) && (
+              <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+                {r.url && (
+                  <a href={r.url} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-0.5 text-[0.68rem] font-semibold hover:underline transition"
+                    style={{ color: '#1A2C5B' }}>
+                    <ExternalLink size={9} />
+                    Visit site
+                  </a>
+                )}
+                {phoneDisplay && (
+                  <span className="flex items-center gap-0.5 text-[0.68rem] text-gray-400 truncate">
+                    <Phone size={9} className="shrink-0" />
+                    {phoneDisplay}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   // ── Quick reply chips ──────────────────────────────────────────────────────
   const QuickReplyChips = ({ chips }: { chips: string[] }) => (
