@@ -395,6 +395,7 @@ _This is not medical advice. Discuss with your VA provider or primary doctor._`,
           severity: data.severity,
           recommendations: finalRecs,
           keywords: data.keywords ?? [],
+          activeExclusions: data.activeExclusions ?? [],
         });
         setIsHandedOff(true);
         setChatExpanded(true);

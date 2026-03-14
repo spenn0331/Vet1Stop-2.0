@@ -91,6 +91,7 @@ export interface TriageResult {
     state: ResourceRecommendation[];
   };
   keywords?: string[];
+  activeExclusions?: string[];
 }
 
 interface ResultsPanelProps {
@@ -584,11 +585,21 @@ export default function ResultsPanel({ result, onReset }: ResultsPanelProps) {
    */
   const [liveRecs, setLiveRecs]           = useState(result.recommendations);
   const [liveKeywords, setLiveKeywords]   = useState<string[]>(result.keywords ?? []);
+  const [activeExclusions, setActiveExclusions] = useState<string[]>(result.activeExclusions ?? []);
+
+  // Track initial mount so the sync effect doesn't fire a toast on first load
+  const isInitialMount = useRef(true);
 
   // Sync liveRecs when parent passes updated recommendations (after refinement re-query)
   useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
     setLiveRecs(result.recommendations);
     setLiveKeywords(result.keywords ?? []);
+    setActiveExclusions(result.activeExclusions ?? []);
+    setShowRefreshToast(true);
   }, [result]);
 
   // ─── Pathway modal state ──────────────────────────────────────────────────
@@ -957,6 +968,19 @@ export default function ResultsPanel({ result, onReset }: ResultsPanelProps) {
               >
                 View Now
               </button>
+            </div>
+          )}
+
+          {/* ─── Active exclusion filter badges ─── */}
+          {activeExclusions.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5 mb-2 px-1">
+              <span className="text-[11px] text-gray-500 font-medium">Filtering out:</span>
+              {activeExclusions.map(ex => (
+                <span key={ex} className="inline-flex items-center gap-1 bg-red-50 border border-red-200 text-red-700 text-[11px] font-semibold px-2 py-0.5 rounded-full">
+                  <XMarkIcon className="h-3 w-3" />
+                  {ex}
+                </span>
+              ))}
             </div>
           )}
 
