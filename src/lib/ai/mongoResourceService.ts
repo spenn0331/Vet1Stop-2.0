@@ -19,15 +19,12 @@ export interface Resource {
   category?: string;
   subcategory?: string;
   resourceType?: string;
-  // Top-level fields (actual DB schema from seed scripts)
+  // URL — may be stored as url, link, or website depending on seed script
   url?: string;
+  link?: string;
+  // Phone — may be top-level string or nested in contact object
   phone?: string;
-  // Legacy nested contact (some older docs may use this)
-  contact?: {
-    phone?: string;
-    email?: string;
-    website?: string;
-  };
+  contact?: string | { phone?: string; email?: string; website?: string };
   location?: {
     address?: string;
     city?: string;
@@ -103,14 +100,15 @@ export async function searchResources(params: ResourceSearchParams): Promise<Res
       filter.serviceBranch = { $in: [params.serviceBranch] };
     }
     
-    // Query collections — healthResources first (most relevant for chat),
-    // then broader collections for education/career/leisure queries.
+    // Query collections in priority order; break as soon as we have enough results.
     const collections = [
       'healthResources',
       'educationResources',
       'lifeAndLeisureResources',
       'careerResources',
       'resources',
+      'ngos',
+      'ngoResources',
     ];
 
     let allResults: any[] = [];
@@ -145,29 +143,44 @@ export async function searchResources(params: ResourceSearchParams): Promise<Res
     const limitedResults = typedResults.slice(0, params.limit || 10);
     
     // Map to ensure each result conforms to Resource interface
-    const mappedResults: Resource[] = limitedResults.map(doc => ({
-      _id: doc._id.toString(),
-      title: doc.title || 'Untitled Resource',
-      description: doc.description || 'No description available',
-      category: doc.category,
-      subcategory: doc.subcategory,
-      resourceType: doc.resourceType,
-      // url/phone are top-level in real seed docs
-      url: doc.url,
-      phone: doc.phone,
-      // legacy nested contact fallback
-      contact: doc.contact,
-      location: doc.location,
-      eligibility: doc.eligibility,
-      veteranType: doc.veteranType,
-      serviceBranch: doc.serviceBranch,
-      tags: doc.tags,
-      isFeatured: doc.isFeatured,
-      rating: doc.rating,
-      isFree: doc.isFree,
-      lastUpdated: doc.lastUpdated,
-      updatedAt: doc.updatedAt,
-    }));
+    const mappedResults: Resource[] = limitedResults.map(doc => {
+      // URL: try url, then link, then nested contact.website
+      const resolvedUrl =
+        doc.url ||
+        doc.link ||
+        doc.website ||
+        (doc.contact && typeof doc.contact === 'object' ? doc.contact.website : undefined);
+
+      // Phone: try phone, then contact if it's a plain string, then nested contact.phone
+      const resolvedPhone =
+        doc.phone ||
+        (doc.contact && typeof doc.contact === 'string' ? doc.contact : undefined) ||
+        (doc.contact && typeof doc.contact === 'object' ? doc.contact.phone : undefined);
+
+      // Title: some NGO docs use 'name' instead of 'title'
+      const resolvedTitle = doc.title || doc.name || 'Untitled Resource';
+
+      return {
+        _id: doc._id.toString(),
+        title: resolvedTitle,
+        description: doc.description || 'No description available',
+        category: doc.category,
+        subcategory: doc.subcategory,
+        resourceType: doc.resourceType,
+        url: resolvedUrl,
+        phone: resolvedPhone,
+        location: doc.location,
+        eligibility: doc.eligibility,
+        veteranType: doc.veteranType,
+        serviceBranch: doc.serviceBranch,
+        tags: doc.tags || doc.focus,  // NGO docs use 'focus' array
+        isFeatured: doc.isFeatured || doc.featured,
+        rating: doc.rating,
+        isFree: doc.isFree || doc.costLevel === 'free',
+        lastUpdated: doc.lastUpdated,
+        updatedAt: doc.updatedAt,
+      };
+    });
     
     return mappedResults;
     
@@ -199,12 +212,12 @@ export function formatResourcesForAI(resources: Resource[]): string {
       formattedResources += `   Type: ${resource.resourceType}\n`;
     }
     
-    if (resource.contact?.website) {
-      formattedResources += `   Website: ${resource.contact.website}\n`;
+    if (resource.url) {
+      formattedResources += `   Website: ${resource.url}\n`;
     }
     
-    if (resource.contact?.phone) {
-      formattedResources += `   Phone: ${resource.contact.phone}\n`;
+    if (resource.phone) {
+      formattedResources += `   Phone: ${resource.phone}\n`;
     }
     
     if (resource.location?.state) {

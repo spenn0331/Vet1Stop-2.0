@@ -131,6 +131,12 @@ export default function useAIChat(initialUserProfile?: UserProfile, currentPage?
       const data = await res.json();
       const response: string = data.response;
       const resources: ResourceCard[] = data.resources || [];
+      // Browser-visible debug — check DevTools Console
+      console.log('[Vet1Stop Chat] API response received:', {
+        responseLength: response.length,
+        resourceCards: resources.length,
+        cards: resources.map(r => ({ title: r.title, url: r.url, phone: r.phone })),
+      });
       
       // Create assistant message — carries resource cards for widget rendering
       const assistantMessage: ChatMessage = {
