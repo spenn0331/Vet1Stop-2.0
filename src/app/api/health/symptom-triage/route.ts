@@ -247,6 +247,8 @@ function parseNegativeContext(messages: TriageMessage[]): string[] {
     { pattern: /\b(don'?t need.{0,15}caregiver|no caregiver|i'?m independent|can take care of myself)\b/, tag: 'caregiver' },
     { pattern: /\b(not a woman|i'?m.{0,5}male|i'?m a man|not.{0,10}female)\b/, tag: 'women' },
     { pattern: /\b(don'?t.{0,15}peer support|don'?t want group|not.{0,10}support group|prefer individual)\b/, tag: 'peer support' },
+    { pattern: /\b(remove art|not.{0,15}interested in art|don'?t.{0,10}art|no art|without art)\b/, tag: 'art therapy' },
+    { pattern: /\b(remove.{0,15}yoga|not.{0,10}yoga|don'?t.{0,10}yoga|no yoga)\b/, tag: 'yoga' },
   ];
 
   return NEGATIVE_MAP

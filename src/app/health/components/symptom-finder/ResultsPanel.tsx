@@ -580,9 +580,16 @@ export default function ResultsPanel({ result, onReset }: ResultsPanelProps) {
   /**
    * liveRecs: driven by initial result.recommendations, updated in-place
    * by rescoreWithKeywords() after each refine send.
+   * Also synced from parent when result prop changes (refinement re-query).
    */
   const [liveRecs, setLiveRecs]           = useState(result.recommendations);
   const [liveKeywords, setLiveKeywords]   = useState<string[]>(result.keywords ?? []);
+
+  // Sync liveRecs when parent passes updated recommendations (after refinement re-query)
+  useEffect(() => {
+    setLiveRecs(result.recommendations);
+    setLiveKeywords(result.keywords ?? []);
+  }, [result]);
 
   // ─── Pathway modal state ──────────────────────────────────────────────────
   const [pathwayModalLabel, setPathwayModalLabel] = useState<string | null>(null);
