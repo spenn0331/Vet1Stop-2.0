@@ -4,16 +4,80 @@
 - **Repo**: [github.com/spenn0331/Vet1Stop-2.0](https://github.com/spenn0331/Vet1Stop-2.0) (branch: `main`)
 - **Local Path**: `c:\Users\penny\Desktop\Vet1Stop`
 - **Primary Goal**: MVP Launch (Q2 2026)
-- **Current Phase**: Phase 1 Health MVP — Strike 8 Mission Briefings + Unification Complete
-- **Dev Server**: `npm run dev` → http://localhost:3001
-- **Last Active Development**: Mar 11, 2026
+- **Current Phase**: Phase 1 Health MVP — Chat AI Premium Upgrade Complete (Mar 14, 2026)
+- **Dev Server**: `npm run dev` → http://localhost:3000
+- **Last Active Development**: Mar 14, 2026
 - **Recovery Date**: Feb 14, 2026 (restored from git commit `863a42cd`)
-- **Latest Commits**: `6dd06daf` (Strike 7 AI overhaul), `66c05afe` (NGO filters), `623375c3` (NGO spotlight placeholders)
-- **Pending**: End-to-end browser test of Mission Briefings panel + pathway route `/health/pathways/[id]`
+- **Latest Commits**: `8e323237` (NGO mixed + card redesign), `db88f2a8` (resource field mapping), `71dcb988` (category filter fix), `748bb794` (premium chat upgrade), `87b1156c` (mic + hallucination fix)
+- **Pending**: Seed `healthResources` NGO subcategory docs to confirm NGO cards in chat; end-to-end browser test Mission Briefings + pathway route `/health/pathways/[id]`
 
 ---
 
-## 🎯 Current Status: Strike 9 Complete — Resource Intelligence Overhaul + Mission Expansion
+## 🎯 Current Status: Chat AI Premium Upgrade — Mar 14, 2026
+
+### ✅ Chat AI Premium Upgrade (Mar 14, 2026) — Commits `87b1156c` → `8e323237`
+
+**Goal:** Transform the floating chatbot from a navigation pointer into a premium AI assistant that directly answers veteran questions, surfaces real MongoDB resources as clickable cards, and feels as natural as ChatGPT/Grok.
+
+**Problem solved:** Chat was hallucinating non-existent tools ("Resource Finder Tool", fake sidebar sections), showing no greeting, crashing on mic use, and returning no resource cards despite a 200+ resource MongoDB database.
+
+**Fixes and features shipped (8 commits):**
+
+**`src/components/ai/ChatbotWidget.tsx`**
+- Fixed `transcript is not defined` ReferenceError — declared missing state, two-step mic overlay UX
+- Added `ResourceCardItem` component — compact cards rendered below AI text: navy/orange/green color-coded badge by subcategory (federal/NGO/state), title, 2-line description, `Visit site` link, truncated phone number (36-char max)
+- Added `QuickReplyChips` component — 3 context-sensitive tap chips below the last AI response. Topic-aware: PTSD → claims/treatment chips, sleep → CBT-i/service-connection chips, housing → VA loan/HUD-VASH chips, etc.
+- Updated message rendering loop to pass `isLastAI` + `prevUserMsg` to each bubble so chips only show on the latest response
+
+**`src/app/api/ai/chat/route.ts`**
+- Removed stale `contextEnhancer` import (was poisoning prompts with hallucinated navigation)
+- Always rebuilds system prompt fresh from `promptBuilder.ts` — no more sessionStorage cache poisoning
+- Added `getTopResourcesRaw()` call alongside AI generation; injects concise resource titles into system prompt and returns full resource objects in API response as `resources[]`
+- Returns `{ response, resources[], metadata }` — cards flow from DB → API → hook → widget
+
+**`src/lib/ai/promptBuilder.ts`**
+- Fully rewrote `CHATBOT_SYSTEM` with precise tab-by-tab navigation for all 5 Health page tabs
+- Explicitly forbids hallucinating tools that don't exist
+- Removed dead `getResourceRecommendationsForConcern()` function
+- Added follow-up question pattern instruction
+
+**`src/lib/ai/mongoResourceService.ts`**
+- Exported `Resource` interface for card typing across route/hook/widget
+- Fixed critical `$and` → `$or` keyword search bug (was requiring ALL words to match — returned 0 results)
+- Fixed `$elemMatch` → plain `$regex` for string array tag fields
+- Removed `category: 'Health'` filter (seed docs use `subcategory` not `category` — this silently killed every query)
+- Fixed URL/phone field resolution: tries `url` → `link` → `website` → `contact.website`; phone tries `phone` → `contact` (string) → `contact.phone`
+- Added `subcategory` filter param to `searchResources()`
+- Added `mixedSearch()` helper — runs parallel queries for 2 general + 1 NGO, deduplicates, returns top 3 mixed
+- Added NGO intent detection ("ngo", "nonprofit", "non-federal", "not va", etc.) → routes to NGO-only subcategory query
+- Added `ngos` and `ngoResources` to collection search list
+- Handles NGO schema variants: `name` → title, `link` → url, `focus` → tags
+- Added server console tracing: `[AI Resources]` prefix logs on every query
+
+**`src/hooks/useAIChat.ts`**
+- Added `ResourceCard` interface with `url`, `phone`, `rating`, `isFree` fields
+- Extended `ChatMessage` to carry `resources?: ResourceCard[]`
+- Parses `data.resources` from API response and attaches to assistant message
+- Added `[Vet1Stop Chat]` browser console log on every response (shows `resourceCards` count + titles/urls)
+
+**Card UI redesign:**
+- `rounded-lg` (was `rounded-xl`), `py-2 px-2.5` (was `py-2.5 px-3`) — compact feel
+- Left border `w-0.5` (was `w-1`) — subtle accent
+- Color-coded subcategory badges: 🔵 Federal `#E8EEF8` · 🟠 NGO `#FFF3E0` · 🟢 State `#E8F5E9`
+- Phone truncated at 36 chars with `…` — prevents long contact strings breaking layout
+- `text-[0.55rem]` badges, `text-xs` title, `text-[0.68rem]` description — clear hierarchy
+
+**Debugging infrastructure:**
+- Server terminal (`npm run dev`) logs: `[AI Resources]` query, collection, results count; `[Chat Route]` resource card count per request
+- Browser DevTools console logs: `[Vet1Stop Chat]` after every AI response — shows `resourceCards` count and card titles/URLs
+
+**Known pending:**
+- NGO cards in chat require `healthResources` docs with `subcategory: 'ngo'` — run `node scripts/seed-federal-va-resources.js` (already has ngo docs) to confirm. If still empty, inspect DB directly for ngo subcategory count.
+- Quick reply chips show wrong topic when user sends a follow-up (chips are based on previous user message, not conversation topic context)
+
+---
+
+## 🎯 Previous Status: Strike 9 Complete — Resource Intelligence Overhaul + Mission Expansion
 **As of Mar 11, 2026:** Strike 9 delivers four major upgrades: (A/B/C) Scoring engine precision (recreational penalty, coverage multiplier, raised cutoff), (D-lite) Grok AI re-ranks from our own MongoDB pool instead of hallucinating, Browse search synonym expansion fixes vocabulary gaps, Mission Briefings get `vet1stopTip` platform callouts, and the preventive-wellness mission is replaced with a legally-compliant VA Claims Navigation mission.
 
 ### ✅ Strike 9 — Resource Intelligence Overhaul + Mission Expansion (Mar 11, 2026)
