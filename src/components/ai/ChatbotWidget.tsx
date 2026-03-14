@@ -7,12 +7,42 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { Bot, User, X, RotateCcw, Send, Mic, Info, MessageSquare } from 'lucide-react';
-import useAIChat, { ChatMessage } from '@/hooks/useAIChat';
+import { Bot, User, X, RotateCcw, Send, Mic, Info, MessageSquare, ExternalLink, Phone } from 'lucide-react';
+import useAIChat, { ChatMessage, ResourceCard } from '@/hooks/useAIChat';
 
 interface ChatbotWidgetProps {
   userProfile?: any;
   currentPage?: string;
+}
+
+// Context-sensitive quick reply chips based on conversation topic
+function getQuickReplies(prevUserMsg: string): string[] {
+  const q = prevUserMsg.toLowerCase();
+  if (q.includes('ptsd') || q.includes('trauma')) {
+    return ['What PTSD treatments does VA offer?', 'How do I get a disability rating?', 'PTSD + sleep issues'];
+  }
+  if (q.includes('sleep') || q.includes('insomnia') || q.includes('nightmare')) {
+    return ['What is CBT-i Coach?', 'Is sleep a service-connected condition?', 'VA programs for PTSD + sleep'];
+  }
+  if (q.includes('claim') || q.includes('rating') || q.includes('disability')) {
+    return ['How do I start a VA claim?', 'What is a nexus letter?', 'Do I need a VSO?'];
+  }
+  if (q.includes('health') || q.includes('care') || q.includes('doctor') || q.includes('pain')) {
+    return ['How do I enroll in VA healthcare?', 'What is the Community Care Network?', 'Browse all health resources'];
+  }
+  if (q.includes('mental') || q.includes('anxiety') || q.includes('depression')) {
+    return ['What mental health programs does VA have?', 'Tell me about Vet Centers', 'How do I get a rating for mental health?'];
+  }
+  if (q.includes('education') || q.includes('gi bill') || q.includes('school')) {
+    return ['Post-9/11 vs Montgomery GI Bill', 'What is VR&E (Chapter 31)?', 'Transferring GI Bill to dependents'];
+  }
+  if (q.includes('job') || q.includes('career') || q.includes('work') || q.includes('employ')) {
+    return ['How do I translate military skills?', 'What is USAJOBS for veterans?', 'Hiring Our Heroes program'];
+  }
+  if (q.includes('housing') || q.includes('home') || q.includes('homeless')) {
+    return ['Tell me about VA home loans', 'What is HUD-VASH?', 'Transitional housing for veterans'];
+  }
+  return ['What resources are available?', 'Help with my VA benefits', 'How do I use the Health page?'];
 }
 
 // Strip accessibility artifacts + fix nested markdown headers in list items
@@ -134,8 +164,61 @@ const ChatbotWidget: React.FC<ChatbotWidgetProps> = ({
     else { startListening(); }
   };
 
+  // ── Inline resource card ─────────────────────────────────────────────────
+  const ResourceCardItem = ({ r }: { r: ResourceCard }) => (
+    <div className="rounded-xl border border-gray-100 bg-white shadow-sm overflow-hidden mb-2 last:mb-0">
+      <div className="flex">
+        <div className="w-1 shrink-0 rounded-l-xl" style={{ backgroundColor: '#1A2C5B' }} />
+        <div className="flex-1 px-3 py-2.5">
+          {(r.subcategory || r.category) && (
+            <span className="inline-block text-[0.6rem] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full mb-1.5"
+              style={{ backgroundColor: '#E8EEF8', color: '#1A2C5B' }}>
+              {r.subcategory || r.category}
+            </span>
+          )}
+          <p className="text-sm font-semibold text-gray-900 leading-snug mb-0.5">{r.title}</p>
+          <p className="text-xs text-gray-500 leading-snug line-clamp-2">{r.description}</p>
+          {(r.website || r.phone) && (
+            <div className="flex items-center gap-3 mt-2">
+              {r.website && (
+                <a href={r.website} target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-xs font-medium hover:opacity-80 transition"
+                  style={{ color: '#1A2C5B' }}>
+                  <ExternalLink size={10} />
+                  Visit site
+                </a>
+              )}
+              {r.phone && (
+                <span className="flex items-center gap-1 text-xs text-gray-500">
+                  <Phone size={10} />
+                  {r.phone}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
+  // ── Quick reply chips ──────────────────────────────────────────────────────
+  const QuickReplyChips = ({ chips }: { chips: string[] }) => (
+    <div className="flex flex-wrap gap-1.5 mt-2.5 mb-1">
+      {chips.map(chip => (
+        <button
+          key={chip}
+          onClick={() => { sendMessage(chip); }}
+          className="text-xs px-3 py-1.5 rounded-full border font-medium transition-all hover:shadow-sm active:scale-95 hover:bg-[#1A2C5B] hover:text-white"
+          style={{ borderColor: '#1A2C5B', color: '#1A2C5B', backgroundColor: 'white' }}
+        >
+          {chip}
+        </button>
+      ))}
+    </div>
+  );
+
   // ── AI bubble — react-markdown with prose typography ──────────────────────
-  const AIBubble = ({ message }: { message: ChatMessage }) => (
+  const AIBubble = ({ message, isLastAI, prevUserMsg }: { message: ChatMessage; isLastAI?: boolean; prevUserMsg?: string }) => (
     <div className="flex items-start gap-2.5 mb-4">
       <div
         className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 mt-0.5 shadow-sm"
@@ -182,6 +265,16 @@ const ChatbotWidget: React.FC<ChatbotWidgetProps> = ({
             {fmtTime(message.timestamp)}
           </p>
         </div>
+        {/* Resource cards — rendered below AI text bubble */}
+        {message.resources && message.resources.length > 0 && (
+          <div className="mt-2 w-full">
+            {message.resources.map((r, i) => <ResourceCardItem key={i} r={r} />)}
+          </div>
+        )}
+        {/* Quick reply chips — only on the most recent AI response */}
+        {isLastAI && prevUserMsg && (
+          <QuickReplyChips chips={getQuickReplies(prevUserMsg)} />
+        )}
       </div>
     </div>
   );
@@ -205,8 +298,10 @@ const ChatbotWidget: React.FC<ChatbotWidgetProps> = ({
     </div>
   );
 
-  const MessageBubble = ({ message }: { message: ChatMessage }) =>
-    message.role === 'user' ? <UserBubble message={message} /> : <AIBubble message={message} />;
+  const MessageBubble = ({ message, isLastAI, prevUserMsg }: { message: ChatMessage; isLastAI?: boolean; prevUserMsg?: string }) =>
+    message.role === 'user'
+      ? <UserBubble message={message} />
+      : <AIBubble message={message} isLastAI={isLastAI} prevUserMsg={prevUserMsg} />;
 
   return (
     <>
@@ -271,9 +366,21 @@ const ChatbotWidget: React.FC<ChatbotWidgetProps> = ({
             className="flex-1 overflow-y-auto overflow-x-hidden px-4 pt-4 pb-2"
             style={{ scrollBehavior: 'smooth' }}
           >
-            {messages
-              .filter(m => m.role !== 'system')
-              .map(m => <MessageBubble key={m.id} message={m} />)}
+            {(() => {
+              const visible = messages.filter(m => m.role !== 'system');
+              const lastAIIdx = visible.map(m => m.role).lastIndexOf('assistant');
+              return visible.map((m, idx) => {
+                const prevUser = visible.slice(0, idx).reverse().find(x => x.role === 'user')?.content;
+                return (
+                  <MessageBubble
+                    key={m.id}
+                    message={m}
+                    isLastAI={m.role === 'assistant' && idx === lastAIIdx}
+                    prevUserMsg={prevUser}
+                  />
+                );
+              });
+            })()}
 
             {/* Typing indicator */}
             {isLoading && (

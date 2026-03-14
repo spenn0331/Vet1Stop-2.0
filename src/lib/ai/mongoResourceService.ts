@@ -10,9 +10,9 @@ import { clientPromise } from '@/lib/mongodb';
 import { Document, WithId } from 'mongodb';
 
 /**
- * Resource type interface
+ * Resource type interface — exported for card rendering in the chat widget
  */
-interface Resource {
+export interface Resource {
   _id: string;
   title: string;
   description: string;
@@ -273,52 +273,50 @@ export async function getHealthcareResources(): Promise<string> {
 }
 
 /**
- * Get resources based on user query
+ * Get resources based on user query — returns formatted text for system prompt injection
  */
 export async function getResourcesForQuery(query: string): Promise<string> {
-  // Normalize the query
-  const normalizedQuery = query.toLowerCase();
-  
-  // Check which type of resources to fetch
-  if (normalizedQuery.includes('ptsd') || 
-      normalizedQuery.includes('trauma') || 
-      normalizedQuery.includes('mental health')) {
-    return await getPTSDResources();
-  }
-  
-  if (normalizedQuery.includes('education') || 
-      normalizedQuery.includes('gi bill') || 
-      normalizedQuery.includes('school') || 
-      normalizedQuery.includes('college')) {
-    return await getEducationResources();
-  }
-  
-  if (normalizedQuery.includes('job') || 
-      normalizedQuery.includes('career') || 
-      normalizedQuery.includes('employment') || 
-      normalizedQuery.includes('work')) {
-    return await getEmploymentResources();
-  }
-  
-  if (normalizedQuery.includes('benefits') || 
-      normalizedQuery.includes('va') || 
-      normalizedQuery.includes('claims') || 
-      normalizedQuery.includes('disability')) {
-    return await getBenefitsResources();
-  }
-  
-  if (normalizedQuery.includes('healthcare') || 
-      normalizedQuery.includes('medical') || 
-      normalizedQuery.includes('health') || 
-      normalizedQuery.includes('treatment')) {
-    return await getHealthcareResources();
-  }
-  
-  // Generic search for other queries
-  const resources = await searchResources({
-    keywords: query,
-    limit: 5
-  });
-  
+  const resources = await getTopResourcesRaw(query);
   return formatResourcesForAI(resources);
+}
+
+/**
+ * Get top resources for a query — returns raw Resource[] for card rendering.
+ * Route returns these as structured data alongside the AI text response.
+ */
+export async function getTopResourcesRaw(query: string): Promise<Resource[]> {
+  const q = query.toLowerCase();
+
+  if (q.includes('ptsd') || q.includes('trauma') || q.includes('mental health') ||
+      q.includes('anxiety') || q.includes('depression') || q.includes('stress') ||
+      q.includes('sleep') || q.includes('insomnia') || q.includes('nightmare')) {
+    return searchResources({ keywords: 'ptsd trauma mental health sleep anxiety', category: 'Health', limit: 3 });
+  }
+
+  if (q.includes('education') || q.includes('gi bill') || q.includes('school') || q.includes('college') || q.includes('degree')) {
+    return searchResources({ keywords: 'education gi bill school college training', category: 'Education', limit: 3 });
+  }
+
+  if (q.includes('job') || q.includes('career') || q.includes('employment') || q.includes('work') || q.includes('resume') || q.includes('hire')) {
+    return searchResources({ keywords: 'job career employment work resume veteran', category: 'Careers', limit: 3 });
+  }
+
+  if (q.includes('disability') || q.includes('rating') || q.includes('claim') || q.includes('c&p') || q.includes('nexus')) {
+    return searchResources({ keywords: 'disability rating claim benefits compensation', limit: 3 });
+  }
+
+  if (q.includes('benefits') || q.includes('va') || q.includes('eligib')) {
+    return searchResources({ keywords: 'benefits va claims disability compensation', limit: 3 });
+  }
+
+  if (q.includes('health') || q.includes('medical') || q.includes('doctor') || q.includes('treatment') || q.includes('care') || q.includes('pain')) {
+    return searchResources({ keywords: 'healthcare medical treatment health', category: 'Health', limit: 3 });
+  }
+
+  if (q.includes('housing') || q.includes('home') || q.includes('homeless') || q.includes('hud')) {
+    return searchResources({ keywords: 'housing home loan homeless veteran', limit: 3 });
+  }
+
+  // Generic fallback
+  return searchResources({ keywords: query, limit: 3 });
 }

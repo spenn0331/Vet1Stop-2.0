@@ -8,7 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { chat, Message } from '@/lib/ai/grokService';
 import { buildChatbotSystemPrompt } from '@/lib/ai/promptBuilder';
-import { getResourcesForQuery } from '@/lib/ai/mongoResourceService';
+import { getTopResourcesRaw, Resource } from '@/lib/ai/mongoResourceService';
 import { updateProfileFromMessage, getProfileForAIContext } from '@/lib/ai/userProfileService';
 import { detectCrisis, enhanceMessageWithCrisisProtocol, getCrisisPreamble, CrisisFlag } from '@/lib/ai/crisisProtocol';
 import { getLocalResourcesFromProfile } from '@/lib/ai/localResourceService';
@@ -81,14 +81,20 @@ export async function POST(request: NextRequest) {
 
     chatMessages.unshift({ role: 'system', content: systemPrompt });
     
-    // Try to get relevant resources from MongoDB
+    // Fetch top 3 matching resources — inject concise titles into system prompt,
+    // return full objects to client for card rendering (no verbose text in prompt).
+    let resourceCards: Resource[] = [];
     try {
-      const resourcesContext = await getResourcesForQuery(userQuery);
-      if (resourcesContext && chatMessages[0]?.role === 'system') {
-        chatMessages[0].content += `\n\nRelevant Resources from Vet1Stop Database: ${resourcesContext}`;
+      resourceCards = await getTopResourcesRaw(userQuery);
+      if (resourceCards.length > 0 && chatMessages[0]?.role === 'system') {
+        const conciseTitles = resourceCards
+          .map((r, i) => `RESOURCE ${i + 1}: "${r.title}" — ${r.description.slice(0, 90)}${r.description.length > 90 ? '...' : ''}`)
+          .join('\n');
+        chatMessages[0].content +=
+          `\n\nMATCHED RESOURCES (the chat UI will render these as clickable cards — just mention 1-2 by title in your reply, do NOT describe them at length):\n${conciseTitles}`;
       }
     } catch (error) {
-      console.error('Error getting MongoDB resources:', error);
+      console.error('Error getting resource cards:', error);
     }
     
     // Add local resources based on user profile if in crisis
@@ -140,15 +146,24 @@ export async function POST(request: NextRequest) {
     // Log information about the interaction
     console.log(`AI Chat: ${userQuery.substring(0, 50)}... | Crisis: ${isCrisis} | Profile: ${!!userProfile} | Local Resources: ${isCrisis ? 'Added' : 'N/A'} | Follow-up: ${isCrisis ? 'Scheduled' : 'N/A'}`);
 
-    // Return the enhanced response
+    // Return response + structured resource cards for client-side card rendering
+    const resourcesPayload = resourceCards.map(r => ({
+      title: r.title,
+      description: r.description,
+      category: r.category,
+      subcategory: r.subcategory,
+      website: r.contact?.website,
+      phone: r.contact?.phone,
+      resourceType: r.resourceType,
+    }));
+
     return NextResponse.json({ 
       response,
+      resources: resourcesPayload,
       metadata: {
         crisisDetected: isCrisis,
         crisisType: isCrisis ? crisisFlag : null,
         followUpScheduled: isCrisis,
-        resourcesAdded: true,
-        accessibilityEnhanced: true
       }
     });
   } catch (error) {

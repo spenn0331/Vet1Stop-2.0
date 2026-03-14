@@ -17,9 +17,20 @@ import {
 } from '@/lib/ai/contextManager';
 import { buildChatbotSystemPrompt } from '@/lib/ai/promptBuilder';
 
+export interface ResourceCard {
+  title: string;
+  description: string;
+  category?: string;
+  subcategory?: string;
+  website?: string;
+  phone?: string;
+  resourceType?: string;
+}
+
 export interface ChatMessage extends Message {
   id: string;
   timestamp: number;
+  resources?: ResourceCard[];
 }
 
 /**
@@ -117,11 +128,13 @@ export default function useAIChat(initialUserProfile?: UserProfile, currentPage?
       }
       const data = await res.json();
       const response: string = data.response;
+      const resources: ResourceCard[] = data.resources || [];
       
-      // Create assistant message
+      // Create assistant message — carries resource cards for widget rendering
       const assistantMessage: ChatMessage = {
         role: 'assistant',
         content: response,
+        resources: resources.length > 0 ? resources : undefined,
         id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         timestamp: Date.now()
       };
