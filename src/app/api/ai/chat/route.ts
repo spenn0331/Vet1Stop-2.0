@@ -94,8 +94,9 @@ export async function POST(request: NextRequest) {
           `\n\nMATCHED RESOURCES (the chat UI will render these as clickable cards — just mention 1-2 by title in your reply, do NOT describe them at length):\n${conciseTitles}`;
       }
     } catch (error) {
-      console.error('Error getting resource cards:', error);
+      console.error('[Chat Route] Error getting resource cards:', error);
     }
+    console.log(`[Chat Route] Resource cards fetched: ${resourceCards.length} | Query: "${userQuery.slice(0, 60)}"`);
     
     // Add local resources based on user profile if in crisis
     if (isCrisis && userId) {

@@ -69,22 +69,19 @@ export async function searchResources(params: ResourceSearchParams): Promise<Res
     // Build query filters
     const filter: any = {};
     
-    // Keyword search using regex on title/description/tags.
-    // Uses $or so ANY matching word returns results (not $and which requires ALL words).
+    // Keyword search — $or means ANY word matching title/description/tags returns the doc.
+    // For string-array fields like tags[], use plain $regex (NOT $elemMatch).
     if (params.keywords) {
       const words = params.keywords.trim().split(/\s+/).filter(Boolean);
       const wordConditions = words.flatMap(w => [
         { title:       { $regex: w, $options: 'i' } },
         { description: { $regex: w, $options: 'i' } },
-        { tags:        { $elemMatch: { $regex: w, $options: 'i' } } },
+        { tags:        { $regex: w, $options: 'i' } },  // plain regex works on string arrays
       ]);
       filter.$or = wordConditions;
     }
-    
-    // Category filter
-    if (params.category) {
-      filter.category = params.category;
-    }
+    // NOTE: No category filter — seed docs use subcategory:'federal'/'ngo' not a category field.
+    // Filtering by category would return 0 results.
     
     // Resource type filter
     if (params.resourceType) {
@@ -124,11 +121,18 @@ export async function searchResources(params: ResourceSearchParams): Promise<Res
           .find(filter)
           .limit(params.limit || 3)
           .toArray();
+        if (results.length > 0) {
+          console.log(`[AI Resources] ${collection}: found ${results.length} docs for filter keys: ${Object.keys(filter).join(', ')}`);
+        }
         allResults = [...allResults, ...results];
         if (allResults.length >= (params.limit || 3)) break;
-      } catch {
-        // Collection may not exist — skip silently
+      } catch (err) {
+        console.error(`[AI Resources] Error querying ${collection}:`, err);
       }
+    }
+
+    if (allResults.length === 0) {
+      console.warn('[AI Resources] Zero results. Filter:', JSON.stringify(filter).slice(0, 200));
     }
     
     // Cast to any first to handle mixed document types
@@ -303,18 +307,20 @@ export async function getResourcesForQuery(query: string): Promise<string> {
 export async function getTopResourcesRaw(query: string): Promise<Resource[]> {
   const q = query.toLowerCase();
 
+  console.log(`[AI Resources] getTopResourcesRaw called with: "${q.slice(0, 80)}"`);
+
   if (q.includes('ptsd') || q.includes('trauma') || q.includes('mental health') ||
       q.includes('anxiety') || q.includes('depression') || q.includes('stress') ||
       q.includes('sleep') || q.includes('insomnia') || q.includes('nightmare')) {
-    return searchResources({ keywords: 'ptsd trauma mental health sleep anxiety', category: 'Health', limit: 3 });
+    return searchResources({ keywords: 'ptsd trauma mental health sleep anxiety', limit: 3 });
   }
 
   if (q.includes('education') || q.includes('gi bill') || q.includes('school') || q.includes('college') || q.includes('degree')) {
-    return searchResources({ keywords: 'education gi bill school college training', category: 'Education', limit: 3 });
+    return searchResources({ keywords: 'education gi bill school college training', limit: 3 });
   }
 
   if (q.includes('job') || q.includes('career') || q.includes('employment') || q.includes('work') || q.includes('resume') || q.includes('hire')) {
-    return searchResources({ keywords: 'job career employment work resume veteran', category: 'Careers', limit: 3 });
+    return searchResources({ keywords: 'job career employment work resume veteran', limit: 3 });
   }
 
   if (q.includes('disability') || q.includes('rating') || q.includes('claim') || q.includes('c&p') || q.includes('nexus')) {
@@ -326,7 +332,7 @@ export async function getTopResourcesRaw(query: string): Promise<Resource[]> {
   }
 
   if (q.includes('health') || q.includes('medical') || q.includes('doctor') || q.includes('treatment') || q.includes('care') || q.includes('pain')) {
-    return searchResources({ keywords: 'healthcare medical treatment health', category: 'Health', limit: 3 });
+    return searchResources({ keywords: 'healthcare medical treatment health', limit: 3 });
   }
 
   if (q.includes('housing') || q.includes('home') || q.includes('homeless') || q.includes('hud')) {
