@@ -37,9 +37,8 @@ import {
 const PRIMARY_MODEL = 'grok-4';
 const FALLBACK_MODEL = 'grok-3-latest';
 
-// ─── Location context (MVP hardcoded — dynamic in Pass 2) ────────────────────
-// TODO Pass 2: pull from Firebase Auth custom claim (user.state) or ask once in chat
-const CARLISLE_PA_CONTEXT = 'Carlisle, PA'; // MVP testing — make dynamic in Pass 2
+// ─── Location context (neutral default — dynamic via bridgeContext.userState / geolocation) ────
+const DEFAULT_LOCATION_CONTEXT = 'your area'; // generic fallback when no state is detected
 
 // ─── System prompt ────────────────────────────────────────────────────────────
 
@@ -158,6 +157,7 @@ async function callGrokModel(
   messages: TriageMessage[],
   systemPrompt: string,
   temperature = 0.3,
+  maxTokens = 1500,
 ): Promise<string> {
   const response = await fetch('https://api.x.ai/v1/chat/completions', {
     method: 'POST',
@@ -169,7 +169,7 @@ async function callGrokModel(
       model,
       messages: [{ role: 'system', content: systemPrompt }, ...messages],
       temperature,
-      max_tokens: 4000,      // Strike 9D: bumped from 2000 → 4000 for resource pool JSON
+      max_tokens: maxTokens,
     }),
   });
 
@@ -182,7 +182,7 @@ async function callGrokModel(
   return data.choices?.[0]?.message?.content || '';
 }
 
-async function callGrokAI(messages: TriageMessage[], systemPrompt: string, temperature = 0.3): Promise<string> {
+async function callGrokAI(messages: TriageMessage[], systemPrompt: string, temperature = 0.3, maxTokens = 1500): Promise<string> {
   const apiKey = getGrokApiKey();
   if (!apiKey) {
     console.warn('[SymptomTriage] No Grok API key — using static fallback');
@@ -190,14 +190,14 @@ async function callGrokAI(messages: TriageMessage[], systemPrompt: string, tempe
   }
 
   try {
-    const result = await callGrokModel(apiKey, PRIMARY_MODEL, messages, systemPrompt, temperature);
+    const result = await callGrokModel(apiKey, PRIMARY_MODEL, messages, systemPrompt, temperature, maxTokens);
     if (result) return result;
   } catch (err) {
     console.warn(`[SymptomTriage] ${PRIMARY_MODEL} failed:`, (err as Error).message);
   }
 
   try {
-    const result = await callGrokModel(apiKey, FALLBACK_MODEL, messages, systemPrompt, temperature);
+    const result = await callGrokModel(apiKey, FALLBACK_MODEL, messages, systemPrompt, temperature, maxTokens);
     if (result) return result;
   } catch (err) {
     console.warn(`[SymptomTriage] ${FALLBACK_MODEL} also failed:`, (err as Error).message);
@@ -411,7 +411,7 @@ function buildSystemPrompt(
   let prompt = TRIAGE_SYSTEM_PROMPT;
 
   // Inject location context
-  const locationStr = bridgeContext?.userState ?? CARLISLE_PA_CONTEXT;
+  const locationStr = bridgeContext?.userState ?? DEFAULT_LOCATION_CONTEXT;
   const stateLabel  = bridgeContext?.userState ?? 'their state (detect from chat if mentioned)';
   prompt += `\n\nUSER LOCATION: Veteran is in ${locationStr}. State Track MUST match ${stateLabel} exactly. Never show resources from other states.`;
 
@@ -528,7 +528,7 @@ function applyScoring(
         isFree: r.isFree,
         costLevel: r.costLevel,
         rating: r.rating,
-        location: r.location ?? CARLISLE_PA_CONTEXT,
+        location: r.location ?? undefined,
         url: r.url,
         phone: r.phone,
         updatedAt: r.updatedAt,
@@ -537,6 +537,8 @@ function applyScoring(
     ).map((s, idx): ScoredRawResource => ({
       ...resources[idx],
       ...s,
+      // Derive priority from score — overrides the flat 'medium' default from DB
+      priority: (s.score ?? 0) >= 70 ? 'high' : (s.score ?? 0) >= 50 ? 'medium' : 'low',
       location: typeof s.location === 'object' ? undefined : s.location,
     }));
     const filtered = scored.filter(r => (r.score ?? 0) >= cutoff);
@@ -547,7 +549,7 @@ function applyScoring(
   return {
     va:    scoreTrack(vaResources),
     ngo:   scoreTrack(ngoResources, NGO_CUTOFF),
-    state: scoreTrack(stateResources.map(r => ({ ...r, location: r.location ?? 'Pennsylvania, PA' }))),
+    state: scoreTrack(stateResources.map(r => ({ ...r, location: r.location ?? undefined }))),
     keywords: scoringContext.keywords,
   };
 }
@@ -596,13 +598,13 @@ function getAssessFallback(bridgeContext?: BridgeContext): object {
   ];
 
   const rawState: RawResource[] = [
-    { title: 'Pennsylvania DMVA Veterans Benefits', description: 'PA Department of Military and Veterans Affairs provides state-funded benefits including education, healthcare, and burial assistance. Free to all eligible PA veterans.', url: 'https://www.dmva.pa.gov/veteransbenefits/', priority: 'high', tags: ['veteran', 'benefits', 'pennsylvania', 'grant', 'free'], location: 'Pennsylvania, PA', isFree: true },
-    { title: 'PA Veterans Trust Fund Grants', description: 'Emergency financial assistance grants for Pennsylvania veterans facing hardship. Applications accepted through county directors year-round.', url: 'https://www.dmva.pa.gov/VETERANS/BenefitsAndServices/pages/veterans-trust-fund.aspx', priority: 'high', tags: ['grant', 'financial assistance', 'veteran', 'pennsylvania', 'free'], location: 'Pennsylvania, PA', isFree: true },
-    { title: 'HACC Veterans Resource Center (Carlisle area)', description: 'Harrisburg Area Community College offers veteran-specific academic support, counseling referrals, and peer mentorship. Located in the Carlisle/Camp Hill area.', url: 'https://www.hacc.edu/StudentServices/VeteranServices/', priority: 'high', tags: ['education', 'peer support', 'carlisle', 'veteran', 'free'], location: 'Carlisle, PA', isFree: true },
-    { title: 'PA Veteran Emergency Assistance Program', description: 'Short-term emergency financial aid for Pennsylvania veterans experiencing temporary financial crisis. Includes utility, rent, and medical cost assistance.', url: 'https://www.phfa.org/', priority: 'medium', tags: ['financial assistance', 'grant', 'veteran', 'pennsylvania', 'emergency'], location: 'Pennsylvania, PA' },
-    { title: 'Penn State Hershey VA Community Based Outpatient Clinic', description: 'VA community clinic serving Cumberland County veterans near Carlisle with primary care and mental health services. No travel to main VAMC required.', url: 'https://www.va.gov/central-pennsylvania-health-care/locations/', priority: 'high', tags: ['healthcare', 'mental health', 'carlisle', 'veteran', 'va', 'free'], location: 'Carlisle, PA', isFree: true },
-    { title: 'PA Adaptive Sports & Wellness Program', description: 'State-funded adaptive sports and wellness programs for veterans with service-connected disabilities. Includes yoga, archery, and fitness programs.', url: 'https://www.dmva.pa.gov/', priority: 'medium', tags: ['adaptive sports', 'fitness', 'yoga', 'veteran', 'pennsylvania', 'free'], location: 'Pennsylvania, PA', isFree: true },
-    { title: 'Cumberland County Veterans Affairs Office', description: 'Free claims assistance, benefits counseling, and referrals for veterans in Carlisle and surrounding Cumberland County area. Walk-ins welcome.', url: 'https://www.cumberlandcountypa.gov/departments/veterans-affairs/', priority: 'medium', tags: ['benefits', 'claims', 'carlisle', 'veteran', 'vso', 'free'], location: 'Carlisle, PA', isFree: true },
+    { title: 'VA State Veterans Affairs Offices', description: 'Every U.S. state has a dedicated Department of Veterans Affairs office providing state-funded benefits, healthcare referrals, and emergency assistance. Find your state office at va.gov.', url: 'https://www.va.gov/statedva.htm', priority: 'high', tags: ['veteran', 'benefits', 'state', 'grant', 'free'], isFree: true },
+    { title: 'DAV (Disabled American Veterans) Chapter Locator', description: 'DAV has state chapters and service officers nationwide providing free claims assistance, transportation, and advocacy for disabled veterans. Find your nearest chapter instantly.', url: 'https://www.dav.org/find-your-chapter/', phone: '1-877-426-2838', priority: 'high', tags: ['benefits', 'claims', 'vso', 'veteran', 'free', 'disability'], isFree: true },
+    { title: 'VFW State & Local Post Finder', description: 'Veterans of Foreign Wars operates 6,000+ posts nationwide offering local peer support, benefits counseling, and community events. Find a post in your area.', url: 'https://www.vfw.org/find-a-post', priority: 'high', tags: ['peer support', 'community', 'benefits', 'veteran', 'free', 'vso'], isFree: true },
+    { title: 'VA Vet Center Locator', description: 'Community-based Vet Centers provide readjustment counseling, mental health services, and MST support in non-clinical settings. Over 300 locations across all 50 states.', url: 'https://www.va.gov/find-locations/?facilityType=vet_center', priority: 'high', tags: ['mental health', 'counseling', 'veteran', 'free', 'community', 'ptsd'], isFree: true },
+    { title: 'SAMHSA Veterans Behavioral Health', description: 'SAMHSA connects veterans and families to state-licensed substance use and mental health treatment programs. Includes the Veterans Crisis Line referral network nationwide.', url: 'https://www.samhsa.gov/veterans-military-families', phone: '1-800-662-4357', priority: 'medium', tags: ['mental health', 'substance use', 'veteran', 'free', 'state'], isFree: true },
+    { title: 'Vets4Warriors Peer Support Line', description: '24/7 confidential peer support by and for veterans. Staffed entirely by veterans — call to talk, vent, or get connected to local resources in your state.', url: 'https://vets4warriors.com/', phone: '1-855-838-8255', priority: 'medium', tags: ['peer support', 'mental health', 'veteran', 'free', 'crisis', 'community'], isFree: true },
+    { title: 'American Legion State Programs Locator', description: 'The American Legion operates state-level veteran assistance programs including emergency financial aid, healthcare navigation, and benefits claims support nationwide.', url: 'https://www.legion.org/findapost', priority: 'medium', tags: ['benefits', 'financial assistance', 'veteran', 'free', 'community', 'vso'], isFree: true },
   ];
 
   const scored = applyScoring(rawVa, rawNgo, rawState, bridgeContext);
@@ -762,7 +764,9 @@ export async function POST(request: NextRequest) {
       const dbResults = await fetchDomainResources(HEALTH_CONFIG, kws, fetchBridge, fetchExclusions);
       let dbVa    = applyExclusions(dbResults['va']    ?? [], exclusionTags);
       let dbNgo   = applyExclusions(dbResults['ngo']   ?? [], exclusionTags);
-      let dbState = applyExclusions(dbResults['state'] ?? [], exclusionTags);
+      // State: skip post-fetch exclusion — already protected in resource-fetcher (trackExclusionFilter).
+      // Applying exclusions here a second time would zero out scarce PA state resources.
+      let dbState = dbResults['state'] ?? [];
       let dbTotal = dbVa.length + dbNgo.length + dbState.length;
 
       // Tier 2: drop state filter if < 10 results
@@ -772,7 +776,7 @@ export async function POST(request: NextRequest) {
         const t2 = await fetchDomainResources(HEALTH_CONFIG, kws, relaxedBridge, fetchExclusions);
         const t2Va = applyExclusions(t2['va'] ?? [], exclusionTags);
         const t2Ngo = applyExclusions(t2['ngo'] ?? [], exclusionTags);
-        const t2State = applyExclusions(t2['state'] ?? [], exclusionTags);
+        const t2State = t2['state'] ?? []; // State: no post-fetch exclusion (see above)
         if (t2Va.length + t2Ngo.length + t2State.length > dbTotal) {
           dbVa = t2Va; dbNgo = t2Ngo; dbState = t2State;
           dbTotal = dbVa.length + dbNgo.length + dbState.length;
@@ -785,7 +789,7 @@ export async function POST(request: NextRequest) {
         const t3 = await fetchDomainResources(HEALTH_CONFIG, [], fetchBridge, fetchExclusions);
         const t3Va = applyExclusions(t3['va'] ?? [], exclusionTags);
         const t3Ngo = applyExclusions(t3['ngo'] ?? [], exclusionTags);
-        const t3State = applyExclusions(t3['state'] ?? [], exclusionTags);
+        const t3State = t3['state'] ?? []; // State: no post-fetch exclusion (see above)
         if (t3Va.length + t3Ngo.length + t3State.length > dbTotal) {
           dbVa = t3Va; dbNgo = t3Ngo; dbState = t3State;
         }

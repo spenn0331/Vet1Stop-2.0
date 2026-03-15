@@ -4,12 +4,36 @@
 - **Repo**: [github.com/spenn0331/Vet1Stop-2.0](https://github.com/spenn0331/Vet1Stop-2.0) (branch: `main`)
 - **Local Path**: `c:\Users\penny\Desktop\Vet1Stop`
 - **Primary Goal**: MVP Launch (Q2 2026)
-- **Current Phase**: Phase 1 Health MVP — Chat AI Premium Upgrade Complete (Mar 14, 2026)
+- **Current Phase**: Health MVP v1.0 Complete + Phase 2 Health Tools In Progress (Mar 15, 2026)
 - **Dev Server**: `npm run dev` → http://localhost:3000
-- **Last Active Development**: Mar 14, 2026
+- **Last Active Development**: Mar 15, 2026
 - **Recovery Date**: Feb 14, 2026 (restored from git commit `863a42cd`)
 - **Latest Commits**: `8e323237` (NGO mixed + card redesign), `db88f2a8` (resource field mapping), `71dcb988` (category filter fix), `748bb794` (premium chat upgrade), `87b1156c` (mic + hallucination fix)
-- **Pending**: Seed `healthResources` NGO subcategory docs to confirm NGO cards in chat; end-to-end browser test Mission Briefings + pathway route `/health/pathways/[id]`
+- **In Progress**: Phase 2 health tools (/health/wellness, /health/scribe, /health/cpp-prep) + Auto-Fill engine (/auto-fill)
+
+---
+
+## 🎯 Current Status: Health MVP v1.0 Complete + Phase 2 In Progress — Mar 15, 2026
+
+### ✅ Health MVP v1.0 Final Polish (Mar 15, 2026)
+
+**Goal:** Complete final polish of the Health page MVP — fix PA-hardcoded state fallback, remove orphaned files, and prepare for Phase 2 health tools.
+
+**Changes shipped:**
+
+**`src/app/api/health/symptom-triage/route.ts`**
+- Removed `CARLISLE_PA_CONTEXT` / `'Pennsylvania, PA'` hardcode. Replaced with `DEFAULT_LOCATION_CONTEXT = 'your area'` — a neutral generic fallback valid for any state.
+- Replaced 7 PA-specific state fallback resources (PA DMVA, HACC Carlisle, Cumberland County VA, Penn State Hershey CBOC, etc.) with 7 nationally-applicable resources valid for any state: VA State Veterans Affairs Offices locator, DAV Chapter Locator, VFW Post Finder, VA Vet Center Locator, SAMHSA Veterans Behavioral Health, Vets4Warriors, American Legion State Programs.
+- Fixed `scoreTrack` to use `location: r.location ?? undefined` (was `?? 'Pennsylvania, PA'`).
+
+**`src/app/health/simplified/`**
+- Deleted orphaned empty directory.
+
+**Phase 2 health tools (in progress this session):**
+- `/health/wellness` — AI Wellness Predictor (client-side, localStorage, no API)
+- `/health/scribe` — Ambient Scribe Companion (Web Speech API + Grok + jsPDF)
+- `/health/cpp-prep` — C&P Exam Prep (Smart Bridge receiver + Grok questions)
+- `/auto-fill` — Auto-Fill engine (pdfjs-dist + Tesseract.js OCR, client-side only, Digital Sea Bag)
 
 ---
 
