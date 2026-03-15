@@ -15,6 +15,9 @@ import {
   AcademicCapIcon,
   BriefcaseIcon,
   SparklesIcon,
+  HeartIcon,
+  MicrophoneIcon,
+  ClipboardDocumentCheckIcon,
 } from '@heroicons/react/24/outline';
 import Link from 'next/link';
 import NGOSpotlight from './components/NGOSpotlight';
@@ -185,6 +188,60 @@ export default function HealthPage() {
                   Apply on VA.gov <ArrowRightIcon className="h-4 w-4" aria-hidden="true" />
                 </a>
               </div>
+            </div>
+          </div>
+
+          {/* Phase 2 tools row */}
+          <div className="mt-8">
+            <div className="flex items-center gap-3 mb-5">
+              <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider">Phase 2 Tools</h3>
+              <span className="text-[11px] font-semibold text-[#1A2C5B] bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-full">New</span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Wellness Predictor */}
+              <Link href="/health/wellness" className="group relative bg-gradient-to-br from-amber-50 to-yellow-50 rounded-2xl p-5 border border-amber-100 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-2" aria-label="Go to AI Wellness Predictor">
+                <div className="flex justify-between items-start mb-3">
+                  <div className="h-10 w-10 rounded-xl bg-amber-500 flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform duration-200">
+                    <HeartIcon className="h-5 w-5 text-white" aria-hidden="true" />
+                  </div>
+                  <ArrowRightIcon className="h-4 w-4 text-amber-300 group-hover:text-amber-500 group-hover:translate-x-1 transition-all duration-200" aria-hidden="true" />
+                </div>
+                <h4 className="text-sm font-extrabold text-[#1A2C5B] mb-1">Wellness Predictor</h4>
+                <p className="text-xs text-gray-500 leading-relaxed">Daily check-in sliders, 7-day trend chart, and smart resource suggestions — private, no data leaves your device.</p>
+                <div className="mt-3 pt-3 border-t border-amber-100">
+                  <span className="text-xs font-bold text-amber-700 group-hover:text-amber-800 inline-flex items-center gap-1">Start Check-In <ArrowRightIcon className="h-3 w-3" aria-hidden="true" /></span>
+                </div>
+              </Link>
+
+              {/* Ambient Scribe */}
+              <Link href="/health/scribe" className="group relative bg-gradient-to-br from-indigo-50 to-blue-50 rounded-2xl p-5 border border-indigo-100 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-2" aria-label="Go to Ambient Scribe Companion">
+                <div className="flex justify-between items-start mb-3">
+                  <div className="h-10 w-10 rounded-xl bg-indigo-500 flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform duration-200">
+                    <MicrophoneIcon className="h-5 w-5 text-white" aria-hidden="true" />
+                  </div>
+                  <ArrowRightIcon className="h-4 w-4 text-indigo-300 group-hover:text-indigo-500 group-hover:translate-x-1 transition-all duration-200" aria-hidden="true" />
+                </div>
+                <h4 className="text-sm font-extrabold text-[#1A2C5B] mb-1">Ambient Scribe</h4>
+                <p className="text-xs text-gray-500 leading-relaxed">Speak or type your health notes — AI organizes them into a structured summary you can download as a PDF.</p>
+                <div className="mt-3 pt-3 border-t border-indigo-100">
+                  <span className="text-xs font-bold text-indigo-700 group-hover:text-indigo-800 inline-flex items-center gap-1">Start Recording <ArrowRightIcon className="h-3 w-3" aria-hidden="true" /></span>
+                </div>
+              </Link>
+
+              {/* C&P Exam Prep */}
+              <Link href="/health/cpp-prep" className="group relative bg-gradient-to-br from-emerald-50 to-teal-50 rounded-2xl p-5 border border-emerald-100 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2" aria-label="Go to C&P Exam Prep">
+                <div className="flex justify-between items-start mb-3">
+                  <div className="h-10 w-10 rounded-xl bg-emerald-600 flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform duration-200">
+                    <ClipboardDocumentCheckIcon className="h-5 w-5 text-white" aria-hidden="true" />
+                  </div>
+                  <ArrowRightIcon className="h-4 w-4 text-emerald-300 group-hover:text-emerald-500 group-hover:translate-x-1 transition-all duration-200" aria-hidden="true" />
+                </div>
+                <h4 className="text-sm font-extrabold text-[#1A2C5B] mb-1">C&amp;P Exam Prep</h4>
+                <p className="text-xs text-gray-500 leading-relaxed">Practice your C&P exam with AI-generated questions, role-play feedback, and a downloadable prep sheet.</p>
+                <div className="mt-3 pt-3 border-t border-emerald-100">
+                  <span className="text-xs font-bold text-emerald-700 group-hover:text-emerald-800 inline-flex items-center gap-1">Start Prep <ArrowRightIcon className="h-3 w-3" aria-hidden="true" /></span>
+                </div>
+              </Link>
             </div>
           </div>
         </div>

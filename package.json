@@ -26,6 +26,7 @@
     "dotenv": "^16.5.0",
     "firebase": "^11.6.0",
     "framer-motion": "^12.7.2",
+    "jspdf": "^4.2.0",
     "lodash": "^4.17.21",
     "lucide-react": "^0.577.0",
     "mongodb": "^6.15.0",
@@ -35,7 +36,8 @@
     "react-markdown": "^10.1.0",
     "react-virtualized-auto-sizer": "^1.0.26",
     "react-window": "^1.8.11",
-    "tailwind-merge": "^3.2.0"
+    "tailwind-merge": "^3.2.0",
+    "tesseract.js": "^7.0.0"
   },
   "devDependencies": {
     "@types/jest": "^29.5.14",

@@ -653,7 +653,7 @@ export default function RecordsReconPanel() {
   // ─── Render: Results State (Split-Pane Command Center) ────────────────────
 
   return (
-    <div className="bg-white rounded-xl lg:rounded-md border border-blue-100 shadow-md overflow-hidden lg:sticky lg:top-[68px] lg:z-10">
+    <div className="bg-white rounded-xl lg:rounded-md border border-blue-100 shadow-md lg:overflow-hidden lg:sticky lg:top-[68px] lg:z-10">
       <ReconDisclaimer />
 
       {/* Horizontal Stepper — Report Ready */}
@@ -672,7 +672,7 @@ export default function RecordsReconPanel() {
       {/* Split Pane Layout — fixed viewport height so the PDF viewer's
            internal virtualizer has a constrained scroll container.
            Without this, scrollTop has no effect and jumpToPage silently no-ops. */}
-      <div className="flex flex-col lg:flex-row h-[calc(100vh-260px)] min-h-[600px]">
+      <div className="flex flex-col lg:flex-row lg:h-[calc(100vh-260px)] lg:min-h-[600px]">
 
         {/* LEFT PANE — Tabbed Dashboard */}
         <div className={`flex-1 flex flex-col min-w-0 ${pdfUrl && !pdfCollapsed ? 'lg:w-[60%]' : 'w-full'}`}>
@@ -710,7 +710,7 @@ export default function RecordsReconPanel() {
           </div>
 
           {/* Tab Content */}
-          <div className="flex-1 overflow-y-auto p-4">
+          <div className="lg:flex-1 lg:overflow-y-auto p-4">
 
             {/* Dashboard Tab */}
             {activeTab === 'dashboard' && report && (
@@ -828,22 +828,48 @@ export default function RecordsReconPanel() {
                   <div className="bg-gradient-to-r from-[#1A2C5B] to-[#2563EB] rounded-lg p-5 text-white shadow-lg">
                     <h4 className="font-bold text-lg mb-1">Next Step: Intel Brief</h4>
                     <p className="text-blue-100 text-sm mb-4">
-                      We found <span className="font-bold text-[#EAB308]">{report.conditionsIndex.length}</span> potential condition{report.conditionsIndex.length !== 1 ? 's' : ''} in your records. Map them to real VA, NGO, and state resources.
+                      We found <span className="font-bold text-[#EAB308]">{report.conditionsIndex.length}</span> potential condition{report.conditionsIndex.length !== 1 ? 's' : ''} in your records. Map them to real resources — or prep for your C&amp;P exam.
                     </p>
-                    <button
-                      onClick={handleBridgeHandoff}
-                      className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#EAB308] text-[#1A2C5B] font-bold rounded-lg hover:bg-[#FACC15] transition-colors shadow-md"
-                      aria-label={`Map ${report.conditionsIndex.length} extracted conditions to VA pathways`}
-                    >
-                      Map My Needs
-                      <ArrowRightIcon className="h-4 w-4" />
-                    </button>
+                    <div className="flex flex-wrap gap-3">
+                      <button
+                        onClick={handleBridgeHandoff}
+                        className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#EAB308] text-[#1A2C5B] font-bold rounded-lg hover:bg-[#FACC15] transition-colors shadow-md"
+                        aria-label={`Map ${report.conditionsIndex.length} extracted conditions to VA pathways`}
+                      >
+                        Map My Needs
+                        <ArrowRightIcon className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (!report || report.conditionsIndex.length === 0) return;
+                          const payload = {
+                            conditions: report.conditionsIndex.map(c => ({
+                              condition: c.condition,
+                              category: c.category,
+                              mentionCount: c.mentionCount,
+                              firstMentionDate: c.firstMentionDate ?? null,
+                              pagesFound: c.pagesFound ?? [],
+                              sourceModule: 'records-recon' as const,
+                            })),
+                            sourceModule: 'records-recon' as const,
+                            timestamp: new Date().toISOString(),
+                            reportSummary: `${report.conditionsIndex.length} conditions extracted from uploaded records.`,
+                          };
+                          localStorage.setItem(BRIDGE_STORAGE_KEY, JSON.stringify(payload));
+                          router.push('/health/cpp-prep');
+                        }}
+                        className="inline-flex items-center gap-2 px-5 py-2.5 bg-white/15 border border-white/30 text-white font-bold rounded-lg hover:bg-white/25 transition-colors"
+                        aria-label="Prep for C&P exam using extracted conditions"
+                      >
+                        Prep for C&amp;P Exam →
+                      </button>
+                    </div>
                   </div>
                 )}
 
-                {/* ─── Sticky floating "Map My Needs" CTA (desktop — below fold fix) ── */}
+                {/* ─── Sticky floating "Map My Needs" CTA (all screens) ── */}
                 {report.conditionsIndex.length > 0 && (
-                  <div className="hidden md:block md:sticky md:bottom-6 md:z-50 mt-4">
+                  <div className="sticky bottom-2 z-50 mt-4 md:bottom-6">
                     <div className="bg-white/80 backdrop-blur-md border border-[#1A2C5B]/20 rounded-xl p-3 shadow-xl flex items-center justify-between gap-3">
                       <p className="text-xs text-[#1A2C5B] font-medium">
                         <span className="font-bold">{report.conditionsIndex.length} conditions</span> ready — auto-bridged to Symptom Finder
