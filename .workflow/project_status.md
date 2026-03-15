@@ -4,12 +4,12 @@
 - **Repo**: [github.com/spenn0331/Vet1Stop-2.0](https://github.com/spenn0331/Vet1Stop-2.0) (branch: `main`)
 - **Local Path**: `c:\Users\penny\Desktop\Vet1Stop`
 - **Primary Goal**: MVP Launch (Q2 2026)
-- **Current Phase**: Health MVP v1.0 Complete + Phase 2 Health Tools In Progress (Mar 15, 2026)
+- **Current Phase**: Phase 2 Health Tools + Auto-Fill Engine COMPLETE (Mar 15, 2026)
 - **Dev Server**: `npm run dev` → http://localhost:3000
 - **Last Active Development**: Mar 15, 2026
 - **Recovery Date**: Feb 14, 2026 (restored from git commit `863a42cd`)
-- **Latest Commits**: `8e323237` (NGO mixed + card redesign), `db88f2a8` (resource field mapping), `71dcb988` (category filter fix), `748bb794` (premium chat upgrade), `87b1156c` (mic + hallucination fix)
-- **In Progress**: Phase 2 health tools (/health/wellness, /health/scribe, /health/cpp-prep) + Auto-Fill engine (/auto-fill)
+- **Latest Commits**: `50c81067` (Phase 2 + Auto-Fill complete), `e1951dcf` (Health MVP v1.0 polish), `8e323237` (NGO mixed + card redesign), `748bb794` (premium chat upgrade), `87b1156c` (mic + hallucination fix)
+- **Next Up**: Local VOB Directory (Leaflet + Real Estate) — Phase 1 item #2 per master strategy
 
 ---
 
@@ -29,11 +29,49 @@
 **`src/app/health/simplified/`**
 - Deleted orphaned empty directory.
 
-**Phase 2 health tools (in progress this session):**
-- `/health/wellness` — AI Wellness Predictor (client-side, localStorage, no API)
-- `/health/scribe` — Ambient Scribe Companion (Web Speech API + Grok + jsPDF)
-- `/health/cpp-prep` — C&P Exam Prep (Smart Bridge receiver + Grok questions)
-- `/auto-fill` — Auto-Fill engine (pdfjs-dist + Tesseract.js OCR, client-side only, Digital Sea Bag)
+---
+
+## ✅ Phase 2 Health Tools + Auto-Fill Engine — Mar 15, 2026 (commit `50c81067`)
+
+### `/health/wellness` — AI Wellness Predictor
+- 5-slider daily check-in (Mood, Energy, Sleep, Pain, Social Connection 1–10)
+- 7-day inline SVG sparkline trend chart — 5 color-coded metric lines
+- Smart Insights engine: surfaces mental health / physical / sleep resources based on threshold logic (mood ≤4 for 3+ days, pain ≥7, sleep ≤3 for 2+ days)
+- Crisis modal: triggers on mood=1 or crisis keyword detection in notes (988 + Text 838255)
+- Day streak counter, mini bar chart of recent check-ins
+- 100% client-side; all data in `localStorage` key `vet1stop_wellness_log`; nothing transmitted
+- Legal: "Not a medical device" disclaimer on every render; 988 always visible in breadcrumb
+
+### `/health/scribe` — Ambient Scribe Companion
+- Web Speech API voice recording with live interim transcript display
+- Text fallback textarea for non-supporting browsers
+- AI summary via `/api/health/scribe` (grok-4 → grok-3-latest fallback): 3-section output (What I Described, Key Themes, Things to Follow Up On)
+- jsPDF client-side export: branded header + 3-section summary + raw transcript + legal footer
+- Server route (`src/app/api/health/scribe/route.ts`): structured JSON extraction, static fallback if no API key
+
+### `/health/cpp-prep` — C&P Exam Prep
+- Smart Bridge receiver: reads `vet1stop_recon_bridge_data` from localStorage (conditions from Records Recon auto-populate)
+- Manual condition add/remove with accordion cards
+- AI questions via `/api/health/cpp-prep` (grok-4 → fallback): 5 questions per condition with Tip + "Avoid" per question
+- Role-play mode: answer a question → Grok gives feedback + rating (good/needs-work/incomplete) + improvement angle
+- Exam Day Checklist: 10 items with progress bar
+- jsPDF download: full prep sheet with all conditions, questions, checklist, disclaimer
+- RecordsReconPanel: added "Prep for C&P Exam →" CTA alongside "Map My Needs" in the Smart Bridge inline card
+- Legal: "Educational practice tool only — not official VA guidance or claims assistance"
+
+### `/auto-fill` — Auto-Fill Engine
+- Two-tab UI: "Upload Document" + "Enter Manually"
+- Upload tab: drag-and-drop or click-to-browse; PDF → pdfjs-dist text layer; images → Tesseract.js OCR with progress indicator
+- `src/lib/auto-fill/extractFields.ts`: pure client-side extraction utility — DD-214 fields: full name, branch, entry/separation dates, MOS, character of discharge, awards. SSN intentionally NOT extracted. Date normalization (YYYYMMDD, MM/DD/YYYY, DD MMM YYYY). Branch + discharge normalization. Years-of-service auto-computed from dates.
+- Digital Sea Bag status bar: shows saved state, last updated date, clear button
+- Manual tab: dropdowns for Branch (8 options) + Character of Discharge (6 types), date pickers, years-of-service auto-calc display, awards textarea
+- Save/clear with confirmation modal. Clear confirms before wiping `vet1stop_sea_bag` from localStorage
+- FAB (`AutoFillButton.tsx`): rewired from "Coming Soon" overlay to direct `router.push('/auto-fill')`
+- `public/pdf.worker.min.js` copied from `node_modules/pdfjs-dist/build/`
+- Legal: "Processes entirely in your browser — nothing sent to any server. SSNs never extracted."
+
+### Health Hub Updates (`src/app/health/page.tsx`)
+- Added Phase 2 tools row below existing 3 main cards: Wellness Predictor (amber), Ambient Scribe (indigo), C&P Exam Prep (emerald) — each with "New" badge, icon, description, CTA
 
 ---
 
