@@ -12,7 +12,29 @@
 
 ---
 
-## 🎯 Current Status: Health Page Polish — Mar 16, 2026
+## 🎯 Current Status: Education Page — Education Advisor Shipped — Mar 16, 2026
+
+### ✅ Education Advisor (AI inline panel — Mar 16, 2026)
+
+**New files:**
+- `src/app/education/components/EducationAdvisorPanel.tsx` — inline AI chat panel with intent tap cards, 3-track results (Federal, NGO/Scholarships, State), cross-domain hints
+- `src/app/api/education/advise/route.ts` — Grok 4 API, D-lite MongoDB pool injection, 3-tier query relaxation (state → no-state → no-keywords), static fallback
+
+**Modified files:**
+- `src/app/education/page.tsx` — hero CTA button ("Education Advisor"), full-width dark tool card (AI-Powered badge), inline section at `#edu-advisor` anchor (after GiBillPanel)
+- `src/lib/resource-intelligence/domain-configs.ts` — EDUCATION_CONFIG tracks fixed: `scholarship` subcategory → `ngo` (matches actual MongoDB subcategory); expanded signalWords
+- `src/lib/ai/promptBuilder.ts` — education case updated to reference all 4 education tools by name (Education Advisor, GI Bill Pathfinder, School Finder, Mission Briefing)
+- `src/components/ai/ChatbotWidget.tsx` — education quick-reply chips now include "Try the Education Advisor to match my benefits"
+
+### ✅ Education Page — Mission Briefing + NGO Tab (Mar 16, 2026)
+
+- Pathway cards restyled to match health's Mission Briefing (white cards, navy gradient top bar, no difficulty badge, objective text added, repositioned below secondary tools)
+- NGO tab added to Browse Education Resources (with 7 mega-category filters)
+- All 23 education NGO documents in MongoDB enriched with proper tags (scholarship, mentoring, career, stem, transition, women, free) via `scripts/enrich-education-ngo-tags.js`
+
+---
+
+## 🎯 Previous Status: Health Page Polish — Mar 16, 2026
 
 ### ✅ C&P Exam Prep — PDF Polish + UX Clarity
 

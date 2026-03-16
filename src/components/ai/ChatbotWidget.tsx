@@ -33,8 +33,8 @@ function getQuickReplies(prevUserMsg: string): string[] {
   if (q.includes('mental') || q.includes('anxiety') || q.includes('depression')) {
     return ['What mental health programs does VA have?', 'Tell me about Vet Centers', 'How do I get a rating for mental health?'];
   }
-  if (q.includes('education') || q.includes('gi bill') || q.includes('school')) {
-    return ['Post-9/11 vs Montgomery GI Bill', 'What is VR&E (Chapter 31)?', 'Transferring GI Bill to dependents'];
+  if (q.includes('education') || q.includes('gi bill') || q.includes('school') || q.includes('scholarship')) {
+    return ['Try the Education Advisor to match my benefits', 'Post-9/11 vs Montgomery GI Bill', 'What is VR&E (Chapter 31)?'];
   }
   if (q.includes('job') || q.includes('career') || q.includes('work') || q.includes('employ')) {
     return ['How do I translate military skills?', 'What is USAJOBS for veterans?', 'Hiring Our Heroes program'];
