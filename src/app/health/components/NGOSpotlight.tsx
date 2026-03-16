@@ -35,6 +35,13 @@ export interface SpotlightSlot {
   secondaryCta?: { label: string; url: string };
   isActive: boolean;
   stripeProductId?: string;
+  metrics?: {
+    communityScore?: number;
+    veteransSupported?: string;
+    fundingEfficiency?: string;
+    engagementRate?: string;
+    rating?: string;
+  };
 }
 
 // ─── Config — update ONLY this array to activate/deactivate partners ─────────
@@ -54,6 +61,13 @@ const SPOTLIGHT_CONFIG: SpotlightSlot[] = [
     websiteUrl: 'https://www.woundedwarriorproject.org',
     phone: '888-997-2586',
     impactStat: 'Served 230,000+ warriors and their families since 2003',
+    metrics: {
+      communityScore: 96,
+      veteransSupported: '230K+',
+      fundingEfficiency: '80%',
+      engagementRate: '94%',
+      rating: '4.9 ★',
+    },
     verifiedBadge: true,
     ctaLabel: 'Visit Wounded Warrior Project',
     ctaUrl: 'https://www.woundedwarriorproject.org',
@@ -150,6 +164,41 @@ function PremiumActiveCard({ slot }: { slot: SpotlightSlot }) {
               <UserGroupIcon className="h-4 w-4 text-[#EAB308]" aria-hidden="true" />
               {slot.impactStat}
             </p>
+          )}
+          {slot.metrics && (
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-4" aria-label="Partner impact metrics">
+              {slot.metrics.communityScore !== undefined && (
+                <div className="bg-[#EAB308]/10 border border-[#EAB308]/20 rounded-lg px-3 py-2 text-center">
+                  <p className="text-[9px] font-bold uppercase tracking-widest text-[#EAB308]/70 leading-none mb-0.5">Score</p>
+                  <p className="text-lg font-black text-[#EAB308] leading-none">{slot.metrics.communityScore}</p>
+                  <p className="text-[9px] text-white/30 mt-0.5">/100</p>
+                </div>
+              )}
+              {slot.metrics.rating && (
+                <div className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-center">
+                  <p className="text-[9px] font-bold uppercase tracking-widest text-white/40 leading-none mb-0.5">Rating</p>
+                  <p className="text-sm font-extrabold text-white leading-tight">{slot.metrics.rating}</p>
+                </div>
+              )}
+              {slot.metrics.veteransSupported && (
+                <div className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-center">
+                  <p className="text-[9px] font-bold uppercase tracking-widest text-white/40 leading-none mb-0.5">Veterans</p>
+                  <p className="text-sm font-extrabold text-white leading-tight">{slot.metrics.veteransSupported}</p>
+                </div>
+              )}
+              {slot.metrics.fundingEfficiency && (
+                <div className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-center">
+                  <p className="text-[9px] font-bold uppercase tracking-widest text-white/40 leading-none mb-0.5">To Programs</p>
+                  <p className="text-sm font-extrabold text-white leading-tight">{slot.metrics.fundingEfficiency}</p>
+                </div>
+              )}
+              {slot.metrics.engagementRate && (
+                <div className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-center">
+                  <p className="text-[9px] font-bold uppercase tracking-widest text-white/40 leading-none mb-0.5">Engagement</p>
+                  <p className="text-sm font-extrabold text-white leading-tight">{slot.metrics.engagementRate}</p>
+                </div>
+              )}
+            </div>
           )}
           <div className="flex flex-wrap gap-3">
             {slot.ctaUrl && (

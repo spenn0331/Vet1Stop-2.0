@@ -47,64 +47,39 @@ function computeScoreLocal(ngo: NGOResource): ScoreBreakdown {
 function ScoreBar({ label, value, max, colorClass }: { label: string; value: number; max: number; colorClass: string }) {
   const pct = Math.round((value / max) * 100);
   return (
-    <div className="flex items-center gap-3">
-      <span className="text-xs text-gray-500 w-36 shrink-0 leading-tight">{label}</span>
-      <div className="flex-1 h-2.5 bg-gray-100 rounded-full overflow-hidden">
-        <div
-          className={`h-full rounded-full transition-all duration-700 ${colorClass}`}
-          style={{ width: `${pct}%` }}
-        />
+    <div className="flex items-center gap-2">
+      <span className="text-xs text-gray-400 w-32 shrink-0">{label}</span>
+      <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+        <div className={`h-full rounded-full transition-all duration-700 ${colorClass}`} style={{ width: `${pct}%` }} />
       </div>
-      <span className="text-xs font-bold text-gray-700 w-12 text-right tabular-nums">
+      <span className="text-xs font-semibold text-gray-600 w-10 text-right tabular-nums">
         {value}<span className="text-gray-400 font-normal">/{max}</span>
       </span>
     </div>
   );
 }
 
-function MetricCard({
+function MetricChip({
   label,
   value,
   sub,
   Icon,
-  bgClass,
-  textClass,
-  borderClass,
 }: {
   label: string;
   value: string;
   sub?: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   Icon: React.ComponentType<any>;
-  bgClass: string;
-  textClass: string;
-  borderClass: string;
 }) {
   return (
-    <div className={`rounded-xl p-3.5 border ${bgClass} ${borderClass} flex items-start gap-3`}>
-      <Icon className={`h-5 w-5 mt-0.5 shrink-0 ${textClass} opacity-70`} aria-hidden="true" />
-      <div className="min-w-0">
-        <p className={`text-[11px] font-semibold uppercase tracking-wide ${textClass} opacity-60 mb-0.5`}>
-          {label}
-        </p>
-        <p className={`text-base font-extrabold ${textClass} leading-tight`}>{value}</p>
-        {sub && <p className={`text-[11px] ${textClass} opacity-50 mt-0.5 leading-tight`}>{sub}</p>}
+    <div className="bg-slate-50 rounded-lg p-3 border border-slate-100 flex flex-col gap-1 min-w-0">
+      <div className="flex items-center gap-1.5">
+        <Icon className="h-3.5 w-3.5 text-[#1A2C5B] opacity-50 shrink-0" aria-hidden="true" />
+        <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide truncate">{label}</span>
       </div>
+      <p className="text-sm font-extrabold text-[#1A2C5B] leading-tight">{value}</p>
+      {sub && <p className="text-[10px] text-gray-400 leading-tight">{sub}</p>}
     </div>
-  );
-}
-
-function LoadingSkeleton() {
-  return (
-    <section className="py-10 bg-gradient-to-br from-emerald-50 to-teal-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 animate-pulse space-y-4">
-        <div className="flex items-center gap-3">
-          <div className="h-6 w-6 bg-emerald-200 rounded-full" />
-          <div className="h-6 w-72 bg-emerald-100 rounded-lg" />
-        </div>
-        <div className="bg-white rounded-2xl border-2 border-emerald-100 shadow-sm h-64" />
-      </div>
-    </section>
   );
 }
 
@@ -140,7 +115,16 @@ export default function NGOOfTheMonthBanner() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <LoadingSkeleton />;
+  if (loading) {
+    return (
+      <section className="py-8 bg-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 animate-pulse">
+          <div className="h-6 w-56 bg-slate-100 rounded mb-3" />
+          <div className="h-44 bg-slate-50 rounded-xl border border-slate-100" />
+        </div>
+      </section>
+    );
+  }
   if (!data) return null;
 
   const { ngoOfTheMonth: ngo, scoreBreakdown: sb, selectionMonth, isManualOverride } = data;
@@ -148,68 +132,67 @@ export default function NGOOfTheMonthBanner() {
   const vetCount = ngo.metrics?.veteransSupportedCount;
   const fundingEff = ngo.metrics?.fundingEfficiency;
   const engagementRate = ngo.metrics?.engagementRate;
-  const programs = Array.isArray(ngo.programs) ? ngo.programs : [];
   const websiteUrl = ngo.link || ngo.website || ngo.contact?.website;
   const phone = ngo.contact?.phone;
-  const focusTags = Array.isArray(ngo.focus) ? ngo.focus : [];
 
   return (
-    <section aria-labelledby="ngo-month-heading" className="py-10 bg-gradient-to-br from-emerald-50 via-teal-50 to-emerald-50">
+    <section aria-labelledby="ngo-month-heading" className="py-8 bg-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
 
-        {/* Section header */}
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
-          <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0">
-              <TrophyIcon className="h-5 w-5 text-emerald-600" aria-hidden="true" />
-            </div>
+        {/* Section header — matches "Featured Partners" heading style */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <TrophyIcon className="h-5 w-5 text-[#EAB308]" aria-hidden="true" />
             <div>
-              <h2 id="ngo-month-heading" className="text-xl font-extrabold text-[#1A2C5B] tracking-tight leading-tight">
-                Community Choice &mdash; NGO of the Month
+              <h2 id="ngo-month-heading" className="text-2xl font-extrabold text-[#1A2C5B] tracking-tight">
+                Community Choice Award
               </h2>
-              <p className="text-xs text-emerald-700 font-semibold mt-0.5">
-                {selectionMonth} &nbsp;&middot;&nbsp; Earned through community impact — not a paid placement
+              <p className="text-sm text-gray-500 mt-0.5">
+                {selectionMonth} &middot; Scored by community metrics &mdash; not a paid placement
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
             {isManualOverride && (
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 text-xs font-semibold">
-                <InformationCircleIcon className="h-3.5 w-3.5" aria-hidden="true" />
+              <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-xs font-semibold">
+                <InformationCircleIcon className="h-3 w-3" aria-hidden="true" />
                 Admin Selected
               </span>
             )}
-            <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold">
-              <TrophyIcon className="h-3.5 w-3.5" aria-hidden="true" />
-              Merit-Based Award
-            </span>
+            <a
+              href="mailto:partnerships@vet1stop.com?subject=Premium+NGO+Spotlight+Inquiry"
+              className="hidden sm:inline-flex items-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-[#1A2C5B] transition-colors focus:outline-none focus:underline"
+            >
+              <SparklesIcon className="h-3.5 w-3.5" aria-hidden="true" />
+              Become a Partner
+            </a>
           </div>
         </div>
 
-        {/* Main card */}
-        <div className="bg-white rounded-2xl border-2 border-emerald-200 shadow-lg overflow-hidden">
-          {/* Top gradient stripe */}
-          <div className="h-1.5 bg-gradient-to-r from-emerald-400 via-teal-400 to-emerald-500" />
+        {/* Main card — lighter than premium, clearly secondary */}
+        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          {/* Thin gold top accent (echoes premium card gold border, but subtle) */}
+          <div className="h-0.5 bg-gradient-to-r from-[#EAB308]/60 via-[#EAB308]/30 to-transparent" />
 
-          <div className="p-6 sm:p-8">
+          <div className="p-5 sm:p-6">
 
-            {/* NGO Identity row */}
-            <div className="flex flex-wrap items-start gap-4 mb-7">
-              {/* Logo placeholder */}
-              <div className="h-14 w-14 rounded-xl bg-emerald-50 border-2 border-emerald-100 flex items-center justify-center shrink-0">
-                <UserGroupIcon className="h-7 w-7 text-emerald-600" aria-hidden="true" />
+            {/* Identity row */}
+            <div className="flex flex-wrap items-start gap-4 mb-4">
+              {/* Icon */}
+              <div className="h-11 w-11 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center shrink-0">
+                <UserGroupIcon className="h-6 w-6 text-[#1A2C5B]/60" aria-hidden="true" />
               </div>
 
               {/* Name + badges + description */}
               <div className="flex-1 min-w-0">
-                <div className="flex flex-wrap items-center gap-2 mb-1.5">
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold uppercase tracking-wide">
+                <div className="flex flex-wrap items-center gap-1.5 mb-1">
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#EAB308]/10 text-[#8B6914] text-xs font-bold uppercase tracking-wide">
                     <TrophyIcon className="h-3 w-3" aria-hidden="true" />
                     {selectionMonth}
                   </span>
                   {(ngo.isVerified || ngo.verified) && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-xs font-semibold">
-                      <CheckBadgeIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-xs font-semibold">
+                      <CheckBadgeIcon className="h-3 w-3" aria-hidden="true" />
                       Vet1Stop Verified
                     </span>
                   )}
@@ -218,191 +201,80 @@ export default function NGOOfTheMonthBanner() {
                       Veteran Founded
                     </span>
                   )}
-                  {focusTags.slice(0, 2).map(tag => (
-                    <span key={tag} className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 text-xs font-medium capitalize">
-                      {tag.replace(/-/g, ' ')}
-                    </span>
-                  ))}
                 </div>
-                <h3 className="text-xl sm:text-2xl font-extrabold text-[#1A2C5B] leading-tight">{orgName}</h3>
+                <h3 className="text-lg font-extrabold text-[#1A2C5B]">{orgName}</h3>
                 {ngo.description && (
-                  <p className="text-sm text-gray-600 mt-1.5 max-w-2xl leading-relaxed">{ngo.description}</p>
+                  <p className="text-sm text-gray-500 mt-0.5 line-clamp-2 leading-snug max-w-2xl">{ngo.description}</p>
                 )}
               </div>
 
-              {/* Community Score badge */}
+              {/* Community Score — navy bg, gold number */}
               <div
-                className="flex flex-col items-center justify-center bg-gradient-to-br from-emerald-500 to-teal-600 text-white rounded-2xl px-5 py-4 shadow-md shrink-0 min-w-[88px]"
+                className="flex flex-col items-center justify-center bg-[#1A2C5B] rounded-xl px-4 py-3 shadow-sm shrink-0 min-w-[72px] text-center"
                 aria-label={`Community score: ${sb.total} out of 100`}
               >
-                <p className="text-[9px] font-bold uppercase tracking-widest opacity-80 leading-none">Community</p>
-                <p className="text-[9px] font-bold uppercase tracking-widest opacity-80 mb-1">Score</p>
-                <p className="text-4xl font-black leading-none">{sb.total}</p>
-                <p className="text-[10px] opacity-60 mt-1">/ 100</p>
+                <p className="text-[8px] font-bold uppercase tracking-widest text-white/50 leading-none">Score</p>
+                <p className="text-3xl font-black leading-tight text-[#EAB308]">{sb.total}</p>
+                <p className="text-[8px] text-white/40">/100</p>
               </div>
             </div>
 
-            {/* Two-column: Metrics grid + Programs */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-
-              {/* Metrics grid */}
-              <div>
-                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-3">Impact Metrics</p>
-                <div className="grid grid-cols-2 gap-3">
-                  <MetricCard
-                    label="Community Rating"
-                    value={ngo.rating ? `${ngo.rating.toFixed(1)} ★` : 'N/A'}
-                    sub={ngo.reviewCount ? `${ngo.reviewCount.toLocaleString()} reviews` : undefined}
-                    Icon={StarIcon}
-                    bgClass="bg-amber-50"
-                    borderClass="border-amber-100"
-                    textClass="text-amber-700"
-                  />
-                  <MetricCard
-                    label="Veterans Supported"
-                    value={
-                      vetCount
-                        ? vetCount >= 1000
-                          ? `${(vetCount / 1000).toFixed(0)}K+`
-                          : vetCount.toLocaleString()
-                        : 'N/A'
-                    }
-                    sub="program participants"
-                    Icon={UserGroupIcon}
-                    bgClass="bg-blue-50"
-                    borderClass="border-blue-100"
-                    textClass="text-blue-700"
-                  />
-                  <MetricCard
-                    label="Funding to Veterans"
-                    value={fundingEff ? `${Math.round(fundingEff * 100)}%` : 'N/A'}
-                    sub="of funds to programs"
-                    Icon={HeartIcon}
-                    bgClass="bg-emerald-50"
-                    borderClass="border-emerald-100"
-                    textClass="text-emerald-700"
-                  />
-                  <MetricCard
-                    label="Engagement Rate"
-                    value={engagementRate ? `${Math.round(engagementRate * 100)}%` : 'N/A'}
-                    sub="platform this month"
-                    Icon={ChartBarIcon}
-                    bgClass="bg-purple-50"
-                    borderClass="border-purple-100"
-                    textClass="text-purple-700"
-                  />
-                </div>
-              </div>
-
-              {/* Programs list */}
-              <div>
-                {programs.length > 0 ? (
-                  <>
-                    <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-3">Programs Offered</p>
-                    <ul className="space-y-2" aria-label="Programs offered">
-                      {programs.slice(0, 5).map((prog, i) => (
-                        <li key={i} className="flex items-start gap-2.5 text-sm text-gray-700">
-                          <span className="mt-2 h-1.5 w-1.5 rounded-full bg-emerald-400 shrink-0" aria-hidden="true" />
-                          {prog}
-                        </li>
-                      ))}
-                      {programs.length > 5 && (
-                        <li className="text-xs text-gray-400 pl-4">+{programs.length - 5} more programs</li>
-                      )}
-                    </ul>
-                  </>
-                ) : (
-                  <div className="flex flex-col items-center justify-center h-full bg-gray-50 rounded-xl border border-gray-100 p-6 text-center">
-                    <p className="text-xs text-gray-400">Program details coming soon.</p>
-                    {websiteUrl && (
-                      <a
-                        href={websiteUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="mt-2 text-xs font-semibold text-emerald-600 hover:underline"
-                      >
-                        Visit website for details →
-                      </a>
-                    )}
-                  </div>
-                )}
-              </div>
+            {/* 4 metric chips — compact 4-column grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+              <MetricChip
+                label="Community Rating"
+                value={ngo.rating ? `${ngo.rating.toFixed(1)} ★` : 'N/A'}
+                sub={ngo.reviewCount ? `${ngo.reviewCount.toLocaleString()} reviews` : undefined}
+                Icon={StarIcon}
+              />
+              <MetricChip
+                label="Veterans Supported"
+                value={vetCount ? (vetCount >= 1000 ? `${(vetCount / 1000).toFixed(0)}K+` : vetCount.toLocaleString()) : 'N/A'}
+                sub="program participants"
+                Icon={UserGroupIcon}
+              />
+              <MetricChip
+                label="Funding to Veterans"
+                value={fundingEff ? `${Math.round(fundingEff * 100)}%` : 'N/A'}
+                sub="of funds to programs"
+                Icon={HeartIcon}
+              />
+              <MetricChip
+                label="Engagement Rate"
+                value={engagementRate ? `${Math.round(engagementRate * 100)}%` : 'N/A'}
+                sub="on platform this month"
+                Icon={ChartBarIcon}
+              />
             </div>
 
-            {/* Score Breakdown */}
-            <div className="bg-gray-50 rounded-xl border border-gray-100 p-4 mb-5">
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Score Breakdown</p>
-                <span className="text-xs text-gray-400">Auto-updated monthly</span>
+            {/* Score breakdown — compact */}
+            <div className="bg-slate-50 rounded-lg border border-slate-100 px-4 py-3 mb-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Score Breakdown</span>
+                <span className="text-[10px] text-gray-400">Auto-updated monthly</span>
               </div>
-              <div className="space-y-2.5">
-                <ScoreBar label="Impact Score" value={sb.impactComponent} max={35} colorClass="bg-emerald-500" />
-                <ScoreBar label="Community Rating" value={sb.ratingComponent} max={25} colorClass="bg-amber-400" />
-                <ScoreBar label="Funding Efficiency" value={sb.fundingComponent} max={20} colorClass="bg-blue-500" />
-                <ScoreBar label="Reach & Engagement" value={sb.veteransComponent} max={20} colorClass="bg-purple-500" />
+              <div className="space-y-1.5">
+                <ScoreBar label="Impact Score" value={sb.impactComponent} max={35} colorClass="bg-[#1A2C5B]" />
+                <ScoreBar label="Community Rating" value={sb.ratingComponent} max={25} colorClass="bg-[#EAB308]" />
+                <ScoreBar label="Funding Efficiency" value={sb.fundingComponent} max={20} colorClass="bg-slate-500" />
+                <ScoreBar label="Reach & Engagement" value={sb.veteransComponent} max={20} colorClass="bg-slate-400" />
               </div>
-              <div className="mt-3 pt-3 border-t border-gray-200 flex items-center justify-between">
+              <div className="mt-2 pt-2 border-t border-slate-200 flex items-center justify-between">
                 <span className="text-xs font-semibold text-gray-500">Total Community Score</span>
-                <span className="text-sm font-black text-emerald-700">{sb.total} / 100</span>
+                <span className="text-xs font-black text-[#1A2C5B]">{sb.total} / 100</span>
               </div>
             </div>
 
-            {/* How are winners chosen? accordion */}
-            <button
-              onClick={() => setHowOpen(p => !p)}
-              className="flex items-center gap-2 text-xs font-semibold text-gray-400 hover:text-[#1A2C5B] transition-colors duration-200 mb-4 focus:outline-none focus:underline"
-              aria-expanded={howOpen}
-              aria-controls="how-chosen-panel"
-            >
-              <InformationCircleIcon className="h-4 w-4 shrink-0" aria-hidden="true" />
-              How are winners chosen?
-              {howOpen
-                ? <ChevronUpIcon className="h-3.5 w-3.5 ml-0.5" aria-hidden="true" />
-                : <ChevronDownIcon className="h-3.5 w-3.5 ml-0.5" aria-hidden="true" />
-              }
-            </button>
-
-            {howOpen && (
-              <div
-                id="how-chosen-panel"
-                className="bg-emerald-50 border border-emerald-100 rounded-xl p-4 mb-5 text-xs text-gray-600 space-y-2"
-              >
-                <p className="font-bold text-emerald-800 mb-2">Monthly Auto-Selection Algorithm</p>
-                <ul className="space-y-2">
-                  <li className="flex items-start gap-2">
-                    <span className="shrink-0">🎯</span>
-                    <span><strong>Impact Score (35%)</strong> — Program outcome rating sourced from verified veteran service data</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="shrink-0">⭐</span>
-                    <span><strong>Community Rating (25%)</strong> — Aggregate star rating from Vet1Stop user reviews</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="shrink-0">💰</span>
-                    <span><strong>Funding Efficiency (20%)</strong> — Percentage of total funds going directly to veteran programs vs. overhead</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="shrink-0">👥</span>
-                    <span><strong>Reach & Engagement (20%)</strong> — Total veterans supported, normalized against top performer</span>
-                  </li>
-                </ul>
-                <p className="text-gray-400 pt-2 border-t border-emerald-100 mt-2">
-                  Winners are selected automatically on the 1st of each month. Vet1Stop admins may review and confirm.{' '}
-                  <strong>This is not a paid placement.</strong>
-                </p>
-              </div>
-            )}
-
-            {/* Footer CTA */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-5 border-t border-gray-100">
-              <div className="flex flex-wrap gap-3">
+            {/* CTA + how chosen row */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-4 border-t border-slate-100">
+              <div className="flex flex-wrap items-center gap-3">
                 {websiteUrl && (
                   <a
                     href={websiteUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#1A2C5B] text-white font-bold text-sm hover:bg-[#243d7a] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-400 shadow-sm hover:shadow-md"
-                    aria-label={`Visit ${orgName} website`}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#1A2C5B] text-white font-bold text-sm hover:bg-[#243d7a] transition-all focus:outline-none focus:ring-2 focus:ring-blue-400"
+                    aria-label={`Visit ${orgName}`}
                   >
                     <ArrowTopRightOnSquareIcon className="h-4 w-4" aria-hidden="true" />
                     Visit {orgName}
@@ -411,36 +283,54 @@ export default function NGOOfTheMonthBanner() {
                 {phone && (
                   <a
                     href={`tel:${phone.replace(/\D/g, '')}`}
-                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-gray-100 text-gray-700 font-semibold text-sm hover:bg-gray-200 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-gray-300"
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-slate-100 text-slate-700 font-semibold text-sm hover:bg-slate-200 transition-all"
                     aria-label={`Call ${orgName}`}
                   >
                     <PhoneIcon className="h-4 w-4" aria-hidden="true" />
                     {phone}
                   </a>
                 )}
+                <button
+                  onClick={() => setHowOpen(p => !p)}
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-gray-400 hover:text-[#1A2C5B] transition-colors focus:outline-none focus:underline"
+                  aria-expanded={howOpen}
+                  aria-controls="how-chosen-panel"
+                >
+                  <InformationCircleIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                  How are winners chosen?
+                  {howOpen
+                    ? <ChevronUpIcon className="h-3 w-3 ml-0.5" aria-hidden="true" />
+                    : <ChevronDownIcon className="h-3 w-3 ml-0.5" aria-hidden="true" />
+                  }
+                </button>
               </div>
-
-              {/* Upsell CTA */}
               <a
                 href="mailto:partnerships@vet1stop.com?subject=Premium+NGO+Spotlight+Inquiry"
-                className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 hover:text-emerald-900 transition-colors duration-200 focus:outline-none focus:underline whitespace-nowrap group"
-                aria-label="Inquire about permanent featured partnership"
+                className="text-xs font-semibold text-gray-400 hover:text-[#1A2C5B] transition-colors whitespace-nowrap focus:outline-none focus:underline"
               >
-                <SparklesIcon className="h-3.5 w-3.5 group-hover:scale-110 transition-transform duration-200" aria-hidden="true" />
-                Want permanent placement? Become a Featured Partner →
+                Want permanent placement? Become a Partner →
               </a>
             </div>
+
+            {/* How chosen panel */}
+            {howOpen && (
+              <div
+                id="how-chosen-panel"
+                className="mt-3 bg-slate-50 border border-slate-100 rounded-lg p-4 text-xs text-gray-500 space-y-1.5"
+              >
+                <p className="font-bold text-[#1A2C5B] mb-2">Monthly Auto-Selection Algorithm</p>
+                <p>🎯 <strong>Impact Score (35%)</strong> — Program outcome rating from verified veteran service data</p>
+                <p>⭐ <strong>Community Rating (25%)</strong> — Aggregate star rating from Vet1Stop user reviews</p>
+                <p>💰 <strong>Funding Efficiency (20%)</strong> — % of funds going directly to veteran programs vs. overhead</p>
+                <p>👥 <strong>Reach &amp; Engagement (20%)</strong> — Veterans supported, normalized against top performer</p>
+                <p className="text-gray-400 pt-2 border-t border-slate-200 mt-1">
+                  Winners auto-selected on the 1st of each month. Vet1Stop admins may review and confirm.{' '}
+                  <strong>Not a paid placement.</strong>
+                </p>
+              </div>
+            )}
           </div>
         </div>
-
-        {/* Fine print */}
-        <p className="text-center text-xs text-gray-400 mt-3">
-          NGO of the Month is selected automatically by community metrics each month.{' '}
-          <a href="mailto:partnerships@vet1stop.com" className="text-emerald-600 hover:underline">
-            Contact us
-          </a>{' '}
-          to learn about premium paid placements.
-        </p>
       </div>
     </section>
   );
