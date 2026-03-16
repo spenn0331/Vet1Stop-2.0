@@ -1,382 +1,409 @@
-import { Metadata } from 'next';
-import ResourceGrid from '@/components/feature/ResourceGrid';
-import ResourceFilters from '@/components/feature/ResourceFilters';
-import FilterBanner from '@/components/feature/FilterBanner';
-import { 
-  AcademicCapIcon, 
-  ArrowRightIcon, 
-  DocumentTextIcon, 
-  AcademicCapIcon as GraduationIcon,
+﻿import { Metadata } from 'next';
+import {
+  CheckCircleIcon,
+  LockClosedIcon,
+  ShieldCheckIcon,
+  MapPinIcon,
+} from '@heroicons/react/24/solid';
+import {
+  AcademicCapIcon,
+  ArrowRightIcon,
+  CalculatorIcon,
   BriefcaseIcon,
+  SparklesIcon,
   HeartIcon,
-  SparklesIcon
+  MapIcon,
+  ClockIcon,
+  CheckCircleIcon as CheckOutline,
+  GlobeAltIcon,
+  DocumentTextIcon,
+  StarIcon,
 } from '@heroicons/react/24/outline';
 import Link from 'next/link';
+import SchoolFinderPanel from './components/SchoolFinderPanel';
+import GiBillPanel from './components/GiBillPanel';
+import EducationBrowseSection from './components/EducationBrowseSection';
+import MOSTranslatorCard from './components/MOSTranslatorCard';
+import AutoFillButton from '@/components/shared/AutoFillButton';
 
 export const metadata: Metadata = {
-  title: 'Education Resources | Vet1Stop',
-  description: 'Discover educational resources, benefits, scholarships, and training opportunities for veterans and their families.',
-  keywords: 'veteran education benefits, GI Bill, scholarships for veterans, military education, veteran training programs, education resources',
+  title: 'Education Benefits & Resources | Vet1Stop',
+  description: 'GI Bill Pathfinder, School Finder, scholarships, and 102+ vetted education programs â€” free tools built for veterans.',
+  keywords: 'GI Bill calculator, veteran education benefits, yellow ribbon schools, scholarships for veterans, MOS translator, school comparison, post-9/11 GI bill',
+};
+
+// â”€â”€â”€ Education Pathways (static, no MissionPanel needed for MVP) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+const EDUCATION_PATHS = [
+  {
+    id: 'gi-bill-activation',
+    icon: 'ðŸŽ“', title: 'Activate Your Post-9/11 GI Bill',
+    difficulty: 'Easy', estimatedMins: 90,
+    steps: [
+      'Verify active service duration â†’ determines your entitlement %',
+      'Apply online using VA Form 22-1990 at VA.gov',
+      'Receive Certificate of Eligibility (COE) by mail',
+      'Deliver COE to your school\'s Veterans Certifying Official',
+    ],
+  },
+  {
+    id: 'school-comparison',
+    icon: 'ðŸ«', title: 'Compare Schools & Maximize BAH',
+    difficulty: 'Medium', estimatedMins: 60,
+    steps: [
+      'Use School Finder below to filter Yellow Ribbon schools',
+      'Select up to 3 schools â†’ compare tuition, debt, vet services',
+      'Bridge to GI Bill Pathfinder to see net monthly income',
+      'Confirm school is approved at VA WEAM lookup tool',
+    ],
+  },
+  {
+    id: 'voc-rehab',
+    icon: 'âš™ï¸', title: 'Apply for Vocational Rehab (Ch. 31)',
+    difficulty: 'Medium', estimatedMins: 120,
+    steps: [
+      'Confirm service-connected disability rating (any % qualifies)',
+      'Apply online at VA.gov â†’ select Chapter 31 VR&E',
+      'Attend Initial Evaluation appointment with a VR&E counselor',
+      'Develop Individual Plan for Employment (IPE) with your counselor',
+    ],
+  },
+  {
+    id: 'stem-scholarship',
+    icon: 'ðŸ”¬', title: 'STEM Scholarship Pathway',
+    difficulty: 'Hard', estimatedMins: 180,
+    steps: [
+      'Confirm STEM-approved program (VA list: science, tech, engineering, math)',
+      'Exhaust at least 180 days of Post-9/11 GI Bill entitlement first',
+      'Apply for VA STEM Scholarship extension (up to 9 extra months)',
+      'Supplement with Pat Tillman, SVA, or branch-specific scholarship',
+    ],
+  },
+] as const;
+
+const DIFFICULTY_COLORS: Record<string, string> = {
+  Easy:   'bg-emerald-50 text-emerald-700',
+  Medium: 'bg-amber-50 text-amber-700',
+  Hard:   'bg-red-50 text-red-600',
 };
 
 export default function EducationPage() {
   return (
     <main className="bg-white min-h-screen" role="main">
-      {/* Hero Banner */}
-      <section 
-        aria-labelledby="education-hero-heading" 
-        className="bg-[#1A2C5B] text-white"
-      >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-20">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between">
-            <div className="flex-1">
-              <h1 
-                id="education-hero-heading"
-                className="text-3xl md:text-4xl font-bold mb-4 tracking-tight"
-              >
-                Education Resources
-              </h1>
-              <p className="text-lg md:text-xl max-w-3xl leading-relaxed">
-                Access education benefits, scholarships, and training opportunities designed specifically for veterans, service members, and their families.
-              </p>
-              <div className="flex flex-wrap gap-4 mt-8">
-                <a 
-                  href="#resource-library" 
-                  className="inline-flex items-center px-6 py-3 rounded-md bg-[#EAB308] text-[#1A2C5B] font-semibold hover:bg-[#FACC15] focus:outline-none focus:ring-4 focus:ring-yellow-300 transition-colors"
-                  aria-label="Jump to resource library section"
-                >
-                  Browse Resources
-                  <ArrowRightIcon className="ml-2 h-5 w-5" aria-hidden="true" />
-                </a>
-                <Link 
-                  href="/careers" 
-                  className="inline-flex items-center px-6 py-3 rounded-md bg-transparent border-2 border-white text-white font-semibold hover:bg-white/10 focus:outline-none focus:ring-4 focus:ring-white/30 transition-colors"
-                  aria-label="View related career resources"
-                >
-                  Explore Career Opportunities
-                </Link>
-              </div>
-            </div>
-            <div className="mt-8 md:mt-0 flex justify-center">
-              <div className="bg-white/10 p-5 rounded-full">
-                <AcademicCapIcon className="h-24 w-24 text-[#EAB308]" aria-hidden="true" />
-              </div>
+
+      {/* â”€â”€â”€ Hero â”€â”€â”€ */}
+      <section aria-labelledby="education-hero-heading" className="bg-gradient-to-br from-[#0F1D3D] via-[#1A2C5B] to-[#1e3a7a] text-white relative overflow-hidden">
+        <div className="absolute inset-0 pointer-events-none">
+          <div className="absolute top-0 right-0 w-96 h-96 bg-[#EAB308]/5 rounded-full translate-x-32 -translate-y-24" />
+          <div className="absolute bottom-0 left-0 w-64 h-64 bg-white/[0.03] rounded-full -translate-x-20 translate-y-16" />
+        </div>
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14 md:py-20">
+          <div className="max-w-3xl">
+            <h1 id="education-hero-heading" className="text-3xl md:text-5xl font-extrabold tracking-tight mb-4 leading-tight">
+              Your Education.<br />
+              <span className="text-[#EAB308]">Your Benefits. Your Future.</span>
+            </h1>
+            <p className="text-lg text-white/80 mb-2 max-w-2xl leading-relaxed">
+              GI Bill calculator, school comparison, 102+ vetted scholarships and VA programs â€” free tools built for veterans.
+            </p>
+            <p className="text-sm text-white/50 italic mb-8">
+              &ldquo;Education is the most powerful weapon which you can use to change the world.&rdquo;
+            </p>
+            <div className="flex flex-wrap gap-4">
+              <a href="#school-finder" className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-[#EAB308] text-[#0F1D3D] font-bold hover:bg-[#FACC15] focus:outline-none focus:ring-4 focus:ring-yellow-300 transition-all duration-200 shadow-lg hover:shadow-xl hover:-translate-y-0.5" aria-label="Go to School Finder">
+                <AcademicCapIcon className="h-5 w-5" aria-hidden="true" />
+                School Finder
+              </a>
+              <a href="#gi-bill" className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-white/10 border border-white/20 text-white font-bold hover:bg-white/20 focus:outline-none focus:ring-4 focus:ring-white/30 transition-all duration-200 backdrop-blur-sm" aria-label="Go to GI Bill Pathfinder">
+                <CalculatorIcon className="h-5 w-5" aria-hidden="true" />
+                GI Bill Pathfinder
+              </a>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Benefits Overview */}
-      <section 
-        aria-labelledby="benefits-heading" 
-        className="py-16 bg-white"
-      >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 
-            id="benefits-heading"
-            className="text-2xl md:text-3xl font-bold text-[#1A2C5B] mb-8"
-          >
-            Education Benefits Overview
-          </h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <div className="bg-blue-50 rounded-lg p-6 border border-blue-100 shadow-sm hover:shadow-md transition-shadow">
-              <div className="mb-4 flex justify-between items-start">
-                <h3 className="text-xl font-bold text-[#1A2C5B]">GI Bill Benefits</h3>
-                <DocumentTextIcon className="h-6 w-6 text-[#1A2C5B]" aria-hidden="true" />
-              </div>
-              <p className="text-gray-700 mb-4">
-                The Post-9/11 GI Bill provides financial support for education and housing to individuals with at least
-                90 days of aggregate service after September 10, 2001.
-              </p>
-              <ul className="list-disc list-inside text-gray-700 space-y-2">
-                <li>Tuition and fee coverage</li>
-                <li>Monthly housing allowance</li>
-                <li>Books and supplies stipend</li>
-                <li>Transferability to dependents</li>
-              </ul>
-              <div className="mt-4 pt-4 border-t border-blue-100">
-                <a 
-                  href="https://www.va.gov/education/about-gi-bill-benefits/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[#1A2C5B] font-medium hover:text-blue-700 inline-flex items-center focus:outline-none focus:underline"
-                  aria-label="Learn more about GI Bill benefits on VA website (opens in new tab)"
-                >
-                  Learn more on VA.gov
-                  <ArrowRightIcon className="ml-1 h-4 w-4" aria-hidden="true" />
-                </a>
-              </div>
-            </div>
-            
-            <div className="bg-blue-50 rounded-lg p-6 border border-blue-100 shadow-sm hover:shadow-md transition-shadow">
-              <div className="mb-4 flex justify-between items-start">
-                <h3 className="text-xl font-bold text-[#1A2C5B]">Scholarships & Grants</h3>
-                <DocumentTextIcon className="h-6 w-6 text-[#1A2C5B]" aria-hidden="true" />
-              </div>
-              <p className="text-gray-700 mb-4">
-                Beyond GI Bill benefits, numerous scholarships and grants are available specifically for veterans
-                and military families.
-              </p>
-              <ul className="list-disc list-inside text-gray-700 space-y-2">
-                <li>Military-specific scholarships</li>
-                <li>ROTC scholarships</li>
-                <li>Foundation grants</li>
-                <li>State-based education benefits</li>
-              </ul>
-              <div className="mt-4 pt-4 border-t border-blue-100">
-                <a 
-                  href="https://www.va.gov/education/other-va-education-benefits/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[#1A2C5B] font-medium hover:text-blue-700 inline-flex items-center focus:outline-none focus:underline"
-                  aria-label="Learn more about scholarships and grants on VA website (opens in new tab)"
-                >
-                  Explore scholarships
-                  <ArrowRightIcon className="ml-1 h-4 w-4" aria-hidden="true" />
-                </a>
-              </div>
-            </div>
-            
-            <div className="bg-blue-50 rounded-lg p-6 border border-blue-100 shadow-sm hover:shadow-md transition-shadow">
-              <div className="mb-4 flex justify-between items-start">
-                <h3 className="text-xl font-bold text-[#1A2C5B]">Educational Counseling</h3>
-                <DocumentTextIcon className="h-6 w-6 text-[#1A2C5B]" aria-hidden="true" />
-              </div>
-              <p className="text-gray-700 mb-4">
-                VA offers personalized educational and career counseling services to help you maximize your benefits.
-              </p>
-              <ul className="list-disc list-inside text-gray-700 space-y-2">
-                <li>Benefits explanation assistance</li>
-                <li>Educational planning</li>
-                <li>Career guidance</li>
-                <li>Academic counseling</li>
-              </ul>
-              <div className="mt-4 pt-4 border-t border-blue-100">
-                <a 
-                  href="https://www.va.gov/careers-employment/education-and-career-counseling/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[#1A2C5B] font-medium hover:text-blue-700 inline-flex items-center focus:outline-none focus:underline"
-                  aria-label="Learn more about educational counseling on VA website (opens in new tab)"
-                >
-                  Get counseling
-                  <ArrowRightIcon className="ml-1 h-4 w-4" aria-hidden="true" />
-                </a>
-              </div>
-            </div>
-          </div>
+      {/* â”€â”€â”€ Trust Banner â”€â”€â”€ */}
+      <div className="bg-slate-50 border-b border-slate-100">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-wrap items-center justify-center gap-x-8 gap-y-1.5">
+          {([
+            { Icon: CheckCircleIcon, text: '102+ Vetted Resources' },
+            { Icon: LockClosedIcon,  text: 'GI Bill Eligible Programs' },
+            { Icon: StarIcon,        text: 'Yellow Ribbon Schools Tracked' },
+            { Icon: ShieldCheckIcon, text: 'Free Tools â€” No Account Required' },
+          ] as const).map(({ Icon, text }) => (
+            <span key={text} className="flex items-center gap-1.5 text-xs text-slate-500">
+              <Icon className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" aria-hidden="true" />
+              {text}
+            </span>
+          ))}
         </div>
-      </section>
+      </div>
 
-      {/* Quick Guides */}
-      <section 
-        aria-labelledby="guides-heading" 
-        className="py-16 bg-gray-50"
-      >
+      {/* â”€â”€â”€ Primary Tool Cards â”€â”€â”€ */}
+      <section aria-labelledby="tools-heading" className="py-12 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 
-            id="guides-heading"
-            className="text-2xl md:text-3xl font-bold text-[#1A2C5B] mb-8"
-          >
-            Education Quick Guides
-          </h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div className="bg-white rounded-lg shadow-md p-6 border border-gray-100">
-              <div className="flex items-center mb-4">
-                <div className="h-10 w-10 rounded-full bg-[#1A2C5B] flex items-center justify-center text-white mr-4">
-                  <span className="font-bold">1</span>
+          <h2 id="tools-heading" className="text-2xl font-extrabold text-[#1A2C5B] tracking-tight mb-2">Education Tools</h2>
+          <p className="text-sm text-gray-500 mb-8">AI-powered tools and calculators built for veterans</p>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* School Finder */}
+            <a href="#school-finder" className="group relative bg-gradient-to-br from-blue-50 to-slate-100 rounded-2xl p-6 border border-blue-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2" aria-label="Go to School Finder">
+              <div className="flex justify-between items-start mb-4">
+                <div className="h-12 w-12 rounded-xl bg-[#1A2C5B] flex items-center justify-center shadow-md group-hover:scale-110 transition-transform duration-200">
+                  <AcademicCapIcon className="h-6 w-6 text-[#EAB308]" aria-hidden="true" />
                 </div>
-                <h3 className="text-xl font-bold text-[#1A2C5B]">How to Apply for GI Bill Benefits</h3>
+                <ArrowRightIcon className="h-5 w-5 text-gray-400 group-hover:text-[#1A2C5B] group-hover:translate-x-1 transition-all duration-200" aria-hidden="true" />
               </div>
-              <ol className="list-none space-y-6">
-                <li className="relative pl-9">
-                  <div className="absolute left-0 top-0 flex h-6 w-6 items-center justify-center rounded-full bg-blue-100 text-[#1A2C5B] font-bold text-sm">1</div>
-                  <div>
-                    <span className="font-medium text-[#1A2C5B]">Determine your eligibility</span>
-                    <p className="mt-1 text-gray-600">
-                      Check if you qualify for the Post-9/11 GI Bill, Montgomery GI Bill, or other programs based on your service.
-                    </p>
-                  </div>
-                </li>
-                <li className="relative pl-9">
-                  <div className="absolute left-0 top-0 flex h-6 w-6 items-center justify-center rounded-full bg-blue-100 text-[#1A2C5B] font-bold text-sm">2</div>
-                  <div>
-                    <span className="font-medium text-[#1A2C5B]">Gather your documentation</span>
-                    <p className="mt-1 text-gray-600">
-                      You'll need your Certificate of Eligibility, DD-214, and other service records.
-                    </p>
-                  </div>
-                </li>
-                <li className="relative pl-9">
-                  <div className="absolute left-0 top-0 flex h-6 w-6 items-center justify-center rounded-full bg-blue-100 text-[#1A2C5B] font-bold text-sm">3</div>
-                  <div>
-                    <span className="font-medium text-[#1A2C5B]">Submit VA Form 22-1990</span>
-                    <p className="mt-1 text-gray-600">
-                      Apply online through VA.gov or with the help of a school certifying official.
-                    </p>
-                  </div>
-                </li>
-                <li className="relative pl-9">
-                  <div className="absolute left-0 top-0 flex h-6 w-6 items-center justify-center rounded-full bg-blue-100 text-[#1A2C5B] font-bold text-sm">4</div>
-                  <div>
-                    <span className="font-medium text-[#1A2C5B]">Contact your school's Veterans Office</span>
-                    <p className="mt-1 text-gray-600">
-                      Work with your school to certify your enrollment and process your benefits.
-                    </p>
-                  </div>
-                </li>
-              </ol>
-              <div className="mt-6 pt-4 border-t border-gray-100">
-                <a 
-                  href="https://www.va.gov/education/how-to-apply/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[#1A2C5B] font-medium hover:text-blue-700 inline-flex items-center focus:outline-none focus:underline"
-                  aria-label="View complete application guide on VA website (opens in new tab)"
-                >
-                  View complete application guide
-                  <ArrowRightIcon className="ml-1 h-4 w-4" aria-hidden="true" />
-                </a>
+              <h3 className="text-lg font-extrabold text-[#1A2C5B] mb-2">School Finder</h3>
+              <p className="text-sm text-gray-600 leading-relaxed mb-4">Filter 20 top veteran-friendly schools by state, Yellow Ribbon status, and degree type â€” then compare up to 3 side-by-side.</p>
+              <ul className="space-y-1.5">
+                {['State + Yellow Ribbon filter', 'Side-by-side comparison table', 'Bridge to GI Bill calculator'].map(f => (
+                  <li key={f} className="flex items-center gap-2 text-xs text-gray-500">
+                    <CheckOutline className="h-3.5 w-3.5 text-green-500 flex-shrink-0" aria-hidden="true" />
+                    {f}
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-5 pt-4 border-t border-blue-100">
+                <span className="text-sm font-bold text-[#1A2C5B] group-hover:text-blue-700 inline-flex items-center gap-1">Find My School <ArrowRightIcon className="h-4 w-4" aria-hidden="true" /></span>
               </div>
-            </div>
-            
-            <div className="bg-white rounded-lg shadow-md p-6 border border-gray-100">
-              <div className="flex items-center mb-4">
-                <div className="h-10 w-10 rounded-full bg-[#1A2C5B] flex items-center justify-center text-white mr-4">
-                  <GraduationIcon className="h-5 w-5" aria-hidden="true" />
+            </a>
+
+            {/* GI Bill Pathfinder */}
+            <a href="#gi-bill" className="group relative bg-gradient-to-br from-blue-50 to-slate-100 rounded-2xl p-6 border border-blue-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2" aria-label="Go to GI Bill Pathfinder">
+              <div className="flex justify-between items-start mb-4">
+                <div className="h-12 w-12 rounded-xl bg-[#1A2C5B] flex items-center justify-center shadow-md group-hover:scale-110 transition-transform duration-200">
+                  <CalculatorIcon className="h-6 w-6 text-[#EAB308]" aria-hidden="true" />
                 </div>
-                <h3 className="text-xl font-bold text-[#1A2C5B]">Choosing a Veteran-Friendly School</h3>
+                <ArrowRightIcon className="h-5 w-5 text-gray-400 group-hover:text-[#1A2C5B] group-hover:translate-x-1 transition-all duration-200" aria-hidden="true" />
               </div>
-              <ol className="list-none space-y-6">
-                <li className="relative pl-9">
-                  <div className="absolute left-0 top-0 flex h-6 w-6 items-center justify-center rounded-full bg-blue-100 text-[#1A2C5B] font-bold text-sm">1</div>
-                  <div>
-                    <span className="font-medium text-[#1A2C5B]">Look for Yellow Ribbon Program participants</span>
-                    <p className="mt-1 text-gray-600">
-                      These schools provide additional funding to cover costs beyond GI Bill limits.
-                    </p>
-                  </div>
-                </li>
-                <li className="relative pl-9">
-                  <div className="absolute left-0 top-0 flex h-6 w-6 items-center justify-center rounded-full bg-blue-100 text-[#1A2C5B] font-bold text-sm">2</div>
-                  <div>
-                    <span className="font-medium text-[#1A2C5B]">Check for a dedicated veteran's office</span>
-                    <p className="mt-1 text-gray-600">
-                      Schools with dedicated staff for veteran services offer better support.
-                    </p>
-                  </div>
-                </li>
-                <li className="relative pl-9">
-                  <div className="absolute left-0 top-0 flex h-6 w-6 items-center justify-center rounded-full bg-blue-100 text-[#1A2C5B] font-bold text-sm">3</div>
-                  <div>
-                    <span className="font-medium text-[#1A2C5B]">Verify VA benefit acceptance</span>
-                    <p className="mt-1 text-gray-600">
-                      Ensure the school is approved for VA education benefits before applying.
-                    </p>
-                  </div>
-                </li>
-                <li className="relative pl-9">
-                  <div className="absolute left-0 top-0 flex h-6 w-6 items-center justify-center rounded-full bg-blue-100 text-[#1A2C5B] font-bold text-sm">4</div>
-                  <div>
-                    <span className="font-medium text-[#1A2C5B]">Research veteran student organizations</span>
-                    <p className="mt-1 text-gray-600">
-                      Schools with active veteran communities often provide better peer support.
-                    </p>
-                  </div>
-                </li>
-              </ol>
-              <div className="mt-6 pt-4 border-t border-gray-100">
-                <a 
-                  href="https://www.va.gov/education/choosing-a-school/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[#1A2C5B] font-medium hover:text-blue-700 inline-flex items-center focus:outline-none focus:underline"
-                  aria-label="View school selection guide on VA website (opens in new tab)"
-                >
-                  View school selection guide
-                  <ArrowRightIcon className="ml-1 h-4 w-4" aria-hidden="true" />
+              <h3 className="text-lg font-extrabold text-[#1A2C5B] mb-2">GI Bill Pathfinder</h3>
+              <p className="text-sm text-gray-600 leading-relaxed mb-4">Enter your service months, school state, and tuition â€” see your exact monthly net income and 3-year degree projection.</p>
+              <ul className="space-y-1.5">
+                {['Live BAH + stipend calculation', 'Post-9/11 & Montgomery chapters', 'Downloadable GI Bill Plan PDF'].map(f => (
+                  <li key={f} className="flex items-center gap-2 text-xs text-gray-500">
+                    <CheckOutline className="h-3.5 w-3.5 text-green-500 flex-shrink-0" aria-hidden="true" />
+                    {f}
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-5 pt-4 border-t border-blue-100">
+                <span className="text-sm font-bold text-[#1A2C5B] group-hover:text-blue-700 inline-flex items-center gap-1">Calculate My Income <ArrowRightIcon className="h-4 w-4" aria-hidden="true" /></span>
+              </div>
+            </a>
+
+            {/* VA Education Benefits */}
+            <div className="group bg-gradient-to-br from-blue-50 to-slate-100 rounded-2xl p-6 border border-blue-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
+              <div className="flex justify-between items-start mb-4">
+                <div className="h-12 w-12 rounded-xl bg-[#1A2C5B] flex items-center justify-center shadow-md group-hover:scale-110 transition-transform duration-200">
+                  <DocumentTextIcon className="h-6 w-6 text-[#EAB308]" aria-hidden="true" />
+                </div>
+              </div>
+              <h3 className="text-lg font-extrabold text-[#1A2C5B] mb-2">VA Education Benefits</h3>
+              <p className="text-sm text-gray-600 leading-relaxed mb-4">Explore every VA education program â€” Post-9/11, Montgomery, Voc Rehab, Survivor benefits, and more.</p>
+              <ul className="space-y-1.5">
+                {['All GI Bill chapters explained', 'Transferability to dependents', 'Chapter 35 survivor benefits'].map(f => (
+                  <li key={f} className="flex items-center gap-2 text-xs text-gray-500">
+                    <CheckOutline className="h-3.5 w-3.5 text-green-500 flex-shrink-0" aria-hidden="true" />
+                    {f}
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-5 pt-4 border-t border-blue-100">
+                <a href="https://www.va.gov/education/about-gi-bill-benefits/" target="_blank" rel="noopener noreferrer" className="text-sm font-bold text-[#1A2C5B] group-hover:text-blue-700 inline-flex items-center gap-1 focus:outline-none transition-colors duration-200">
+                  Explore on VA.gov <ArrowRightIcon className="h-4 w-4" aria-hidden="true" />
                 </a>
               </div>
             </div>
           </div>
+
+          {/* Secondary tool cards */}
+          <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
+            <a href="https://www.va.gov/education/about-gi-bill-benefits/post-9-11/yellow-ribbon-program/find-yellow-ribbon-schools/" target="_blank" rel="noopener noreferrer" className="group bg-gradient-to-br from-yellow-50 to-amber-50 rounded-2xl p-5 border border-yellow-100 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:ring-offset-2" aria-label="Yellow Ribbon school search on VA.gov">
+              <div className="flex justify-between items-start mb-3">
+                <div className="h-10 w-10 rounded-xl bg-amber-500 flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform duration-200">
+                  <StarIcon className="h-5 w-5 text-white" aria-hidden="true" />
+                </div>
+                <ArrowRightIcon className="h-4 w-4 text-amber-300 group-hover:text-amber-500 group-hover:translate-x-1 transition-all duration-200" aria-hidden="true" />
+              </div>
+              <h4 className="text-sm font-extrabold text-[#1A2C5B] mb-1">Yellow Ribbon Finder</h4>
+              <p className="text-xs text-gray-500 leading-relaxed">Official VA school search for all Yellow Ribbon participating institutions.</p>
+              <div className="mt-3 pt-3 border-t border-amber-100">
+                <span className="text-xs font-bold text-amber-700 group-hover:text-amber-800 inline-flex items-center gap-1">Search on VA.gov <ArrowRightIcon className="h-3 w-3" aria-hidden="true" /></span>
+              </div>
+            </a>
+
+            <a href="https://www.va.gov/careers-employment/vocational-rehabilitation/" target="_blank" rel="noopener noreferrer" className="group bg-gradient-to-br from-purple-50 to-indigo-50 rounded-2xl p-5 border border-purple-100 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:ring-offset-2" aria-label="Vocational Rehabilitation Chapter 31 on VA.gov">
+              <div className="flex justify-between items-start mb-3">
+                <div className="h-10 w-10 rounded-xl bg-purple-600 flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform duration-200">
+                  <BriefcaseIcon className="h-5 w-5 text-white" aria-hidden="true" />
+                </div>
+                <ArrowRightIcon className="h-4 w-4 text-purple-300 group-hover:text-purple-500 group-hover:translate-x-1 transition-all duration-200" aria-hidden="true" />
+              </div>
+              <h4 className="text-sm font-extrabold text-[#1A2C5B] mb-1">Vocational Rehab (Ch. 31)</h4>
+              <p className="text-xs text-gray-500 leading-relaxed">Full tuition + living stipend for veterans with service-connected disabilities seeking new careers.</p>
+              <div className="mt-3 pt-3 border-t border-purple-100">
+                <span className="text-xs font-bold text-purple-700 group-hover:text-purple-800 inline-flex items-center gap-1">Learn More <ArrowRightIcon className="h-3 w-3" aria-hidden="true" /></span>
+              </div>
+            </a>
+
+            <a href="https://www.va.gov/education/other-va-education-benefits/stem-scholarship/" target="_blank" rel="noopener noreferrer" className="group bg-gradient-to-br from-teal-50 to-emerald-50 rounded-2xl p-5 border border-teal-100 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-teal-400 focus:ring-offset-2" aria-label="VA STEM Scholarship on VA.gov">
+              <div className="flex justify-between items-start mb-3">
+                <div className="h-10 w-10 rounded-xl bg-teal-600 flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform duration-200">
+                  <SparklesIcon className="h-5 w-5 text-white" aria-hidden="true" />
+                </div>
+                <ArrowRightIcon className="h-4 w-4 text-teal-300 group-hover:text-teal-500 group-hover:translate-x-1 transition-all duration-200" aria-hidden="true" />
+              </div>
+              <h4 className="text-sm font-extrabold text-[#1A2C5B] mb-1">STEM Scholarship</h4>
+              <p className="text-xs text-gray-500 leading-relaxed">Up to 9 additional months of Post-9/11 GI Bill benefits for approved STEM degree programs.</p>
+              <div className="mt-3 pt-3 border-t border-teal-100">
+                <span className="text-xs font-bold text-teal-700 group-hover:text-teal-800 inline-flex items-center gap-1">Apply for STEM <ArrowRightIcon className="h-3 w-3" aria-hidden="true" /></span>
+              </div>
+            </a>
+          </div>
         </div>
       </section>
 
-      {/* Resource Library */}
-      <section 
-        id="resource-library"
-        aria-labelledby="resources-heading" 
-        className="py-16 bg-white scroll-mt-20"
-      >
+      {/* â”€â”€â”€ School Finder Panel (inline, anchor #school-finder) â”€â”€â”€ */}
+      <SchoolFinderPanel />
+
+      {/* â”€â”€â”€ GI Bill Pathfinder (inline, anchor #gi-bill, Smart Bridge receiver) â”€â”€â”€ */}
+      <GiBillPanel />
+
+      {/* â”€â”€â”€ Education Pathways â”€â”€â”€ */}
+      <section aria-labelledby="pathways-heading" className="py-12 bg-white border-t border-gray-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8">
-            <div>
-              <h2 
-                id="resources-heading"
-                className="text-2xl md:text-3xl font-bold text-[#1A2C5B] mb-2"
-              >
-                Education Resource Library
-              </h2>
-              <p className="text-gray-700">
-                Browse our comprehensive collection of education resources for veterans.
-              </p>
-            </div>
+          <div className="flex items-center gap-2 mb-2">
+            <MapIcon className="h-5 w-5 text-[#EAB308]" aria-hidden="true" />
+            <h2 id="pathways-heading" className="text-2xl font-extrabold text-[#1A2C5B] tracking-tight">Education Pathways</h2>
           </div>
-
-          {/* Filters */}
-          <FilterBanner 
-            category="education" 
-          />
-          
-          <div className="mt-8 grid grid-cols-1 lg:grid-cols-4 gap-8">
-            <div className="lg:col-span-1 bg-gray-50 p-4 rounded-md">
-              <h3 className="font-semibold text-lg text-[#1A2C5B] mb-4">Filter Resources</h3>
-              <ResourceFilters category="education" />
-            </div>
-            
-            <div className="lg:col-span-3">
-              <ResourceGrid category="education" />
-            </div>
+          <p className="text-sm text-gray-500 mb-8">Step-by-step guides to activate and maximize your education benefits</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            {EDUCATION_PATHS.map(path => (
+              <div key={path.id} className="bg-gray-50 rounded-2xl border border-gray-100 p-5 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
+                <div className="flex items-start justify-between mb-3">
+                  <span className="text-2xl" aria-hidden="true">{path.icon}</span>
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${DIFFICULTY_COLORS[path.difficulty]}`}>
+                    {path.difficulty}
+                  </span>
+                </div>
+                <h3 className="text-sm font-extrabold text-[#1A2C5B] leading-snug mb-3">{path.title}</h3>
+                <div className="flex items-center gap-1.5 text-xs text-gray-400 mb-4">
+                  <ClockIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                  ~{path.estimatedMins} min
+                </div>
+                <ol className="space-y-2">
+                  {path.steps.map((step, i) => (
+                    <li key={i} className="flex gap-2 text-xs text-gray-600 leading-snug">
+                      <span className="flex-shrink-0 h-4 w-4 rounded-full bg-[#1A2C5B]/10 text-[#1A2C5B] flex items-center justify-center font-bold text-[10px]">{i + 1}</span>
+                      {step}
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            ))}
           </div>
         </div>
       </section>
 
-      {/* Related Section */}
-      <section 
-        aria-labelledby="related-heading" 
-        className="py-16 bg-gray-50"
-      >
+      {/* â”€â”€â”€ Browse Education Resources â”€â”€â”€ */}
+      <EducationBrowseSection />
+
+      {/* â”€â”€â”€ MOS Translator (Careerâ†’Education flywheel) â”€â”€â”€ */}
+      <MOSTranslatorCard />
+
+      {/* â”€â”€â”€ VA Quick Guides â”€â”€â”€ */}
+      <section aria-labelledby="edu-guides-heading" className="py-12 bg-gray-50 border-t border-gray-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 
-            id="related-heading"
-            className="text-2xl md:text-3xl font-bold text-[#1A2C5B] mb-8 text-center"
-          >
-            Explore Related Resources
-          </h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <Link href="/careers" className="flex flex-col items-center p-6 bg-white rounded-lg shadow-md border border-gray-100 hover:shadow-lg transition-shadow focus:outline-none focus:ring-4 focus:ring-blue-100">
-              <BriefcaseIcon className="h-12 w-12 text-[#1A2C5B] mb-4" aria-hidden="true" />
-              <h3 className="text-xl font-bold text-[#1A2C5B] mb-2">Careers</h3>
-              <p className="text-center text-gray-600">Find job opportunities and career resources for veterans</p>
+          <h2 id="edu-guides-heading" className="text-2xl font-extrabold text-[#1A2C5B] tracking-tight mb-6">VA Quick Guides</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+            {([
+              {
+                title: 'How to Apply for GI Bill Benefits',
+                desc: 'Confirm eligibility â†’ gather DD-214 â†’ submit VA Form 22-1990 online â†’ deliver Certificate of Eligibility to your school\'s Veterans Certifying Official.',
+                href: 'https://www.va.gov/education/how-to-apply/',
+                cta: 'Apply on VA.gov',
+              },
+              {
+                title: 'Transfer GI Bill Benefits to Dependents',
+                desc: 'Active-duty members with 6+ years of service can transfer unused GI Bill entitlement to a spouse or child â€” requires 4-year service commitment extension.',
+                href: 'https://www.va.gov/education/transfer-post-9-11-gi-bill-benefits/',
+                cta: 'Transfer Benefits',
+              },
+            ] as const).map(g => (
+              <div key={g.title} className="bg-white rounded-2xl p-5 border border-gray-100">
+                <h3 className="font-extrabold text-[#1A2C5B] mb-2">{g.title}</h3>
+                <p className="text-sm text-gray-600 leading-relaxed mb-4">{g.desc}</p>
+                <a href={g.href} target="_blank" rel="noopener noreferrer" className="text-sm font-bold text-[#1A2C5B] hover:text-blue-700 inline-flex items-center gap-1 focus:outline-none focus:underline transition-colors duration-200">
+                  {g.cta} <ArrowRightIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                </a>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* â”€â”€â”€ Essential Resources â”€â”€â”€ */}
+      <section aria-labelledby="edu-essential-heading" className="py-12 bg-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <h2 id="edu-essential-heading" className="text-2xl font-extrabold text-[#1A2C5B] tracking-tight mb-6">Essential Education Resources</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {([
+              { title: 'VA Education Benefits',   desc: 'Complete guide to all GI Bill chapters, eligibility, and how to apply.',           url: 'https://www.va.gov/education/' },
+              { title: 'Student Veterans of America', desc: 'Network of 1,500+ campus chapters providing peer support and advocacy for student vets.', url: 'https://studentveterans.org/' },
+              { title: 'Pat Tillman Foundation',  desc: 'Scholarship + leadership network for military and veteran scholars (undergrad through grad).', url: 'https://pattillmanfoundation.org/', phone: '480-621-4074' },
+              { title: 'FAFSA for Veterans',       desc: 'Federal student aid â€” veterans may qualify for additional Pell Grants and work-study.', url: 'https://studentaid.gov/apply-for-aid/fafsa/filling-out/military' },
+              { title: 'Scholarship America',      desc: 'Largest private scholarship network â€” veteran-specific awards available year-round.',  url: 'https://scholarshipamerica.org/' },
+              { title: 'VET TEC Program',          desc: 'VA-funded tech training: coding bootcamps, cybersecurity certs, data science â€” no GI Bill needed.', url: 'https://www.va.gov/education/about-gi-bill-benefits/how-to-use-benefits/vettec-high-tech-program/' },
+              { title: 'Hire Heroes USA',          desc: 'Free career coaching and job placement services for transitioning veterans and spouses.', url: 'https://www.hireheroesusa.org/', phone: '1-800-915-4976' },
+              { title: 'American Corporate Partners', desc: 'Free mentoring from business professionals to help veterans build civilian careers.',  url: 'https://www.acp-usa.org/' },
+            ] as const).map(r => (
+              <div key={r.title} className="bg-gray-50 rounded-xl p-4 border border-gray-100 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-300">
+                <h3 className="font-bold text-[#1A2C5B] text-sm mb-1.5">{r.title}</h3>
+                <p className="text-xs text-gray-500 leading-relaxed mb-3">{r.desc}</p>
+                <div className="flex flex-col gap-1">
+                  <a href={r.url} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-[#1A2C5B] hover:text-blue-700 inline-flex items-center gap-1 focus:outline-none focus:underline transition-colors duration-200">
+                    Visit Website <ArrowRightIcon className="h-3 w-3" aria-hidden="true" />
+                  </a>
+                  {'phone' in r && r.phone && (
+                    <a href={`tel:${(r.phone as string).replace(/\D/g, '')}`} className="text-xs font-semibold text-[#B22234] hover:text-red-700 inline-flex items-center gap-1 transition-colors duration-200">
+                      {r.phone}
+                    </a>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* â”€â”€â”€ Explore Related â”€â”€â”€ */}
+      <section aria-labelledby="edu-related-heading" className="py-12 bg-gray-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <h2 id="edu-related-heading" className="text-2xl font-extrabold text-[#1A2C5B] tracking-tight mb-6 text-center">Explore Related Resources</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <Link href="/careers" className="group flex flex-col items-center p-6 bg-white rounded-2xl border border-gray-100 hover:shadow-lg hover:-translate-y-1 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2" aria-label="Career resources for veterans">
+              <BriefcaseIcon className="h-10 w-10 text-[#1A2C5B] mb-3 group-hover:scale-110 transition-transform duration-200" aria-hidden="true" />
+              <h3 className="text-lg font-extrabold text-[#1A2C5B] mb-1">Careers</h3>
+              <p className="text-center text-sm text-gray-500">Jobs, MOS translation, and federal/civilian hiring</p>
             </Link>
-            
-            <Link href="/health" className="flex flex-col items-center p-6 bg-white rounded-lg shadow-md border border-gray-100 hover:shadow-lg transition-shadow focus:outline-none focus:ring-4 focus:ring-blue-100">
-              <HeartIcon className="h-12 w-12 text-[#B22234] mb-4" aria-hidden="true" />
-              <h3 className="text-xl font-bold text-[#1A2C5B] mb-2">Health</h3>
-              <p className="text-center text-gray-600">Access healthcare and wellness resources for veterans</p>
+            <Link href="/local" className="group flex flex-col items-center p-6 bg-white rounded-2xl border border-gray-100 hover:shadow-lg hover:-translate-y-1 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2" aria-label="Local veteran-owned businesses">
+              <MapIcon className="h-10 w-10 text-[#1A2C5B] mb-3 group-hover:scale-110 transition-transform duration-200" aria-hidden="true" />
+              <h3 className="text-lg font-extrabold text-[#1A2C5B] mb-1">Local</h3>
+              <p className="text-center text-sm text-gray-500">Find veteran-owned tutoring and education services near you</p>
             </Link>
-            
-            <Link href="/entrepreneur" className="flex flex-col items-center p-6 bg-white rounded-lg shadow-md border border-gray-100 hover:shadow-lg transition-shadow focus:outline-none focus:ring-4 focus:ring-blue-100">
-              <SparklesIcon className="h-12 w-12 text-[#EAB308] mb-4" aria-hidden="true" />
-              <h3 className="text-xl font-bold text-[#1A2C5B] mb-2">Entrepreneur</h3>
-              <p className="text-center text-gray-600">Discover resources for veteran business owners and startups</p>
+            <Link href="/health" className="group flex flex-col items-center p-6 bg-white rounded-2xl border border-gray-100 hover:shadow-lg hover:-translate-y-1 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2" aria-label="Health resources for veterans">
+              <HeartIcon className="h-10 w-10 text-[#EAB308] mb-3 group-hover:scale-110 transition-transform duration-200" aria-hidden="true" />
+              <h3 className="text-lg font-extrabold text-[#1A2C5B] mb-1">Health</h3>
+              <p className="text-center text-sm text-gray-500">Wellness tools, records recon, and VA health programs</p>
             </Link>
           </div>
         </div>
       </section>
+
+      {/* â”€â”€â”€ Auto-Fill Floating Button â”€â”€â”€ */}
+      <AutoFillButton context="education" />
     </main>
   );
 }
