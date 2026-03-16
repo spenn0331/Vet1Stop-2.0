@@ -81,7 +81,7 @@ export interface ConditionPayload {
   mentionCount: number;
   firstMentionDate: string | null;
   pagesFound: number[];
-  sourceModule: 'records-recon';
+  sourceModule: 'records-recon' | 'wellness';
 }
 
 export interface BridgeData {

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   ChevronRightIcon,
@@ -12,12 +13,16 @@ import {
   UserGroupIcon,
   ExclamationCircleIcon,
   Cog6ToothIcon,
+  DocumentArrowDownIcon,
+  ArrowRightCircleIcon,
 } from '@heroicons/react/24/outline';
 import { PhoneIcon as PhoneIconSolid, StarIcon } from '@heroicons/react/24/solid';
 import NvwiConsentModal from './NvwiConsentModal';
 import type { NvwiConsent, WellnessProfile } from '@/types/wellness';
 import { NVWI_CONSENT_KEY, WELLNESS_PROFILE_KEY } from '@/types/wellness';
 import { buildCohortUpdate } from '@/lib/wellness/anonymize';
+import { PremiumGate } from '@/components/shared/PremiumGate';
+import { BRIDGE_STORAGE_KEY } from '@/types/records-recon';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -247,6 +252,7 @@ function ResourceSuggestions({
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 export default function WellnessPanel() {
+  const router = useRouter();
   const [log,         setLog]         = useState<WellnessEntry[]>([]);
   const [scores,      setScores]      = useState<WellnessScores>({ mood: 5, energy: 5, sleep: 5, pain: 3, social: 5 });
   const [notes,       setNotes]       = useState('');
@@ -256,7 +262,9 @@ export default function WellnessPanel() {
   const [isHydrated,    setIsHydrated]    = useState(false);
   const [nvwiConsent,   setNvwiConsent]   = useState<NvwiConsent | null>(null);
   const [showNvwiModal, setShowNvwiModal] = useState(false);
-  const [pendingEntry,  setPendingEntry]  = useState<import('@/types/wellness').WellnessEntry | null>(null);
+  const [pendingEntry,    setPendingEntry]    = useState<import('@/types/wellness').WellnessEntry | null>(null);
+  const [lastChangedKey,  setLastChangedKey]  = useState<SliderKey | null>(null);
+  const [isExporting,     setIsExporting]     = useState(false);
 
   // ── Hydrate from localStorage ────────────────────────────────────────────
   useEffect(() => {
@@ -282,6 +290,8 @@ export default function WellnessPanel() {
   const handleSlider = useCallback((key: SliderKey, value: number) => {
     setScores(prev => ({ ...prev, [key]: value }));
     setSavedToday(false);
+    setLastChangedKey(key);
+    setTimeout(() => setLastChangedKey(null), 400);
     if (key === 'mood' && value === 1) setShowCrisis(true);
   }, []);
 
@@ -347,6 +357,125 @@ export default function WellnessPanel() {
     setShowNvwiModal(false);
     setPendingEntry(null);
   }, []);
+
+  // [PREMIUM: wellness_diary_export] Symptom diary PDF — premium feature
+  const handleExportDiary = useCallback(async () => {
+    if (log.length === 0) return;
+    setIsExporting(true);
+    try {
+      const { jsPDF } = await import('jspdf');
+      const doc    = new jsPDF({ unit: 'pt', format: 'letter' });
+      const pageW  = doc.internal.pageSize.getWidth();
+      const margin = 54;
+      const maxW   = pageW - margin * 2;
+      let y        = 60;
+
+      const write = (text: string, opts: { size?: number; bold?: boolean; color?: [number, number, number] } = {}) => {
+        doc.setFontSize(opts.size ?? 10);
+        doc.setTextColor(...(opts.color ?? [30, 30, 30]));
+        const lines = doc.splitTextToSize(text, maxW) as string[];
+        lines.forEach((line: string) => {
+          if (y > 720) { doc.addPage(); y = 60; }
+          doc.text(line, margin, y);
+          y += (opts.size ?? 10) * 1.45;
+        });
+      };
+      const gap = (n = 8) => { y += n; };
+      const rule = () => {
+        if (y > 720) { doc.addPage(); y = 60; }
+        doc.setDrawColor(220, 220, 220);
+        doc.line(margin, y, pageW - margin, y);
+        y += 10;
+      };
+
+      // Cover header
+      doc.setFillColor(26, 44, 91);
+      doc.rect(0, 0, pageW, 44, 'F');
+      doc.setFontSize(15); doc.setTextColor(255, 255, 255);
+      doc.text('Vet1Stop — Personal Wellness Symptom Diary', margin, 28);
+      y = 66;
+
+      const now  = new Date();
+      const past = new Date(); past.setDate(now.getDate() - 29);
+      const fmt  = (d: Date) => d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+      write(`Date Range: ${fmt(past)} — ${fmt(now)}`, { size: 9, color: [100, 100, 100] });
+      gap(4);
+      write(`Generated: ${fmt(now)}  |  Total Check-Ins: ${log.length}`, { size: 9, color: [100, 100, 100] });
+      gap(4);
+      write('DISCLAIMER: Personal tracking tool only. Not a medical record. Not a diagnosis. For VA appointment and C&P exam reference only.', { size: 8, color: [160, 80, 80] });
+      gap(14);
+      rule();
+
+      // Column headers
+      doc.setFontSize(8); doc.setTextColor(100, 100, 100);
+      const cols = { date: margin, mood: margin + 90, energy: margin + 130, sleep: margin + 175, pain: margin + 218, social: margin + 260, notes: margin + 310 };
+      doc.text('Date',   cols.date,   y);
+      doc.text('Mood',   cols.mood,   y);
+      doc.text('Energy', cols.energy, y);
+      doc.text('Sleep',  cols.sleep,  y);
+      doc.text('Pain',   cols.pain,   y);
+      doc.text('Social', cols.social, y);
+      doc.text('Notes',  cols.notes,  y);
+      y += 14;
+      rule();
+
+      // Rows — last 30 days most recent first
+      const recent = [...log].reverse().slice(0, 30);
+      recent.forEach((entry, i) => {
+        if (y > 700) { doc.addPage(); y = 60; }
+        const d = new Date(entry.date + 'T00:00:00');
+        const dl = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' });
+        const rowColor: [number, number, number] = i % 2 === 0 ? [30, 30, 30] : [60, 60, 60];
+        doc.setFontSize(8.5); doc.setTextColor(...rowColor);
+        doc.text(dl,                            cols.date,   y);
+        doc.text(String(entry.scores.mood),     cols.mood,   y);
+        doc.text(String(entry.scores.energy),   cols.energy, y);
+        doc.text(String(entry.scores.sleep),    cols.sleep,  y);
+        doc.text(String(entry.scores.pain),     cols.pain,   y);
+        doc.text(String(entry.scores.social),   cols.social, y);
+        if (entry.notes) {
+          const noteSnip = entry.notes.slice(0, 55) + (entry.notes.length > 55 ? '…' : '');
+          doc.text(noteSnip, cols.notes, y);
+        }
+        y += 14;
+      });
+
+      gap(16); rule();
+
+      // Footer note
+      write('Suggested use: Bring this diary to your VA appointment or share with your VSO before a C&P exam as supporting documentation of symptom frequency and severity over time.', { size: 8.5, color: [80, 80, 80] });
+      gap(6);
+      write('All data was recorded privately on your personal device. Vet1Stop is NOT a VSO and does not provide claims assistance. Always consult an accredited VSO (DAV, VFW, American Legion) for official claims support.', { size: 8, color: [140, 140, 140] });
+
+      const fileName = `vet1stop-wellness-diary-${now.toISOString().split('T')[0]}.pdf`;
+      doc.save(fileName);
+    } catch {
+      /* fail silently — non-critical */
+    } finally {
+      setIsExporting(false);
+    }
+  }, [log]);
+
+  const handleBridgeToCpp = useCallback(() => {
+    if (log.length === 0) return;
+    const avgPain   = log.slice(-7).reduce((s, e) => s + e.scores.pain,  0) / Math.min(log.length, 7);
+    const avgMood   = log.slice(-7).reduce((s, e) => s + e.scores.mood,  0) / Math.min(log.length, 7);
+    const avgSleep  = log.slice(-7).reduce((s, e) => s + e.scores.sleep, 0) / Math.min(log.length, 7);
+    const conditions = [
+      avgPain  >= 5 ? { condition: 'Chronic Pain (self-reported)',         category: 'pain',          mentionCount: log.length, firstMentionDate: log[0]?.date ?? null, pagesFound: [], sourceModule: 'wellness' as const } : null,
+      avgMood  <= 5 ? { condition: 'Mood / Mental Health (self-reported)', category: 'mental-health', mentionCount: log.length, firstMentionDate: log[0]?.date ?? null, pagesFound: [], sourceModule: 'wellness' as const } : null,
+      avgSleep <= 5 ? { condition: 'Sleep Issues (self-reported)',         category: 'sleep',         mentionCount: log.length, firstMentionDate: log[0]?.date ?? null, pagesFound: [], sourceModule: 'wellness' as const } : null,
+    ].filter(Boolean);
+    if (conditions.length === 0) return;
+    const payload = {
+      conditions,
+      sourceModule: 'wellness' as const,
+      timestamp: new Date().toISOString(),
+      reportSummary: `${log.length} wellness check-ins — avg pain ${avgPain.toFixed(1)}, mood ${avgMood.toFixed(1)}, sleep ${avgSleep.toFixed(1)}.`,
+    };
+    localStorage.setItem(BRIDGE_STORAGE_KEY, JSON.stringify(payload));
+    router.push('/health/cpp-prep');
+  }, [log, router]);
 
   // ── Derived state ─────────────────────────────────────────────────────────
   const insights = useMemo(() => computeInsights(log), [log]);
@@ -468,7 +597,7 @@ export default function WellnessPanel() {
                 AI Wellness Predictor
               </h1>
               <p className="text-white/70 max-w-xl text-sm md:text-base leading-relaxed">
-                Track your daily well-being across 5 dimensions. Spot trends before they become problems — with smart resource suggestions when your scores need attention.
+                Track your daily well-being across 5 dimensions. Spot trends before they become problems — and build a private symptom diary that supports your C&P exam, VA appointments, and benefit claims.
               </p>
             </div>
             {streak > 0 && (
@@ -515,21 +644,28 @@ export default function WellnessPanel() {
                     </div>
                     <div className="flex items-center gap-3">
                       <span className="text-[11px] text-gray-400 hidden sm:block">{desc}</span>
-                      <span className={`text-xl font-extrabold ${color} w-6 text-center tabular-nums`}>
+                      <span
+                        className={`text-xl font-extrabold ${color} w-6 text-center tabular-nums transition-transform duration-150 ${
+                          lastChangedKey === key ? 'scale-125' : 'scale-100'
+                        }`}
+                        aria-live="polite"
+                      >
                         {scores[key]}
                       </span>
                     </div>
                   </div>
-                  <input
-                    type="range"
-                    min={1} max={10} step={1}
-                    value={scores[key]}
-                    onChange={e => handleSlider(key, Number(e.target.value))}
-                    className={`w-full h-2 rounded-full appearance-none cursor-pointer ${accent}`}
-                    aria-label={`${label}, current value ${scores[key]} out of 10`}
-                  />
-                  <div className="flex justify-between text-[10px] text-gray-300 mt-1 px-0.5 select-none">
-                    <span>1</span><span>5</span><span>10</span>
+                  <div className="relative">
+                    <input
+                      type="range"
+                      min={1} max={10} step={1}
+                      value={scores[key]}
+                      onChange={e => handleSlider(key, Number(e.target.value))}
+                      className={`w-full h-3 rounded-full appearance-none cursor-grab active:cursor-grabbing ${accent} [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:cursor-grab [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:shadow-md [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:cursor-grab`}
+                      aria-label={`${label}, current value ${scores[key]} out of 10`}
+                    />
+                  </div>
+                  <div className="flex justify-between text-[10px] text-gray-300 mt-1.5 px-0.5 select-none">
+                    <span>1 — low</span><span>5</span><span>10 — high</span>
                   </div>
                 </div>
               ))}
@@ -561,6 +697,34 @@ export default function WellnessPanel() {
               >
                 {justSaved ? '✓ Check-In Saved!' : 'Save Check-In'}
               </button>
+
+              {/* [PREMIUM: wellness_diary_export] Export + C&P Bridge buttons */}
+              {log.length > 0 && (
+                <div className="pt-1 border-t border-gray-50 space-y-2">
+                  <PremiumGate feature="wellness_diary_export" compact>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleExportDiary}
+                        disabled={isExporting}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-[#1A2C5B] font-semibold text-xs rounded-xl transition-colors focus:outline-none focus:ring-2 focus:ring-gray-300 disabled:opacity-50"
+                        aria-label="Export 30-day symptom diary as PDF"
+                      >
+                        <DocumentArrowDownIcon className="h-4 w-4" aria-hidden="true" />
+                        {isExporting ? 'Generating…' : 'Export Symptom Diary (PDF)'}
+                      </button>
+                      <button
+                        onClick={handleBridgeToCpp}
+                        className="flex items-center justify-center gap-1.5 px-3 py-2.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 font-semibold text-xs rounded-xl transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                        aria-label="Use wellness data in C&P Exam Prep"
+                        title="Send to C&P Exam Prep"
+                      >
+                        <ArrowRightCircleIcon className="h-4 w-4" aria-hidden="true" />
+                        C&amp;P Prep
+                      </button>
+                    </div>
+                  </PremiumGate>
+                </div>
+              )}
 
               {/* Overall score */}
               <div className="flex items-center justify-between pt-1 border-t border-gray-50">
