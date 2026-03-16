@@ -4,12 +4,92 @@
 - **Repo**: [github.com/spenn0331/Vet1Stop-2.0](https://github.com/spenn0331/Vet1Stop-2.0) (branch: `main`)
 - **Local Path**: `c:\Users\penny\Desktop\Vet1Stop`
 - **Primary Goal**: MVP Launch (Q2 2026)
-- **Current Phase**: Phase 2 Health Tools + Auto-Fill Engine COMPLETE (Mar 15, 2026)
+- **Current Phase**: Wellness Platform Sprints 1–4 COMPLETE (Mar 15, 2026)
 - **Dev Server**: `npm run dev` → http://localhost:3000
 - **Last Active Development**: Mar 15, 2026
-- **Recovery Date**: Feb 14, 2026 (restored from git commit `863a42cd`)
-- **Latest Commits**: `50c81067` (Phase 2 + Auto-Fill complete), `e1951dcf` (Health MVP v1.0 polish), `8e323237` (NGO mixed + card redesign), `748bb794` (premium chat upgrade), `87b1156c` (mic + hallucination fix)
+- **Latest Commits**: `0ae6bf0e` (Sprint 4 premium dashboard), `618fbee2` (Sprint 3 wearables), `0128162e` (Sprint 2 diary PDF), `ba466a3e` (Sprint 1 NVWI registry), `50c81067` (Phase 2 + Auto-Fill)
 - **Next Up**: Local VOB Directory (Leaflet + Real Estate) — Phase 1 item #2 per master strategy
+
+---
+
+## 🎯 Current Status: Wellness Platform Sprints 1–4 COMPLETE — Mar 15, 2026
+
+All four wellness platform sprints shipped in one session. Commits: `ba466a3e` → `0128162e` → `618fbee2` → `0ae6bf0e`.
+
+### ✅ Sprint 1 — NVWI Data Registry + Premium Infrastructure (commit `ba466a3e`)
+
+**New files (7):**
+- `src/types/wellness.ts` — shared types for the entire wellness/wearable/NVWI system (`WellnessEntry`, `WellnessProfile`, `NvwiConsent`, `WearableData`, `WearableToken`, localStorage key constants)
+- `src/lib/wellness/anonymize.ts` — anonymization utility: ISO week bucketing, cohort update builder. Zero PII transmitted.
+- `src/lib/premium.ts` — `PREMIUM_FEATURES` registry (14 keys), `FREE_TIER_LIMITS`, `isPremium()` gate check
+- `src/components/shared/PremiumGate.tsx` — `<PremiumGate feature="...">` React wrapper: full replacement card + `compact` badge overlay modes
+- `src/app/api/health/wellness/registry-sync/route.ts` — MongoDB `$inc` cohort upsert. No individual records ever stored. Groups by era/branch/age/region + ISO week.
+- `src/app/health/components/NvwiConsentModal.tsx` — opt-in modal with dual checkboxes (wellness + wearable). Fires after first check-in save.
+- `src/app/health/wellness/setup/page.tsx` — optional 4-question veteran profile (era/branch/age/region) at `/health/wellness/setup`
+
+**Modified (5):** WellnessPanel (NVWI consent + registry sync + Registry Member badge), ScribePanel + CppPrepPanel + AutoFillPanel + RecordsReconPanel (`// [PREMIUM: key]` annotations)
+
+---
+
+### ✅ Sprint 2 — Slider UX Polish + Phase A Symptom Diary PDF (commit `0128162e`)
+
+- Slider track upgraded: `h-3`, 20px white thumb, grab cursor, `1 — low / 5 / 10 — high` labels
+- Value number bounces to 125% scale on change (`aria-live` for accessibility)
+- Hero copy updated to mention C&P exam + VA appointment documentation value
+- `handleExportDiary()` — 30-day jsPDF symptom diary with VA-friendly dated log (date · all 5 scores · notes excerpt · footer disclaimer)
+- `handleBridgeToCpp()` — Smart Bridge: calculates 7-day averages, builds wellness-based `ConditionPayload[]`, sends to C&P Prep
+- Export + C&P Prep buttons below Save button, wrapped in `PremiumGate`
+- `ConditionPayload.sourceModule` widened to `'records-recon' | 'wellness'`
+
+---
+
+### ✅ Sprint 3 — Phase B Wearable Integration (commit `618fbee2`)
+
+**9 new files (1,131 lines):**
+- `src/lib/wellness/wearable.ts` — token helpers, data cache, device→slider score mapper
+- **Fitbit OAuth 2.0 PKCE**: `fitbit-auth` (PKCE verifier in httpOnly cookie) → `fitbit-callback` (token via URL hash, never in server logs) → `fitbit-sync` (proxy: sleep + resting HR + steps + active minutes)
+- **Garmin Health API OAuth 1.0a**: Full HMAC-SHA1 signing in Node `crypto` (no third-party lib). `garmin-auth` → `garmin-callback` → `garmin-sync` (dailies + sleep + HRV)
+- `WearableConnectCard.tsx` — 3-platform connect UI, data grid, Apple Health JSON import panel with file upload + paste
+
+**WellnessPanel updates:** OAuth hash handler on mount, auto-sync on connect, 3-mode slider UI (device data card vs manual slider for Sleep + Energy), `PremiumGate` on WearableConnectCard, `hasWearable` wired to NvwiConsentModal
+
+---
+
+### ✅ Sprint 4 — Phase C Premium Dashboard (commit `0ae6bf0e`)
+
+**5 new files (1,006 lines):**
+- `src/app/api/health/wellness/insights/route.ts` — Grok AI analysis of last 14 check-ins → 4 typed insight cards (trend/correlation/warning/positive/recommendation). Graceful static fallback if no API key or <3 entries.
+- `WellnessCorrelationChart.tsx` — pure SVG: 30-day 5-dimension trend lines + 5×5 Pearson correlation heatmap with blue/red gradient. No external chart library. Requires 7+ entries.
+- `WellnessInsightCards.tsx` — lazy-load trigger → loading skeletons → AI card grid with refresh button
+- `WellnessCaregiverReport.tsx` — two jsPDF modes: **VA Provider Brief** (30-day averages + trends + notes) and **Appointment Prep Packet** (same + tailored provider questions based on scores). Copy-text summary button. Built-in FAQ explainer panel.
+- **WellnessPanel Premium Dashboard section** — inserted between main grid and Smart Insights: correlation chart (full-width) + 2-col AI insights / caregiver share. All wrapped in `PremiumGate`.
+
+---
+
+### 📋 Premium Feature Registry (complete as of Sprint 4)
+
+| Key | Description |
+|-----|-------------|
+| `wellness_diary_export` | Symptom Diary PDF Export |
+| `wellness_wearable_sync` | Wearable Device Sync (Fitbit/Garmin/Apple) |
+| `wellness_correlation_chart` | 30-Day Trend Correlation Chart |
+| `wellness_insight_cards` | AI Weekly Insight Cards |
+| `wellness_caregiver_share` | Caregiver / VSO Share Link |
+| `scribe_unlimited` | Scribe: Unlimited AI Summaries |
+| `cpp_prep_unlimited` | C&P Prep: Unlimited Sessions |
+| `autofill_unlimited` | Auto-Fill: Unlimited Profiles |
+| `records_recon_unlimited` | Records Recon: Unlimited Scans |
+
+### 🔑 Credentials Still Needed (in `.env.local`)
+```
+FITBIT_CLIENT_ID=        # dev.fitbit.com → Register App
+FITBIT_CLIENT_SECRET=
+GARMIN_CONSUMER_KEY=     # developer.garmin.com/gc-developer-program (1-2 day approval)
+GARMIN_CONSUMER_SECRET=
+NVWI_HASH_SECRET=        # any long random string
+```
+
+---
 
 ---
 
