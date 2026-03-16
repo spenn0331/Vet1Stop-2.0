@@ -66,9 +66,9 @@ export const HEALTH_CONFIG: DomainConfig = {
 // ─── Education domain (Strike 6 — GI Bill Pathfinder) ────────────────────────
 
 const EDUCATION_TRACKS: DomainTrack[] = [
-  { id: 'federal',     label: 'Federal Programs', subcategory: 'federal'     },
-  { id: 'scholarship', label: 'Scholarships',      subcategory: 'scholarship' },
-  { id: 'state',       label: 'State Programs',    subcategory: 'state', geoFilter: PA_GEO_FILTER },
+  { id: 'federal', label: 'Federal Programs',    subcategory: 'federal' },
+  { id: 'ngo',     label: 'Scholarships & NGOs', subcategory: 'ngo'     },
+  { id: 'state',   label: 'State Programs',      subcategory: 'state', geoFilter: PA_GEO_FILTER },
 ];
 
 export const EDUCATION_CONFIG: DomainConfig = {
@@ -77,13 +77,16 @@ export const EDUCATION_CONFIG: DomainConfig = {
   tracks:     EDUCATION_TRACKS,
 
   knownPhrases: [
-    'gi bill', 'chapter 33', 'chapter 30', 'vocational rehab', 'tuition assistance',
-    'financial aid', 'trade school', 'online learning', 'stem degree',
+    'gi bill', 'chapter 33', 'chapter 30', 'chapter 31', 'vocational rehab', 'tuition assistance',
+    'financial aid', 'trade school', 'online learning', 'stem degree', 'yellow ribbon',
+    'vr&e', 'vet tec', 'coding bootcamp', 'community college',
   ],
 
   signalWords: new Set([
     'school', 'college', 'degree', 'certificate', 'vocational', 'training',
     'university', 'scholarship', 'tuition', 'stem', 'apprenticeship',
+    'gi bill', 'chapter', 'vr&e', 'vettec', 'yellow ribbon', 'bah', 'stipend',
+    'mentor', 'career', 'tech', 'cybersecurity', 'nursing', 'engineering',
   ]),
 };
 

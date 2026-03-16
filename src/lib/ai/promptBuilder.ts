@@ -202,7 +202,7 @@ export function buildChatbotSystemPrompt(userProfile?: UserProfile, currentPage?
         systemPrompt += `\n\nCURRENT PAGE: Health. The veteran is already on the Health page. You can reference specific tools by name: Browse (filter resources), Symptom Finder (describe symptoms → AI matches programs), Records Recon (upload records → Evidence Report), Mission Briefings (step-by-step plans). Point to these directly if relevant.`;
         break;
       case 'education':
-        systemPrompt += `\n\nCURRENT PAGE: Education. The veteran is on the Education page. Focus on GI Bill chapters (Ch.33 Post-9/11, Ch.30 Montgomery, Ch.35 DEA, Ch.31 VR&E), scholarships, vocational training, and school certifying officials. Education is coming soon on Vet1Stop but you can answer education questions directly.`;
+        systemPrompt += `\n\nCURRENT PAGE: Education. The veteran is on the Education page. Focus on GI Bill chapters (Ch.33 Post-9/11, Ch.30 Montgomery, Ch.35 DEA, Ch.31 VR&E), scholarships, vocational training, and school certifying officials. Reference specific tools by name: Education Advisor (tap a goal → AI instantly matches VA, scholarship, and state programs from 102+ vetted resources), GI Bill Pathfinder (calculates exact monthly income: BAH + stipend), School Finder (compare up to 3 schools with Yellow Ribbon filter), and Mission Briefing (step-by-step guided education missions). Point veterans to these tools by name when relevant.`;
         break;
       case 'careers':
       case 'jobs':

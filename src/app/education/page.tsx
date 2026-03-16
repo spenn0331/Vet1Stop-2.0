@@ -25,6 +25,7 @@ import GiBillPanel from './components/GiBillPanel';
 import EducationBrowseSection from './components/EducationBrowseSection';
 import MOSTranslatorCard from './components/MOSTranslatorCard';
 import AutoFillButton from '@/components/shared/AutoFillButton';
+import EducationAdvisorPanel from './components/EducationAdvisorPanel';
 
 export const metadata: Metadata = {
   title: 'Education Benefits & Resources | Vet1Stop',
@@ -116,6 +117,10 @@ export default function EducationPage() {
               <a href="#gi-bill" className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-white/10 border border-white/20 text-white font-bold hover:bg-white/20 focus:outline-none focus:ring-4 focus:ring-white/30 transition-all duration-200 backdrop-blur-sm" aria-label="Go to GI Bill Pathfinder">
                 <CalculatorIcon className="h-5 w-5" aria-hidden="true" />
                 GI Bill Pathfinder
+              </a>
+              <a href="#edu-advisor" className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-white/10 border border-white/20 text-white font-bold hover:bg-white/20 focus:outline-none focus:ring-4 focus:ring-white/30 transition-all duration-200 backdrop-blur-sm" aria-label="Go to Education Advisor AI">
+                <SparklesIcon className="h-5 w-5 text-[#EAB308]" aria-hidden="true" />
+                Education Advisor
               </a>
             </div>
           </div>
@@ -215,6 +220,31 @@ export default function EducationPage() {
                 </a>
               </div>
             </div>
+          </div>
+
+          {/* Education Advisor tool card */}
+          <div className="mt-8 mb-2">
+            <a href="#edu-advisor" className="group relative flex items-start gap-5 bg-gradient-to-br from-[#0F1D3D] to-[#1A2C5B] rounded-2xl p-6 border border-[#1A2C5B] shadow-sm hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2" aria-label="Go to AI Education Advisor">
+              <div className="h-12 w-12 rounded-xl bg-[#EAB308]/20 flex items-center justify-center flex-shrink-0 shadow-md group-hover:scale-110 transition-transform duration-200">
+                <SparklesIcon className="h-6 w-6 text-[#EAB308]" aria-hidden="true" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <h3 className="text-lg font-extrabold text-white">Education Advisor</h3>
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#EAB308] text-[#1F2937]">AI-Powered</span>
+                </div>
+                <p className="text-sm text-white/70 leading-relaxed mb-3">Tell us your education goal — GI Bill, scholarship, Voc Rehab, STEM, or state programs — and our AI pulls curated, vetted resources from 102+ programs in seconds.</p>
+                <ul className="flex flex-wrap gap-x-6 gap-y-1">
+                  {['Federal VA Programs', 'Scholarships & NGOs', 'State Benefits'].map(f => (
+                    <li key={f} className="flex items-center gap-1.5 text-xs text-white/60">
+                      <CheckOutline className="h-3.5 w-3.5 text-[#EAB308] flex-shrink-0" aria-hidden="true" />
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <ArrowRightIcon className="h-5 w-5 text-white/40 group-hover:text-[#EAB308] group-hover:translate-x-1 transition-all duration-200 flex-shrink-0 self-center" aria-hidden="true" />
+            </a>
           </div>
 
           {/* Secondary tool cards */}
@@ -320,6 +350,20 @@ export default function EducationPage() {
 
       {/* â”€â”€â”€ GI Bill Pathfinder (inline, anchor #gi-bill, Smart Bridge receiver) â”€â”€â”€ */}
       <GiBillPanel />
+
+      {/* ─── Education Advisor (AI resource matching) ─── */}
+      <section id="edu-advisor" aria-labelledby="edu-advisor-heading" className="py-12 bg-slate-50 border-t border-slate-100">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center gap-2 mb-1">
+            <SparklesIcon className="h-5 w-5 text-[#EAB308]" aria-hidden="true" />
+            <h2 id="edu-advisor-heading" className="text-2xl font-extrabold text-[#1A2C5B] tracking-tight">Education Advisor</h2>
+          </div>
+          <p className="text-sm text-gray-500 mb-8 max-w-xl">
+            Tell us your education goal and our AI instantly matches you with VA, scholarship, and state programs from our vetted database.
+          </p>
+          <EducationAdvisorPanel />
+        </div>
+      </section>
 
       {/* ─── Browse Education Resources ─── */}
       <EducationBrowseSection />
