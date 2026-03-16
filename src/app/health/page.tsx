@@ -21,6 +21,7 @@ import {
 } from '@heroicons/react/24/outline';
 import Link from 'next/link';
 import NGOSpotlight from './components/NGOSpotlight';
+import NGOOfTheMonthBanner from './components/NGOOfTheMonthBanner';
 import HealthBrowseSection from './components/HealthBrowseSection';
 import SmartBridgeBanner from './components/SmartBridgeBanner';
 import AutoFillButton from '@/components/shared/AutoFillButton';
@@ -248,6 +249,9 @@ export default function HealthPage() {
 
       {/* ─── NGO Spotlight ─── */}
       <NGOSpotlight />
+
+      {/* ─── NGO of the Month (merit-based, not paid) ─── */}
+      <NGOOfTheMonthBanner />
 
       {/* ─── Browse Health Resources ─── */}
       <HealthBrowseSection />

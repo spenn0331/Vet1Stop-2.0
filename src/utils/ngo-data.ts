@@ -440,7 +440,23 @@ export const filterNGOs = (
   });
 };
 
-// Sort NGOs by different criteria
+// ─── Scoring types for NGO of the Month system ────────────────────────────────
+
+export interface ScoreBreakdown {
+  impactComponent: number;    // out of 35
+  ratingComponent: number;    // out of 25
+  fundingComponent: number;   // out of 20
+  veteransComponent: number;  // out of 20
+  total: number;              // out of 100
+}
+
+export interface ScoredCandidate {
+  ngo: NGOResource;
+  scoreBreakdown: ScoreBreakdown;
+}
+
+// ─── Sort NGOs by different criteria ──────────────────────────────────────────
+
 export const sortNGOs = (
   ngoData: NGOResource[],
   sortBy: 'rating' | 'name' | 'impact' | 'established' | 'relevance' = 'relevance'
