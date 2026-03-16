@@ -24,6 +24,9 @@ import { buildCohortUpdate } from '@/lib/wellness/anonymize';
 import { PremiumGate } from '@/components/shared/PremiumGate';
 import { BRIDGE_STORAGE_KEY } from '@/types/records-recon';
 import WearableConnectCard from './WearableConnectCard';
+import WellnessCorrelationChart from './WellnessCorrelationChart';
+import WellnessInsightCards from './WellnessInsightCards';
+import WellnessCaregiverReport from './WellnessCaregiverReport';
 import type { WearableData, WearableToken } from '@/types/wellness';
 import {
   getWearableToken,
@@ -922,7 +925,39 @@ export default function WellnessPanel() {
           </div>
         </div>
 
-        {/* ── Smart Insights ───────────────────────────────────────────────── */}
+        {/* ── Premium Dashboard ─────────────────────────────────────────── */}
+        {log.length >= 1 && (
+          <section aria-label="Premium wellness dashboard">
+            <div className="flex items-center gap-2 mb-4">
+              <span className="text-xs font-bold text-[#1A2C5B] uppercase tracking-widest">Premium Dashboard</span>
+              <span className="flex-1 h-px bg-gray-100" />
+            </div>
+            <div className="space-y-6">
+
+              {/* Correlation chart — [PREMIUM: wellness_correlation_chart] */}
+              <PremiumGate feature="wellness_correlation_chart">
+                <WellnessCorrelationChart log={log} />
+              </PremiumGate>
+
+              {/* AI insights + Caregiver share — 2-col on lg */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+                {/* AI insight cards — [PREMIUM: wellness_ai_insights] */}
+                <PremiumGate feature="wellness_insight_cards">
+                  <WellnessInsightCards log={log} />
+                </PremiumGate>
+
+                {/* Caregiver / appointment share — [PREMIUM: wellness_caregiver_share] */}
+                <PremiumGate feature="wellness_caregiver_share">
+                  <WellnessCaregiverReport log={log} />
+                </PremiumGate>
+
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* ── Smart Insights ─────────────────────────────────────────────── */}
         {(insights.showMentalHealth || insights.showPhysical || insights.showSleep) && (
           <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6" role="region" aria-label="Wellness insights">
             <div className="flex items-start gap-3 mb-5">
