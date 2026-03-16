@@ -11,8 +11,13 @@ import {
   MoonIcon,
   UserGroupIcon,
   ExclamationCircleIcon,
+  Cog6ToothIcon,
 } from '@heroicons/react/24/outline';
-import { PhoneIcon as PhoneIconSolid } from '@heroicons/react/24/solid';
+import { PhoneIcon as PhoneIconSolid, StarIcon } from '@heroicons/react/24/solid';
+import NvwiConsentModal from './NvwiConsentModal';
+import type { NvwiConsent, WellnessProfile } from '@/types/wellness';
+import { NVWI_CONSENT_KEY, WELLNESS_PROFILE_KEY } from '@/types/wellness';
+import { buildCohortUpdate } from '@/lib/wellness/anonymize';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -36,6 +41,8 @@ interface WellnessEntry {
 type SliderKey = keyof WellnessScores;
 
 // ─── Constants ──────────────────────────────────────────────────────────────
+
+const REGISTRY_SYNC_URL = '/api/health/wellness/registry-sync';
 
 const CRISIS_KEYWORDS = [
   'suicide', 'suicidal', 'kill myself', 'end my life', 'want to die',
@@ -246,7 +253,10 @@ export default function WellnessPanel() {
   const [savedToday,  setSavedToday]  = useState(false);
   const [justSaved,   setJustSaved]   = useState(false);
   const [showCrisis,  setShowCrisis]  = useState(false);
-  const [isHydrated,  setIsHydrated]  = useState(false);
+  const [isHydrated,    setIsHydrated]    = useState(false);
+  const [nvwiConsent,   setNvwiConsent]   = useState<NvwiConsent | null>(null);
+  const [showNvwiModal, setShowNvwiModal] = useState(false);
+  const [pendingEntry,  setPendingEntry]  = useState<import('@/types/wellness').WellnessEntry | null>(null);
 
   // ── Hydrate from localStorage ────────────────────────────────────────────
   useEffect(() => {
@@ -262,6 +272,8 @@ export default function WellnessPanel() {
           setSavedToday(true);
         }
       }
+      const consentRaw = localStorage.getItem(NVWI_CONSENT_KEY);
+      if (consentRaw) setNvwiConsent(JSON.parse(consentRaw));
     } catch { /* ignore malformed data */ }
     setIsHydrated(true);
   }, []);
@@ -277,6 +289,23 @@ export default function WellnessPanel() {
     setNotes(value);
     setSavedToday(false);
     if (CRISIS_KEYWORDS.some(kw => value.toLowerCase().includes(kw))) setShowCrisis(true);
+  }, []);
+
+  const syncToRegistry = useCallback(async (
+    entry: WellnessEntry,
+    consent: NvwiConsent,
+  ) => {
+    if (!consent.enrolled) return;
+    try {
+      const profileRaw = localStorage.getItem(WELLNESS_PROFILE_KEY);
+      const profile: WellnessProfile | undefined = profileRaw ? JSON.parse(profileRaw) : undefined;
+      const payload = buildCohortUpdate(entry, profile);
+      await fetch(REGISTRY_SYNC_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    } catch { /* non-critical — fail silently */ }
   }, []);
 
   const handleSave = useCallback(() => {
@@ -296,7 +325,28 @@ export default function WellnessPanel() {
     setSavedToday(true);
     setJustSaved(true);
     setTimeout(() => setJustSaved(false), 2500);
-  }, [scores, notes]);
+
+    if (nvwiConsent === null) {
+      setPendingEntry(entry);
+      setShowNvwiModal(true);
+    } else if (nvwiConsent.enrolled) {
+      syncToRegistry(entry, nvwiConsent);
+    }
+  }, [scores, notes, nvwiConsent, syncToRegistry]);
+
+  const handleNvwiConsent = useCallback((consent: NvwiConsent) => {
+    setNvwiConsent(consent);
+    setShowNvwiModal(false);
+    if (consent.enrolled && pendingEntry) syncToRegistry(pendingEntry, consent);
+    setPendingEntry(null);
+  }, [pendingEntry, syncToRegistry]);
+
+  const handleNvwiDecline = useCallback(() => {
+    const declined: NvwiConsent = { enrolled: false, includeWearable: false, enrolledAt: new Date().toISOString() };
+    setNvwiConsent(declined);
+    setShowNvwiModal(false);
+    setPendingEntry(null);
+  }, []);
 
   // ── Derived state ─────────────────────────────────────────────────────────
   const insights = useMemo(() => computeInsights(log), [log]);
@@ -327,6 +377,15 @@ export default function WellnessPanel() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+
+      {/* ── NVWI Consent Modal ─────────────────────────────────────────── */}
+      {showNvwiModal && (
+        <NvwiConsentModal
+          hasWearable={false}
+          onConsent={handleNvwiConsent}
+          onDecline={handleNvwiDecline}
+        />
+      )}
 
       {/* ── Crisis Modal ─────────────────────────────────────────────────── */}
       {showCrisis && (
@@ -377,14 +436,22 @@ export default function WellnessPanel() {
             <ChevronRightIcon className="h-3 w-3" />
             <span className="text-[#1A2C5B] font-medium">Wellness Predictor</span>
           </nav>
-          <a
-            href="tel:988"
-            className="hidden sm:flex items-center gap-1.5 text-xs text-[#B22234] font-semibold hover:text-red-700 transition-colors"
-            aria-label="Veterans Crisis Line 988"
-          >
-            <PhoneIconSolid className="h-3.5 w-3.5" />
-            988 Crisis Line
-          </a>
+          <div className="flex items-center gap-3">
+            {nvwiConsent?.enrolled && (
+              <span className="hidden sm:flex items-center gap-1 text-xs text-emerald-700 font-semibold bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100">
+                <StarIcon className="h-3 w-3 text-emerald-500" aria-hidden="true" />
+                Registry Member
+              </span>
+            )}
+            <a
+              href="tel:988"
+              className="hidden sm:flex items-center gap-1.5 text-xs text-[#B22234] font-semibold hover:text-red-700 transition-colors"
+              aria-label="Veterans Crisis Line 988"
+            >
+              <PhoneIconSolid className="h-3.5 w-3.5" />
+              988 Crisis Line
+            </a>
+          </div>
         </div>
       </div>
 
@@ -426,6 +493,8 @@ export default function WellnessPanel() {
                 <h2 className="text-lg font-extrabold text-[#1A2C5B]">Today&rsquo;s Check-In</h2>
                 <p className="text-xs text-gray-500 mt-0.5">
                   {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                  <span className="text-gray-300 mx-1.5">·</span>
+                  <span className="text-gray-400">Drag each slider to rate</span>
                 </p>
               </div>
               {savedToday && (
@@ -594,6 +663,38 @@ export default function WellnessPanel() {
             )}
           </div>
         )}
+
+        {/* ── Registry / Profile Footer ─────────────────────────────────── */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-1">
+          {nvwiConsent === null ? (
+            <button
+              onClick={() => setShowNvwiModal(true)}
+              className="text-xs text-[#1A2C5B] font-semibold hover:underline flex items-center gap-1"
+            >
+              <StarIcon className="h-3 w-3 text-amber-400" aria-hidden="true" />
+              Join the National Veteran Wellness Registry
+            </button>
+          ) : nvwiConsent.enrolled ? (
+            <span className="text-xs text-emerald-600 flex items-center gap-1">
+              <StarIcon className="h-3 w-3" aria-hidden="true" />
+              Contributing anonymized data to veteran health research
+            </span>
+          ) : (
+            <button
+              onClick={() => setShowNvwiModal(true)}
+              className="text-xs text-gray-400 hover:text-[#1A2C5B] transition-colors"
+            >
+              Join the Wellness Registry
+            </button>
+          )}
+          <Link
+            href="/health/wellness/setup"
+            className="text-xs text-gray-400 hover:text-[#1A2C5B] flex items-center gap-1 transition-colors"
+          >
+            <Cog6ToothIcon className="h-3.5 w-3.5" aria-hidden="true" />
+            Update Wellness Profile
+          </Link>
+        </div>
 
         {/* ── Legal Disclaimer ─────────────────────────────────────────────── */}
         <div className="bg-gray-50 border border-gray-200 rounded-xl px-5 py-4 text-center">

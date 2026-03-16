@@ -119,6 +119,7 @@ export default function CppPrepPanel() {
       return;
     }
 
+    // [PREMIUM: cpp_prep_unlimited] Free tier: 3 AI sessions/day. Premium: unlimited.
     setConditions(prev => prev.map((c, i) => i === idx ? { ...c, loading: true, expanded: true, error: null } : c));
 
     try {
@@ -145,6 +146,7 @@ export default function CppPrepPanel() {
     setTimeout(() => rolePlayRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
   }, []);
 
+  // [PREMIUM: cpp_prep_unlimited] Feedback calls count toward daily session limit.
   const handleGetFeedback = useCallback(async () => {
     if (!rolePlay || !rolePlay.answer.trim()) return;
     const cond = conditions[rolePlay.conditionIdx];
@@ -172,6 +174,7 @@ export default function CppPrepPanel() {
     }
   }, [rolePlay, conditions]);
 
+  // [PREMIUM: cpp_prep_unlimited] Prep sheet PDF export included in unlimited tier.
   // ── PDF Download ──────────────────────────────────────────────────────────
   const handleDownloadPDF = useCallback(async () => {
     const { jsPDF } = await import('jspdf');

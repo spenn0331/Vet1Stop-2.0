@@ -148,6 +148,7 @@ export default function RecordsReconPanel() {
   }, []);
 
   // ─── Scan ─────────────────────────────────────────────────────────────────
+  // [PREMIUM: records_recon_unlimited] Free tier: 3 scans/day. Premium: unlimited.
 
   const startScan = async (retryData?: { filteredText: string; keywordFlags: Array<{ condition: string; confidence: string; excerpt: string }>; synopsis: ScanSynopsis; fileNames: string; useReducedCap?: boolean }) => {
     setPanelState('processing');

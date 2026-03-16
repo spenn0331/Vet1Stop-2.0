@@ -123,6 +123,7 @@ export default function AutoFillPanel() {
     setJustSaved(false);
   }, []);
 
+  // [PREMIUM: autofill_unlimited] Free tier: 1 saved Sea Bag profile. Premium: unlimited profiles.
   const handleSave = useCallback(() => {
     const data: SeaBagData = {
       fullName:             form.fullName             || null,

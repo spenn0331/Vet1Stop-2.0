@@ -96,6 +96,7 @@ export default function ScribePanel() {
     setInterimText('');
   }, []);
 
+  // [PREMIUM: scribe_unlimited] Free tier: 3 AI summaries/day. Premium: unlimited.
   // ── Summarize ─────────────────────────────────────────────────────────────
   const handleSummarize = useCallback(async () => {
     const fullText = (transcript + ' ' + interimText).trim();
@@ -124,6 +125,7 @@ export default function ScribePanel() {
     }
   }, [transcript, interimText, isRecording, stopRecording]);
 
+  // [PREMIUM: scribe_unlimited] PDF export included in unlimited tier.
   // ── PDF Download ──────────────────────────────────────────────────────────
   const handleDownload = useCallback(async () => {
     const { jsPDF } = await import('jspdf');
