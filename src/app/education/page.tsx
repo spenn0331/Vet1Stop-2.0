@@ -38,7 +38,8 @@ const EDUCATION_PATHS = [
   {
     id: 'gi-bill-activation',
     icon: 'ðŸŽ“', title: 'Activate Your Post-9/11 GI Bill',
-    difficulty: 'Easy', estimatedMins: 90,
+    objective: 'Get your GI Bill entitlement live and your Certificate of Eligibility in hand.',
+    estimatedMins: 90,
     steps: [
       'Verify active service duration â†’ determines your entitlement %',
       'Apply online using VA Form 22-1990 at VA.gov',
@@ -49,7 +50,8 @@ const EDUCATION_PATHS = [
   {
     id: 'school-comparison',
     icon: 'ðŸ«', title: 'Compare Schools & Maximize BAH',
-    difficulty: 'Medium', estimatedMins: 60,
+    objective: 'Find the highest-value school for your goals and lock in your monthly housing income.',
+    estimatedMins: 60,
     steps: [
       'Use School Finder below to filter Yellow Ribbon schools',
       'Select up to 3 schools â†’ compare tuition, debt, vet services',
@@ -60,7 +62,8 @@ const EDUCATION_PATHS = [
   {
     id: 'voc-rehab',
     icon: 'âš™ï¸', title: 'Apply for Vocational Rehab (Ch. 31)',
-    difficulty: 'Medium', estimatedMins: 120,
+    objective: 'Secure full tuition + living stipend for a new career path through VA VR&E.',
+    estimatedMins: 120,
     steps: [
       'Confirm service-connected disability rating (any % qualifies)',
       'Apply online at VA.gov â†’ select Chapter 31 VR&E',
@@ -71,7 +74,8 @@ const EDUCATION_PATHS = [
   {
     id: 'stem-scholarship',
     icon: 'ðŸ”¬', title: 'STEM Scholarship Pathway',
-    difficulty: 'Hard', estimatedMins: 180,
+    objective: 'Stack VA STEM extension with top scholarships for a fully-funded STEM degree.',
+    estimatedMins: 180,
     steps: [
       'Confirm STEM-approved program (VA list: science, tech, engineering, math)',
       'Exhaust at least 180 days of Post-9/11 GI Bill entitlement first',
@@ -81,11 +85,6 @@ const EDUCATION_PATHS = [
   },
 ] as const;
 
-const DIFFICULTY_COLORS: Record<string, string> = {
-  Easy:   'bg-emerald-50 text-emerald-700',
-  Medium: 'bg-amber-50 text-amber-700',
-  Hard:   'bg-red-50 text-red-600',
-};
 
 export default function EducationPage() {
   return (
@@ -266,48 +265,63 @@ export default function EducationPage() {
       </section>
 
       {/* â”€â”€â”€ School Finder Panel (inline, anchor #school-finder) â”€â”€â”€ */}
-      <SchoolFinderPanel />
-
-      {/* â”€â”€â”€ GI Bill Pathfinder (inline, anchor #gi-bill, Smart Bridge receiver) â”€â”€â”€ */}
-      <GiBillPanel />
-
-      {/* â”€â”€â”€ Education Pathways â”€â”€â”€ */}
-      <section aria-labelledby="pathways-heading" className="py-12 bg-white border-t border-gray-100">
+      {/* ─── Mission Briefing ─── */}
+      <section aria-labelledby="mission-briefing-heading" className="py-12 bg-slate-50 border-t border-slate-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-2 mb-2">
+          <div className="flex items-center gap-2 mb-1">
             <MapIcon className="h-5 w-5 text-[#EAB308]" aria-hidden="true" />
-            <h2 id="pathways-heading" className="text-2xl font-extrabold text-[#1A2C5B] tracking-tight">Education Pathways</h2>
+            <h2 id="mission-briefing-heading" className="text-2xl font-extrabold text-[#1A2C5B] tracking-tight">Mission Briefing</h2>
           </div>
-          <p className="text-sm text-gray-500 mb-8">Step-by-step guides to activate and maximize your education benefits</p>
+          <p className="text-sm text-gray-500 mb-8 max-w-xl">
+            Guided, step-by-step education missions — from activating your GI Bill to landing a fully-funded STEM degree.
+          </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
             {EDUCATION_PATHS.map(path => (
-              <div key={path.id} className="bg-gray-50 rounded-2xl border border-gray-100 p-5 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
-                <div className="flex items-start justify-between mb-3">
-                  <span className="text-2xl" aria-hidden="true">{path.icon}</span>
-                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${DIFFICULTY_COLORS[path.difficulty]}`}>
-                    {path.difficulty}
-                  </span>
+              <div key={path.id} className="group text-left bg-white rounded-2xl border border-gray-200 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 overflow-hidden flex flex-col">
+                <div className="h-1.5 w-full bg-gradient-to-r from-[#1A2C5B] to-[#2d4d99]" />
+                <div className="p-5 flex flex-col flex-1">
+                  <span className="text-2xl mb-3 block" role="img" aria-hidden="true">{path.icon}</span>
+                  <h3 className="text-sm font-extrabold text-[#1A2C5B] leading-snug mb-1 group-hover:text-blue-700 transition-colors">
+                    {path.title}
+                  </h3>
+                  <p className="text-xs text-gray-500 leading-relaxed mb-3 flex-1">{path.objective}</p>
+                  <div className="flex items-center gap-3 text-xs text-gray-400 mb-3">
+                    <span className="flex items-center gap-1">
+                      <ClockIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                      {path.estimatedMins} min
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <CheckOutline className="h-3.5 w-3.5" aria-hidden="true" />
+                      {path.steps.length} steps
+                    </span>
+                  </div>
+                  <ol className="space-y-1.5 mb-4">
+                    {path.steps.map((step, i) => (
+                      <li key={i} className="flex gap-2 text-xs text-gray-600 leading-snug">
+                        <span className="flex-shrink-0 h-4 w-4 rounded-full bg-[#1A2C5B]/10 text-[#1A2C5B] flex items-center justify-center font-bold text-[10px]">{i + 1}</span>
+                        {step}
+                      </li>
+                    ))}
+                  </ol>
+                  <div className="pt-3 border-t border-gray-100 flex items-center justify-between">
+                    <span className="text-xs text-gray-400">Education Mission</span>
+                    <span className="text-xs font-bold text-[#1A2C5B] group-hover:text-blue-700 flex items-center gap-0.5 transition-colors">
+                      Follow Steps <ArrowRightIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                    </span>
+                  </div>
                 </div>
-                <h3 className="text-sm font-extrabold text-[#1A2C5B] leading-snug mb-3">{path.title}</h3>
-                <div className="flex items-center gap-1.5 text-xs text-gray-400 mb-4">
-                  <ClockIcon className="h-3.5 w-3.5" aria-hidden="true" />
-                  ~{path.estimatedMins} min
-                </div>
-                <ol className="space-y-2">
-                  {path.steps.map((step, i) => (
-                    <li key={i} className="flex gap-2 text-xs text-gray-600 leading-snug">
-                      <span className="flex-shrink-0 h-4 w-4 rounded-full bg-[#1A2C5B]/10 text-[#1A2C5B] flex items-center justify-center font-bold text-[10px]">{i + 1}</span>
-                      {step}
-                    </li>
-                  ))}
-                </ol>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* â”€â”€â”€ Browse Education Resources â”€â”€â”€ */}
+      <SchoolFinderPanel />
+
+      {/* â”€â”€â”€ GI Bill Pathfinder (inline, anchor #gi-bill, Smart Bridge receiver) â”€â”€â”€ */}
+      <GiBillPanel />
+
+      {/* ─── Browse Education Resources ─── */}
       <EducationBrowseSection />
 
       {/* â”€â”€â”€ MOS Translator (Careerâ†’Education flywheel) â”€â”€â”€ */}

@@ -24,11 +24,12 @@ import type { BrowseResource } from '@/app/health/components/BrowseResourceCard'
 
 // ─── Tab config ───────────────────────────────────────────────────────────────
 
-type Tab = 'all' | 'federal' | 'scholarships' | 'state';
+type Tab = 'all' | 'federal' | 'ngo' | 'scholarships' | 'state';
 
 const TABS: { id: Tab; label: string; ariaLabel: string }[] = [
   { id: 'all',          label: 'All',          ariaLabel: 'Browse all education resources' },
   { id: 'federal',      label: 'Federal',      ariaLabel: 'Browse VA and federal education programs' },
+  { id: 'ngo',          label: 'NGO',          ariaLabel: 'Browse nonprofit and NGO education resources' },
   { id: 'scholarships', label: 'Scholarships', ariaLabel: 'Browse scholarships and grants' },
   { id: 'state',        label: 'State',        ariaLabel: 'Browse state education benefits' },
 ];
@@ -44,6 +45,17 @@ const TAG_FILTERS = [
   { label: 'Free',          value: 'free' },
   { label: 'Nursing',       value: 'nursing' },
   { label: 'IT / Cyber',    value: 'cybersecurity' },
+];
+
+// Used exclusively for the NGO tab — education-focused mega-categories
+const NGO_FILTERS = [
+  { label: 'Scholarships',          value: 'scholarship',  emoji: '🏆' },
+  { label: 'Mentoring & Coaching',  value: 'mentoring',    emoji: '🤝' },
+  { label: 'Career & Workforce',    value: 'career',       emoji: '💼' },
+  { label: 'Women Veterans',        value: 'women',        emoji: '⭐' },
+  { label: 'STEM & Tech',           value: 'stem',         emoji: '🔬' },
+  { label: 'Transition Support',    value: 'transition',   emoji: '🪖' },
+  { label: 'Free Services Only',    value: 'free',         emoji: '✅' },
 ];
 
 const SCHOLARSHIP_FILTERS = [
@@ -156,6 +168,7 @@ export default function EducationBrowseSection() {
   const tabCounts: Record<Tab, string> = {
     all:          String(total),
     federal:      activeTab === 'federal'      ? String(total) : '',
+    ngo:          activeTab === 'ngo'          ? String(total) : '',
     scholarships: activeTab === 'scholarships' ? String(total) : '',
     state:        activeTab === 'state'        ? String(total) : '',
   };
@@ -267,7 +280,39 @@ export default function EducationBrowseSection() {
         </div>
 
         {/* Filter chips */}
-        {activeTab === 'scholarships' ? (
+        {activeTab === 'ngo' ? (
+          <div className="mb-6">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2.5">Filter by organization type</p>
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Filter NGO resources by type">
+              {NGO_FILTERS.map(f => (
+                <button
+                  key={f.value}
+                  onClick={() => setActiveTag(activeTag === f.value ? '' : f.value)}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-400 ${
+                    activeTag === f.value
+                      ? 'bg-[#1A2C5B] text-white shadow-sm'
+                      : 'bg-white text-gray-600 border border-gray-200 hover:border-[#1A2C5B] hover:text-[#1A2C5B]'
+                  }`}
+                  aria-pressed={activeTag === f.value}
+                  aria-label={`Filter by ${f.label}`}
+                >
+                  <span aria-hidden="true">{f.emoji}</span>
+                  {f.label}
+                </button>
+              ))}
+              {(activeTag || debouncedSearch) && (
+                <button
+                  onClick={() => { setActiveTag(''); setSearch(''); setDebounced(''); }}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold text-red-600 bg-red-50 border border-red-100 hover:bg-red-100 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-red-300"
+                  aria-label="Clear all filters"
+                >
+                  <ArrowPathIcon className="h-3 w-3" aria-hidden="true" />
+                  Clear
+                </button>
+              )}
+            </div>
+          </div>
+        ) : activeTab === 'scholarships' ? (
           <div className="mb-6">
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2.5">Filter by scholarship type</p>
             <div className="flex flex-wrap gap-2" role="group" aria-label="Filter scholarships by type">
