@@ -64,12 +64,22 @@ The long-term strategy involves rapid iteration and scaling:
 
 Vet1Stop is a **Founder-Led, Mission-First** entity.
 
-* **No Equity Investors:** We reject VC pressure to monetize user data.  
-* **Bootstrapped Growth:** We grow at the speed of revenue and grants.  
-* **Trust is Currency:** We prioritize authority and genuine utility over quick profits.  
-* **Profit through Utility:** Users(public and veterans) and companies will use our services and products because they’re incredible useful and meet/exceed their needs.   
-* **Trust our “WHY”(simon sinek).**   
-* **Founder must retain majority ownership so he can stir the ship (75% or higher at all time)**
+* **No Outside Investors:** We reject VC and outside equity entirely — not because we don't monetize, but because we refuse to be *pressured* into decisions we wouldn't otherwise make. Bootstrapped control means the founder steers the mission, always.
+* **Bootstrapped Growth:** We grow at the speed of revenue and grants.
+* **Trust is Currency:** We prioritize authority and genuine utility over quick profits.
+* **Profit through Utility:** Users (public and veterans) and companies will use our services and products because they're incredibly useful and meet/exceed their needs.
+* **Trust our "WHY" (Simon Sinek).**
+* **Founder must retain majority ownership so he can steer the ship (75% or higher at all times).**
+
+#### **Data Philosophy: Ethical Monetization (Not Avoidance)**
+
+Selling data is a **planned and intentional revenue pillar** — done the right way:
+
+* **Individual PII is sacred and never sold.** No names, account IDs, exact locations, or any data that could re-identify a specific veteran. Ever. No exceptions.
+* **Anonymized, aggregated population-level insights ARE a product.** Cohort-level wellness trends (by era, branch, age group, region) — stripped of all identifiers — will be licensed to the VA, DoD health agencies, VSOs, and academic research institutions under the "Vet1Stop National Veteran Wellness Index (NVWI)."
+* **Explicit opt-in consent is required.** Veterans choose to join the "National Veteran Wellness Registry." Opting out at any time is trivial and immediate. The framing is mission-aligned: *"Your anonymized data helps improve VA programs for the next generation of veterans."*
+* **The distinction from VC data monetization:** VC-backed companies sell individual behavioral data to advertisers without meaningful consent. We sell *anonymized population health research* to government agencies and VSOs — organizations that exist to serve veterans. The beneficiary of the data sale is ultimately veterans themselves.
+* **Primary buyer targets:** VA Office of Research & Development (SDVOSB sole-source), Defense Health Agency (Digital TAPS), Uniformed Services University, and major VSOs (DAV, VFW, American Legion). Defense contractors are explicitly excluded from health data licensing.
 
 ---
 
