@@ -191,12 +191,8 @@ export default function HealthPage() {
             </div>
           </div>
 
-          {/* Phase 2 tools row */}
+          {/* Additional health tools */}
           <div className="mt-8">
-            <div className="flex items-center gap-3 mb-5">
-              <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider">Phase 2 Tools</h3>
-              <span className="text-[11px] font-semibold text-[#1A2C5B] bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-full">New</span>
-            </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* Wellness Predictor */}
               <Link href="/health/wellness" className="group relative bg-gradient-to-br from-amber-50 to-yellow-50 rounded-2xl p-5 border border-amber-100 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-2" aria-label="Go to AI Wellness Predictor">
