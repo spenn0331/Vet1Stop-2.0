@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { Bars3Icon, XMarkIcon, UserCircleIcon } from '@heroicons/react/24/outline';
@@ -34,16 +33,8 @@ const Header = () => {
           {/* Logo & Brand */}
           <div className="flex items-center">
             <Link href="/" className="flex-shrink-0 flex items-center">
-              {/* Replace with your logo */}
-              <div className="h-10 w-10 relative">
-                <Image
-                  src="/logo.png"
-                  alt="Vet1Stop Logo"
-                  fill
-                  sizes="(max-width: 768px) 40px, 40px"
-                  className="object-contain"
-                  priority
-                />
+              <div className="h-10 w-10 rounded-lg bg-blue-800 flex items-center justify-center flex-shrink-0">
+                <span className="text-white text-xs font-black leading-none">V1S</span>
               </div>
               <span className="ml-2 text-xl font-bold text-blue-800">Vet1Stop</span>
             </Link>

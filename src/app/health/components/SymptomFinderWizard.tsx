@@ -15,6 +15,7 @@ import {
   HeartIcon,
   MapPinIcon,
   ArrowTopRightOnSquareIcon,
+  PencilSquareIcon,
 } from '@heroicons/react/24/outline';
 import { PhoneIcon as PhoneIconSolid } from '@heroicons/react/24/solid';
 import type { BridgeData, ConditionPayload } from '@/types/records-recon';
@@ -194,6 +195,7 @@ export default function SymptomFinderWizard({ bridgeData = null }: SymptomFinder
   const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([]);
   const [isHandedOff, setIsHandedOff] = useState(false);
   const [chatExpanded, setChatExpanded] = useState(false);
+  const [chatCompact, setChatCompact] = useState(false); // true = peek mode (last msg only, no input)
   const [showIntentCards, setShowIntentCards] = useState(false); // progressive profiling tap cards
   const [crossDomainHints, setCrossDomainHints] = useState<string[]>([]);  // cross-domain redirect signals
 
@@ -265,6 +267,14 @@ _This is not medical advice. Discuss with your VA provider or primary doctor._`,
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bridgeData]);
+
+  // Auto-dismiss cross-domain hints 8s after handoff — prevents Careers card persisting through results
+  useEffect(() => {
+    if (isHandedOff && crossDomainHints.length > 0) {
+      const t = setTimeout(() => setCrossDomainHints([]), 3000);
+      return () => clearTimeout(t);
+    }
+  }, [isHandedOff, crossDomainHints.length]);
 
   // Auto-start with intent cards on direct visit (no bridge data)
   useEffect(() => {
@@ -399,10 +409,12 @@ _This is not medical advice. Discuss with your VA provider or primary doctor._`,
         });
         setIsHandedOff(true);
         setChatExpanded(true);
+        setChatCompact(true);  // auto-shrink to peek — resources visible immediately
         setStep('results');
 
-        // Capture cross-domain hints so redirect card shows even after handoff
-        if (data.crossDomainHints?.length) {
+        // Capture cross-domain hints — only on initial handoff, not on refinements
+        // (refinements re-returning careers hints would keep resetting the auto-dismiss clock)
+        if (data.crossDomainHints?.length && !refinement) {
           setCrossDomainHints(data.crossDomainHints);
         }
 
@@ -456,8 +468,11 @@ _This is not medical advice. Discuss with your VA provider or primary doctor._`,
     if (inputRef.current) inputRef.current.style.height = '42px';
     setSuggestedQuestions([]);
     const userTurns = newMessages.filter(m => m.role === 'user').length;
-    // Force 'assess' when results already shown — ensures refinements re-query MongoDB
-    const triageStep = (isHandedOff || userTurns >= 3) ? 'assess' : 'quick_triage';
+    // Force 'assess' when: results shown, 3+ turns, OR first message is comprehensive (>120 chars).
+    // The third condition bypasses the expensive Grok jump-ahead path for users who answer all
+    // 3 questions in one detailed message — cuts cold start from ~80s to ~5s.
+    const isComprehensiveFirstAnswer = userTurns === 1 && text.length > 120;
+    const triageStep = (isHandedOff || userTurns >= 3 || isComprehensiveFirstAnswer) ? 'assess' : 'quick_triage';
     callTriageApi(newMessages, triageStep, text, isHandedOff);
   }, [userInput, isLoading, messages, callTriageApi, isHandedOff]);
 
@@ -521,6 +536,7 @@ _This is not medical advice. Discuss with your VA provider or primary doctor._`,
     setSuggestedQuestions([]);
     setIsHandedOff(false);
     setChatExpanded(false);
+    setChatCompact(false);
     setErrorMsg(null);
     setCrossDomainHints([]);
   }, [bridgeData]);
@@ -631,7 +647,7 @@ _This is not medical advice. Discuss with your VA provider or primary doctor._`,
   //   desktop restores natural h-auto with min-height and no clipping.
 
   return (
-    <div className="flex flex-col max-md:h-[calc(100dvh-180px)] md:min-h-[calc(100vh-100px)] md:h-auto max-w-4xl md:max-w-7xl mx-auto relative px-0 md:px-4">
+    <div className="flex flex-col max-md:h-[calc(100dvh-180px)] md:h-auto max-w-4xl md:max-w-7xl mx-auto relative px-0 md:px-4">
 
       <TopBar />
 
@@ -668,15 +684,22 @@ _This is not medical advice. Discuss with your VA provider or primary doctor._`,
       {/* ─── Chat + Results ─── */}
       {(step === 'chat' || step === 'results' || step === 'loading') && (
         <>
-          {/* Chat container — h-16 minimized bar post-handoff, h-auto active */}
+          {/* ── Chat container ───────────────────────────────────────────────
+               3 states when isHandedOff:
+               1. chatExpanded + !chatCompact  → full chat + input
+               2. chatExpanded + chatCompact   → compact peek (last msg, no input)
+               3. !chatExpanded               → collapsed pill (h-16)
+               During active chat (!isHandedOff): always full
+               ─────────────────────────────────────────────────────────────── */}
           <div
             className={`transition-all duration-300 overflow-hidden flex-shrink-0 ${
               isHandedOff && !chatExpanded ? 'h-16' : 'h-auto'
             }`}
           >
+            {/* ── State 3: Collapsed pill ─────────────────────────────────── */}
             {isHandedOff && !chatExpanded && (
               <button
-                onClick={() => setChatExpanded(true)}
+                onClick={() => { setChatExpanded(true); setChatCompact(true); }}
                 className="w-full h-16 flex items-center justify-between px-4 bg-blue-50 border-b border-blue-100 text-sm text-[#1A2C5B] hover:bg-blue-100 transition-colors"
                 aria-label="Expand chat history"
               >
@@ -690,7 +713,38 @@ _This is not medical advice. Discuss with your VA provider or primary doctor._`,
               </button>
             )}
 
-            {(!isHandedOff || chatExpanded) && (
+            {/* ── State 2: Compact peek — last message preview, no input ─── */}
+            {isHandedOff && chatExpanded && chatCompact && (
+              <div className="border-b border-blue-100 bg-gradient-to-b from-blue-50 to-white flex-shrink-0">
+                <div className="flex items-start gap-2.5 px-3 py-2.5">
+                  <div className="flex-shrink-0 w-6 h-6 rounded-full bg-gradient-to-br from-[#1A2C5B] to-[#2563EB] flex items-center justify-center mt-0.5 shadow-sm">
+                    <SparklesIcon className="h-3 w-3 text-white" />
+                  </div>
+                  <p className="flex-1 min-w-0 text-xs text-gray-700 leading-relaxed line-clamp-3">
+                    {visibleMessages.filter(m => m.role === 'assistant').at(-1)?.content ?? ''}
+                  </p>
+                  <div className="flex flex-col gap-1 flex-shrink-0 ml-1">
+                    <button
+                      onClick={() => setChatCompact(false)}
+                      className="flex items-center gap-1 text-[10px] font-semibold text-[#1A2C5B] bg-blue-100 hover:bg-blue-200 px-2 py-1 rounded-md transition-colors whitespace-nowrap"
+                      aria-label="Expand to refine results"
+                    >
+                      <PencilSquareIcon className="h-3 w-3" /> Refine
+                    </button>
+                    <button
+                      onClick={() => setChatExpanded(false)}
+                      className="flex items-center gap-1 text-[10px] font-medium text-gray-400 hover:text-gray-600 px-2 py-1 rounded-md transition-colors whitespace-nowrap"
+                      aria-label="Collapse chat"
+                    >
+                      <ChevronUpIcon className="h-3 w-3" /> Collapse
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── State 1 + Active chat: Full expanded view ─────────────── */}
+            {(!isHandedOff || (chatExpanded && !chatCompact)) && (
               <div className="flex flex-col">
                 {/* Message list — desktop gets more room, mobile constrained */}
                 <div
@@ -782,7 +836,7 @@ _This is not medical advice. Discuss with your VA provider or primary doctor._`,
                   </div>
                 )}
 
-                {(!isHandedOff || chatExpanded) && (
+                {(!isHandedOff || (chatExpanded && !chatCompact)) && (
                   <div className="flex gap-2 items-end p-3 bg-white border-b border-gray-200">
                     <textarea
                       ref={inputRef}
@@ -812,7 +866,7 @@ _This is not medical advice. Discuss with your VA provider or primary doctor._`,
                   </div>
                 )}
 
-                {(!isHandedOff || chatExpanded) && (
+                {(!isHandedOff || (chatExpanded && !chatCompact)) && (
                   <div className="flex items-center justify-between px-4 py-2 bg-white">
                     <button onClick={handleReset} className="text-xs text-gray-400 hover:text-[#1A2C5B] transition-colors">Start Over</button>
                     <button
@@ -826,13 +880,21 @@ _This is not medical advice. Discuss with your VA provider or primary doctor._`,
                   </div>
                 )}
 
-                {isHandedOff && chatExpanded && (
-                  <button
-                    onClick={() => setChatExpanded(false)}
-                    className="w-full py-1.5 text-xs text-gray-400 hover:text-[#1A2C5B] bg-gray-50 border-b border-gray-100 transition-colors flex items-center justify-center gap-1"
-                  >
-                    <ChevronUpIcon className="h-3 w-3" /> Collapse chat
-                  </button>
+                {isHandedOff && chatExpanded && !chatCompact && (
+                  <div className="flex items-center justify-between px-3 py-1 bg-gray-50 border-b border-gray-100">
+                    <button
+                      onClick={() => setChatCompact(true)}
+                      className="text-xs text-gray-400 hover:text-[#1A2C5B] transition-colors flex items-center gap-1"
+                    >
+                      <ChevronUpIcon className="h-3 w-3" /> Minimise chat
+                    </button>
+                    <button
+                      onClick={() => setChatExpanded(false)}
+                      className="text-xs text-gray-400 hover:text-[#1A2C5B] transition-colors flex items-center gap-1"
+                    >
+                      <ChevronUpIcon className="h-3 w-3" /> Collapse
+                    </button>
+                  </div>
                 )}
               </div>
             )}

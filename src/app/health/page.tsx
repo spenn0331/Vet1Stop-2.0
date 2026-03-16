@@ -250,11 +250,11 @@ export default function HealthPage() {
       {/* ─── NGO Spotlight ─── */}
       <NGOSpotlight />
 
-      {/* ─── NGO of the Month (merit-based, not paid) ─── */}
-      <NGOOfTheMonthBanner />
-
       {/* ─── Browse Health Resources ─── */}
       <HealthBrowseSection />
+
+      {/* ─── NGO of the Month (merit-based, not paid) ─── */}
+      <NGOOfTheMonthBanner />
 
       {/* ─── Quick Guides ─── */}
       <section aria-labelledby="guides-heading" className="py-12 bg-white">

@@ -164,12 +164,17 @@ export async function fetchDomainResources(
       // NGO track gets a larger fetch pool — NGOs are more numerous and score lower
       const FETCH_LIMIT = track.id === 'ngo' ? 50 : 20;
 
+      // State track: never apply exclusion pre-filter — state resources are geo-filtered
+      // and already scarce. Applying $nin risks zeroing out the only PA results when
+      // exclusion tags (e.g. 'homeless') overlap with valid PA program tags.
+      const trackExclusionFilter = track.id === 'state' ? null : exclusionFilter;
+
       // Query 1: keywords + subcategory + geo + exclusion pre-filter
       const strictParts: Record<string, unknown>[] = [];
       if (searchPat) strictParts.push(keywordFilter);
       strictParts.push(subcatFilter);
       if (effectiveGeo) strictParts.push(effectiveGeo);
-      if (exclusionFilter) strictParts.push(exclusionFilter);
+      if (trackExclusionFilter) strictParts.push(trackExclusionFilter);
       const strictQuery = strictParts.length > 1 ? { $and: strictParts } : subcatFilter;
 
       let docs = await coll.find(strictQuery).sort({ rating: -1 }).limit(FETCH_LIMIT)
@@ -179,7 +184,7 @@ export async function fetchDomainResources(
         // Query 2: relax keywords, keep geo + exclusion filters
         const relaxParts: Record<string, unknown>[] = [subcatFilter];
         if (effectiveGeo) relaxParts.push(effectiveGeo);
-        if (exclusionFilter) relaxParts.push(exclusionFilter);
+        if (trackExclusionFilter) relaxParts.push(trackExclusionFilter);
         const relaxedQuery = relaxParts.length > 1 ? { $and: relaxParts } : subcatFilter;
         docs = await coll.find(relaxedQuery).sort({ rating: -1 }).limit(FETCH_LIMIT)
           .toArray() as Record<string, unknown>[];
@@ -189,7 +194,7 @@ export async function fetchDomainResources(
         // Query 3 (last resort): subcategory + exclusion only — only when state is unknown
         // When state IS known but has 0 resources, return [] rather than wrong-state results
         const lastResortParts: Record<string, unknown>[] = [subcatFilter];
-        if (exclusionFilter) lastResortParts.push(exclusionFilter);
+        if (trackExclusionFilter) lastResortParts.push(trackExclusionFilter);
         const lastResortQuery = lastResortParts.length > 1 ? { $and: lastResortParts } : subcatFilter;
         docs = await coll.find(lastResortQuery).sort({ rating: -1 }).limit(FETCH_LIMIT)
           .toArray() as Record<string, unknown>[];

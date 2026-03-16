@@ -908,7 +908,7 @@ export default function ResultsPanel({ result, onReset }: ResultsPanelProps) {
         Refine panel is OUTSIDE the scroll div so it's always anchored at bottom
         on mobile — no overlap, always visible without scrolling.
       */}
-      <section className="flex-1 flex flex-col min-h-0 overflow-hidden">
+      <section className="flex-1 flex flex-col min-h-0 overflow-hidden md:overflow-visible">
 
         {/* ─── "Match refreshed!" toast ─── */}
         {showRefreshToast && (
@@ -952,7 +952,7 @@ export default function ResultsPanel({ result, onReset }: ResultsPanelProps) {
             Scrollable content area — cards never overlap
             the refine bar below on any screen size
             ══════════════════════════════════════════════════ */}
-        <div className="flex-1 overflow-y-auto overscroll-contain px-0">
+        <div className="flex-1 overflow-y-auto overscroll-contain md:overflow-visible px-0">
 
           {/* ─── Suggested Pathway Banner ─── */}
           {showPathwayBanner && (
