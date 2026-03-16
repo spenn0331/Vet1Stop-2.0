@@ -23,6 +23,15 @@ import { NVWI_CONSENT_KEY, WELLNESS_PROFILE_KEY } from '@/types/wellness';
 import { buildCohortUpdate } from '@/lib/wellness/anonymize';
 import { PremiumGate } from '@/components/shared/PremiumGate';
 import { BRIDGE_STORAGE_KEY } from '@/types/records-recon';
+import WearableConnectCard from './WearableConnectCard';
+import type { WearableData, WearableToken } from '@/types/wellness';
+import {
+  getWearableToken,
+  getTodayWearableData,
+  saveTodayWearableData,
+  saveWearableToken,
+  wearableToSliderSuggestions,
+} from '@/lib/wellness/wearable';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -265,6 +274,9 @@ export default function WellnessPanel() {
   const [pendingEntry,    setPendingEntry]    = useState<import('@/types/wellness').WellnessEntry | null>(null);
   const [lastChangedKey,  setLastChangedKey]  = useState<SliderKey | null>(null);
   const [isExporting,     setIsExporting]     = useState(false);
+  const [wearableToken,   setWearableToken]   = useState<WearableToken | null>(null);
+  const [todayWearable,   setTodayWearable]   = useState<WearableData | null>(null);
+  const [wearableOverride, setWearableOverride] = useState<{ sleep?: boolean; energy?: boolean }>({});
 
   // ── Hydrate from localStorage ────────────────────────────────────────────
   useEffect(() => {
@@ -282,8 +294,54 @@ export default function WellnessPanel() {
       }
       const consentRaw = localStorage.getItem(NVWI_CONSENT_KEY);
       if (consentRaw) setNvwiConsent(JSON.parse(consentRaw));
+
+      // Load wearable state
+      const token = getWearableToken();
+      setWearableToken(token);
+      const wData = getTodayWearableData();
+      if (wData) setTodayWearable(wData);
     } catch { /* ignore malformed data */ }
     setIsHydrated(true);
+  }, []);
+
+  // ── Handle OAuth callback (token in URL hash) ─────────────────────────────
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const hash = window.location.hash.slice(1);
+    if (!hash) return;
+    const params = new URLSearchParams(hash);
+    const platform     = params.get('platform') as WearableToken['platform'] | null;
+    const accessToken  = params.get('access_token');
+    const refreshToken = params.get('refresh_token');
+    const expiresAt    = params.get('expires_at');
+    if (platform && accessToken && expiresAt) {
+      const token: WearableToken = {
+        platform,
+        accessToken,
+        refreshToken: refreshToken || null,
+        expiresAt:    Number(expiresAt),
+      };
+      saveWearableToken(token);
+      setWearableToken(token);
+      // Clear hash from URL
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+      // Auto-sync immediately after connect
+      const syncEndpoint = platform === 'fitbit' ? '/api/health/wearable/fitbit-sync' : '/api/health/wearable/garmin-sync';
+      const body = platform === 'fitbit'
+        ? { accessToken }
+        : { accessToken, tokenSecret: refreshToken };
+      fetch(syncEndpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+        .then(r => r.ok ? r.json() : null)
+        .then((data: WearableData | null) => {
+          if (!data) return;
+          saveTodayWearableData(data);
+          setTodayWearable(data);
+          const suggestions = wearableToSliderSuggestions(data);
+          if (suggestions.sleep   != null) setScores(prev => ({ ...prev, sleep:  suggestions.sleep!  }));
+          if (suggestions.energy  != null) setScores(prev => ({ ...prev, energy: suggestions.energy! }));
+        })
+        .catch(() => { /* non-critical */ });
+    }
   }, []);
 
   // ── Handlers ─────────────────────────────────────────────────────────────
@@ -343,6 +401,21 @@ export default function WellnessPanel() {
       syncToRegistry(entry, nvwiConsent);
     }
   }, [scores, notes, nvwiConsent, syncToRegistry]);
+
+  const handleWearableSynced = useCallback((data: WearableData) => {
+    setTodayWearable(data);
+    saveTodayWearableData(data);
+    setWearableOverride({});
+    const suggestions = wearableToSliderSuggestions(data);
+    if (suggestions.sleep   != null) setScores(prev => ({ ...prev, sleep:  suggestions.sleep!  }));
+    if (suggestions.energy  != null) setScores(prev => ({ ...prev, energy: suggestions.energy! }));
+  }, []);
+
+  const handleWearableDisconnected = useCallback(() => {
+    setWearableToken(null);
+    setTodayWearable(null);
+    setWearableOverride({});
+  }, []);
 
   const handleNvwiConsent = useCallback((consent: NvwiConsent) => {
     setNvwiConsent(consent);
@@ -510,7 +583,7 @@ export default function WellnessPanel() {
       {/* ── NVWI Consent Modal ─────────────────────────────────────────── */}
       {showNvwiModal && (
         <NvwiConsentModal
-          hasWearable={false}
+          hasWearable={!!wearableToken}
           onConsent={handleNvwiConsent}
           onDecline={handleNvwiDecline}
         />
@@ -635,40 +708,74 @@ export default function WellnessPanel() {
             </div>
 
             <div className="px-6 py-5 space-y-5">
-              {SLIDERS.map(({ key, label, icon: Icon, color, accent, desc }) => (
-                <div key={key}>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <Icon className={`h-4 w-4 ${color}`} aria-hidden="true" />
-                      <span className="text-sm font-semibold text-gray-800">{label}</span>
+              {SLIDERS.map(({ key, label, icon: Icon, color, accent, desc }) => {
+                const isWearableKey = (key === 'sleep' || key === 'energy') && todayWearable && !wearableOverride[key as 'sleep' | 'energy'];
+                return (
+                  <div key={key}>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <Icon className={`h-4 w-4 ${color}`} aria-hidden="true" />
+                        <span className="text-sm font-semibold text-gray-800">{label}</span>
+                        {isWearableKey && (
+                          <span className="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded-full">
+                            from device
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {isWearableKey && (
+                          <button
+                            onClick={() => setWearableOverride(prev => ({ ...prev, [key]: true }))}
+                            className="text-[10px] text-gray-400 hover:text-[#1A2C5B] underline transition-colors"
+                            aria-label={`Override ${label} with manual input`}
+                          >
+                            edit
+                          </button>
+                        )}
+                        <span className="text-[11px] text-gray-400 hidden sm:block">{desc}</span>
+                        <span
+                          className={`text-xl font-extrabold ${color} w-6 text-center tabular-nums transition-transform duration-150 ${
+                            lastChangedKey === key ? 'scale-125' : 'scale-100'
+                          }`}
+                          aria-live="polite"
+                        >
+                          {scores[key]}
+                        </span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-[11px] text-gray-400 hidden sm:block">{desc}</span>
-                      <span
-                        className={`text-xl font-extrabold ${color} w-6 text-center tabular-nums transition-transform duration-150 ${
-                          lastChangedKey === key ? 'scale-125' : 'scale-100'
-                        }`}
-                        aria-live="polite"
-                      >
-                        {scores[key]}
-                      </span>
-                    </div>
+
+                    {isWearableKey ? (
+                      /* Wearable data card — no slider shown */
+                      <div className={`rounded-xl border px-4 py-2.5 flex items-center justify-between ${
+                        key === 'sleep' ? 'bg-indigo-50 border-indigo-100' : 'bg-blue-50 border-blue-100'
+                      }`}>
+                        <span className="text-xs text-gray-500">
+                          {key === 'sleep' && todayWearable!.sleepDurationMin != null
+                            ? `${Math.floor(todayWearable!.sleepDurationMin / 60)}h ${todayWearable!.sleepDurationMin % 60}m sleep`
+                            : key === 'energy' && todayWearable!.restingHR != null
+                            ? `${todayWearable!.restingHR} bpm resting HR`
+                            : 'Device data'}
+                        </span>
+                        <span className={`text-sm font-extrabold ${color}`}>{scores[key]} / 10</span>
+                      </div>
+                    ) : (
+                      <div className="relative">
+                        <input
+                          type="range"
+                          min={1} max={10} step={1}
+                          value={scores[key]}
+                          onChange={e => handleSlider(key, Number(e.target.value))}
+                          className={`w-full h-3 rounded-full appearance-none cursor-grab active:cursor-grabbing ${accent} [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:cursor-grab [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:shadow-md [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:cursor-grab`}
+                          aria-label={`${label}, current value ${scores[key]} out of 10`}
+                        />
+                        <div className="flex justify-between text-[10px] text-gray-300 mt-1.5 px-0.5 select-none">
+                          <span>1 — low</span><span>5</span><span>10 — high</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  <div className="relative">
-                    <input
-                      type="range"
-                      min={1} max={10} step={1}
-                      value={scores[key]}
-                      onChange={e => handleSlider(key, Number(e.target.value))}
-                      className={`w-full h-3 rounded-full appearance-none cursor-grab active:cursor-grabbing ${accent} [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:cursor-grab [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:shadow-md [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:cursor-grab`}
-                      aria-label={`${label}, current value ${scores[key]} out of 10`}
-                    />
-                  </div>
-                  <div className="flex justify-between text-[10px] text-gray-300 mt-1.5 px-0.5 select-none">
-                    <span>1 — low</span><span>5</span><span>10 — high</span>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
 
               {/* Notes */}
               <div>
@@ -738,6 +845,17 @@ export default function WellnessPanel() {
 
           {/* ── Trend + Recent ────────────────────────────────────────── */}
           <div className="lg:col-span-2 space-y-4">
+
+            {/* Wearable Connect Card */}
+            {/* [PREMIUM: wellness_wearable_sync] */}
+            <PremiumGate feature="wellness_wearable_sync" compact>
+              <WearableConnectCard
+                currentToken={wearableToken}
+                todayData={todayWearable}
+                onDataSynced={handleWearableSynced}
+                onDisconnected={handleWearableDisconnected}
+              />
+            </PremiumGate>
 
             {/* Sparkline */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
