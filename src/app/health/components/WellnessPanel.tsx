@@ -72,15 +72,15 @@ const SLIDERS: {
   label: string;
   icon: React.ComponentType<{ className?: string; 'aria-hidden'?: boolean | 'true' | 'false' }>;
   color: string;
-  accent: string;
+  fillHex: string;
   chartColor: string;
   desc: string;
 }[] = [
-  { key: 'mood',   label: 'Mood',               icon: HeartIcon,             color: 'text-amber-500',   accent: 'accent-amber-500',   chartColor: '#F59E0B', desc: '1 = very low, 10 = excellent'   },
-  { key: 'energy', label: 'Energy',              icon: BoltIcon,              color: 'text-blue-500',    accent: 'accent-blue-500',    chartColor: '#3B82F6', desc: '1 = exhausted, 10 = full energy' },
-  { key: 'sleep',  label: 'Sleep Quality',       icon: MoonIcon,              color: 'text-indigo-500',  accent: 'accent-indigo-500',  chartColor: '#6366F1', desc: '1 = very poor, 10 = refreshed'  },
-  { key: 'pain',   label: 'Pain Level',          icon: ExclamationCircleIcon, color: 'text-red-500',     accent: 'accent-red-500',     chartColor: '#EF4444', desc: '1 = pain-free, 10 = severe pain' },
-  { key: 'social', label: 'Social Connection',   icon: UserGroupIcon,         color: 'text-emerald-500', accent: 'accent-emerald-500', chartColor: '#10B981', desc: '1 = isolated, 10 = well-connected' },
+  { key: 'mood',   label: 'Mood',               icon: HeartIcon,             color: 'text-amber-500',   fillHex: '#F59E0B', chartColor: '#F59E0B', desc: '1 = very low, 10 = excellent'    },
+  { key: 'energy', label: 'Energy',              icon: BoltIcon,              color: 'text-blue-500',    fillHex: '#3B82F6', chartColor: '#3B82F6', desc: '1 = exhausted, 10 = full energy'  },
+  { key: 'sleep',  label: 'Sleep Quality',       icon: MoonIcon,              color: 'text-indigo-500',  fillHex: '#6366F1', chartColor: '#6366F1', desc: '1 = very poor, 10 = refreshed'   },
+  { key: 'pain',   label: 'Pain Level',          icon: ExclamationCircleIcon, color: 'text-red-500',     fillHex: '#EF4444', chartColor: '#EF4444', desc: '1 = pain-free, 10 = severe pain'  },
+  { key: 'social', label: 'Social Connection',   icon: UserGroupIcon,         color: 'text-emerald-500', fillHex: '#10B981', chartColor: '#10B981', desc: '1 = isolated, 10 = well-connected' },
 ];
 
 const MENTAL_HEALTH_RESOURCES = [
@@ -711,7 +711,7 @@ export default function WellnessPanel() {
             </div>
 
             <div className="px-6 py-5 space-y-5">
-              {SLIDERS.map(({ key, label, icon: Icon, color, accent, desc }) => {
+              {SLIDERS.map(({ key, label, icon: Icon, color, fillHex, desc }) => {
                 const isWearableKey = (key === 'sleep' || key === 'energy') && todayWearable && !wearableOverride[key as 'sleep' | 'energy'];
                 return (
                   <div key={key}>
@@ -768,7 +768,11 @@ export default function WellnessPanel() {
                           min={1} max={10} step={1}
                           value={scores[key]}
                           onChange={e => handleSlider(key, Number(e.target.value))}
-                          className={`w-full h-3 rounded-full appearance-none cursor-grab active:cursor-grabbing ${accent} [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:cursor-grab [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:shadow-md [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:cursor-grab`}
+                          style={{
+                            background: `linear-gradient(to right, ${fillHex} 0%, ${fillHex} ${((scores[key] - 1) / 9) * 100}%, #e5e7eb ${((scores[key] - 1) / 9) * 100}%, #e5e7eb 100%)`,
+                            ['--thumb-color']: fillHex,
+                          } as React.CSSProperties}
+                          className="w-full h-3 rounded-full appearance-none cursor-grab active:cursor-grabbing [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-6 [&::-webkit-slider-thumb]:w-6 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[var(--thumb-color)] [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:border-[3px] [&::-webkit-slider-thumb]:border-white [&::-webkit-slider-thumb]:cursor-grab [&::-moz-range-thumb]:h-6 [&::-moz-range-thumb]:w-6 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-[var(--thumb-color)] [&::-moz-range-thumb]:shadow-lg [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:cursor-grab"
                           aria-label={`${label}, current value ${scores[key]} out of 10`}
                         />
                         <div className="flex justify-between text-[10px] text-gray-300 mt-1.5 px-0.5 select-none">

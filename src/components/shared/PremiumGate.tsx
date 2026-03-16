@@ -15,8 +15,10 @@ interface PremiumGateProps {
 // Usage: wrap any premium section with <PremiumGate feature="wellness_correlation_chart">
 //        compact={true} overlays a small lock badge instead of a full replacement card
 
+const DEV_UNLOCKED = process.env.NEXT_PUBLIC_DEV_PREMIUM === 'true';
+
 export function PremiumGate({ feature, children, compact = false }: PremiumGateProps) {
-  if (isPremium()) return <>{children}</>;
+  if (DEV_UNLOCKED || isPremium()) return <>{children}</>;
 
   const label = PREMIUM_FEATURES[feature];
 
