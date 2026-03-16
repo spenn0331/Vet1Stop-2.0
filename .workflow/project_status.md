@@ -36,8 +36,27 @@
 
 | Gap | Description |
 |-----|-------------|
-| **Scribe → C&P Bridge** | Scribe generates AI summaries with conditions/themes but has no "Send to C&P Prep" bridge button. Every other tool has a bridge; Scribe is the missing link. |
-| **Free tier rate limiting** | Premium annotations (`[PREMIUM: cpp_prep_unlimited]`, `[PREMIUM: scribe_unlimited]`) describe "3 sessions/day free" but zero enforcement logic exists. PremiumGate is all-or-nothing. Partial free-tier model not yet coded. |
+| ~~**Scribe → C&P Bridge**~~ | ✅ Shipped Mar 16 |
+| ~~**Free tier rate limiting**~~ | ✅ Shipped Mar 16 |
+
+---
+
+### 🔲 Health Page — Phase 2 Backlog (buildable without live user data)
+
+All Phase 1–2 Health MVP scope is complete as of Mar 16. The following are the next wave — all buildable without a live user base. Will circle back after Local VOB Directory.
+
+| Priority | Feature | Description | Effort |
+|----------|---------|-------------|--------|
+| 🔥 1 | **VA Combined Rating Calculator** | Pure client-side math using VA's "whole person" combined ratings formula. User enters conditions + individual % ratings → outputs combined rating. Zero API cost, highest-demand VA topic online. | Small |
+| ★ 2 | **Contract Highlighter (Overwatch Shield)** | Upload lease/mortgage PDF → AI flags SCRA/MLA predatory lending violations → red/yellow highlights + CFPB pre-fill button. Same architecture as Records Recon. Marked ★ in master strategy. | Medium |
+| 3 | **The Flare (Buddy Check)** | One-tap crisis button on the health page. Up to 5 buddy contacts in localStorage. Press Flare → fires `sms:` links with pre-composed message + location. Zero backend. Sits beside 988 on the wellness hub. | Small |
+| 4 | **Pension Poacher Detector** | Paste suspicious email/text → AI scans for veteran scam patterns (pension poachers, accretion fees, "free benefit audit" scams) → pre-filled FTC/VA OIG report button. | Medium |
+| 5 | **Benefit Eligibility Checker** | Simple 3-question quiz UI (zip, era, branch) that feeds into the existing Symptom Finder AI backend. New clean entry point — engine already built. | Small |
+
+**What needs live data (deferred):**
+- VA OAuth "Connect Account" for Records Recon Phase 2 — needs VA API + SOC-2
+- NVWI cohort trend charts — needs real user wellness submissions
+- Real wearable sync — needs Fitbit/Garmin OAuth credentials registered
 
 ---
 
