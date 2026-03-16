@@ -10,8 +10,16 @@ import {
   DocumentArrowDownIcon,
   SparklesIcon,
   ExclamationTriangleIcon,
+  ArrowRightIcon,
 } from '@heroicons/react/24/outline';
 import { PhoneIcon as PhoneIconSolid, CheckCircleIcon } from '@heroicons/react/24/solid';
+import { useRouter } from 'next/navigation';
+import { BRIDGE_STORAGE_KEY } from '@/types/records-recon';
+import type { ConditionPayload, BridgeData } from '@/types/records-recon';
+import { useFreeTierUsage } from '@/lib/useFreeTierUsage';
+import { isPremium } from '@/lib/premium';
+
+const DEV_UNLOCKED = process.env.NEXT_PUBLIC_DEV_PREMIUM === 'true';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -42,6 +50,8 @@ export default function ScribePanel() {
   const [isHydrated,    setIsHydrated]    = useState(false);
 
   const recognitionRef = useRef<InstanceType<typeof SpeechRecognition> | null>(null);
+  const router      = useRouter();
+  const scribeUsage = useFreeTierUsage('scribe_daily_summaries', 3);
 
   useEffect(() => {
     const SR = window.SpeechRecognition ?? window.webkitSpeechRecognition;
@@ -104,7 +114,12 @@ export default function ScribePanel() {
       setError('Please speak or type some notes first — there\'s nothing to summarize yet.');
       return;
     }
+    if (!DEV_UNLOCKED && !isPremium() && !scribeUsage.canUse) {
+      setError(`Daily limit reached — you've used all ${scribeUsage.dailyLimit} free summaries today. Upgrade to Premium for unlimited.`);
+      return;
+    }
     if (isRecording) stopRecording();
+    scribeUsage.increment();
     setIsLoading(true);
     setError(null);
     setSummary(null);
@@ -123,7 +138,7 @@ export default function ScribePanel() {
     } finally {
       setIsLoading(false);
     }
-  }, [transcript, interimText, isRecording, stopRecording]);
+  }, [transcript, interimText, isRecording, stopRecording, scribeUsage]);
 
   // [PREMIUM: scribe_unlimited] PDF export included in unlimited tier.
   // ── PDF Download ──────────────────────────────────────────────────────────
@@ -202,6 +217,33 @@ export default function ScribePanel() {
     setSummary(null);
     setError(null);
   }, [isRecording, stopRecording]);
+
+  // ── Smart Bridge → C&P Prep ───────────────────────────────────────────────
+  const handleBridgeToCpp = useCallback(() => {
+    if (!summary) return;
+    const parseLines = (text: string) =>
+      text.replace(/\\n/g, '\n').split('\n')
+        .map(l => l.replace(/^[•\-\*]\s*/, '').trim())
+        .filter(l => l.length > 5);
+    const allLines = [...new Set([...parseLines(summary.themes), ...parseLines(summary.followUp)])].slice(0, 8);
+    if (allLines.length === 0) return;
+    const conditions: ConditionPayload[] = allLines.map(line => ({
+      condition:        line.length > 80 ? line.slice(0, 80) + '\u2026' : line,
+      category:         inferCategory(line),
+      mentionCount:     1,
+      firstMentionDate: new Date().toISOString(),
+      pagesFound:       [],
+      sourceModule:     'scribe',
+    }));
+    const bridgeData: BridgeData = {
+      conditions,
+      sourceModule:  'scribe',
+      timestamp:     new Date().toISOString(),
+      reportSummary: `Scribe session on ${new Date().toLocaleDateString()} — ${conditions.length} condition${conditions.length !== 1 ? 's' : ''} identified.`,
+    };
+    localStorage.setItem(BRIDGE_STORAGE_KEY, JSON.stringify(bridgeData));
+    router.push('/health/cpp-prep');
+  }, [summary, router]);
 
   if (!isHydrated) {
     return (
@@ -325,7 +367,7 @@ export default function ScribePanel() {
               {/* Summarize button */}
               <button
                 onClick={handleSummarize}
-                disabled={isLoading || wordCount < 3}
+                disabled={isLoading || wordCount < 3 || (!DEV_UNLOCKED && !isPremium() && !scribeUsage.canUse)}
                 className="w-full py-3.5 rounded-xl font-bold text-sm transition-all duration-200 focus:outline-none focus:ring-4 focus:ring-indigo-200 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed bg-indigo-600 text-white hover:bg-indigo-700 hover:shadow-md hover:-translate-y-0.5 flex items-center justify-center gap-2"
                 aria-label="Generate AI summary of notes"
               >
@@ -342,6 +384,14 @@ export default function ScribePanel() {
                 )}
               </button>
 
+              {!DEV_UNLOCKED && !isPremium() && (
+                <p className="text-xs text-gray-400 text-center tabular-nums">
+                  {scribeUsage.canUse
+                    ? `${scribeUsage.remaining} of ${scribeUsage.dailyLimit} free summaries remaining today`
+                    : `Daily limit reached — resets at midnight`}
+                </p>
+              )}
+
               {error && (
                 <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-xl px-3 py-2.5" role="alert">
                   {error}
@@ -355,14 +405,24 @@ export default function ScribePanel() {
             <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between">
               <h2 className="text-lg font-extrabold text-[#1A2C5B]">AI Summary</h2>
               {summary && (
-                <button
-                  onClick={handleDownload}
-                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-white bg-[#1A2C5B] rounded-xl hover:bg-[#0F1D3D] transition-colors focus:outline-none focus:ring-2 focus:ring-blue-300"
-                  aria-label="Download summary as PDF"
-                >
-                  <DocumentArrowDownIcon className="h-3.5 w-3.5" aria-hidden="true" />
-                  Download PDF
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleDownload}
+                    className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-white bg-[#1A2C5B] rounded-xl hover:bg-[#0F1D3D] transition-colors focus:outline-none focus:ring-2 focus:ring-blue-300"
+                    aria-label="Download summary as PDF"
+                  >
+                    <DocumentArrowDownIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                    Download PDF
+                  </button>
+                  <button
+                    onClick={handleBridgeToCpp}
+                    className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-white bg-emerald-600 rounded-xl hover:bg-emerald-700 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                    aria-label="Send conditions to C&P Exam Prep"
+                  >
+                    <ArrowRightIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                    Prep for C&amp;P →
+                  </button>
+                </div>
               )}
             </div>
 
@@ -425,6 +485,20 @@ export default function ScribePanel() {
       </div>
     </div>
   );
+}
+
+// ─── Category Inference (for Smart Bridge payloads) ──────────────────────────
+
+function inferCategory(text: string): string {
+  const t = text.toLowerCase();
+  if (/ptsd|anxiety|depress|stress|mental|mood|psych|trauma|suicid/.test(t)) return 'Mental Health';
+  if (/sleep|insomnia|nightmare|fatigue|tired|exhausted/.test(t))             return 'Sleep';
+  if (/pain|back|knee|joint|spine|shoulder|neck|hip|muscle|ache|hurt/.test(t)) return 'Physical';
+  if (/heart|cardio|blood pressure|chest|breath|pulmon/.test(t))              return 'Cardiovascular';
+  if (/hearing|tinnitus|ear|deaf/.test(t))                                    return 'Audiology';
+  if (/skin|rash|dermat|eczema/.test(t))                                      return 'Dermatology';
+  if (/follow.?up|schedule|appointment|ask|referral|check/.test(t))           return 'Follow-Up';
+  return 'General';
 }
 
 // ─── Summary Section ─────────────────────────────────────────────────────────

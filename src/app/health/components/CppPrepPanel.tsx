@@ -18,6 +18,10 @@ import {
 import { PhoneIcon as PhoneIconSolid, CheckCircleIcon as CheckCircleSolid } from '@heroicons/react/24/solid';
 import { BRIDGE_STORAGE_KEY } from '@/types/records-recon';
 import type { BridgeData } from '@/types/records-recon';
+import { useFreeTierUsage } from '@/lib/useFreeTierUsage';
+import { isPremium } from '@/lib/premium';
+
+const DEV_UNLOCKED = process.env.NEXT_PUBLIC_DEV_PREMIUM === 'true';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -68,6 +72,7 @@ export default function CppPrepPanel() {
   const [checklist,    setChecklist]    = useState<Record<string, boolean>>({});
   const [rolePlay,     setRolePlay]     = useState<RolePlayState | null>(null);
   const rolePlayRef = useRef<HTMLDivElement>(null);
+  const cppUsage = useFreeTierUsage('cpp_prep_daily_sessions', 3);
 
   // ── Smart Bridge Receiver ────────────────────────────────────────────────
   useEffect(() => {
@@ -120,6 +125,13 @@ export default function CppPrepPanel() {
     }
 
     // [PREMIUM: cpp_prep_unlimited] Free tier: 3 AI sessions/day. Premium: unlimited.
+    if (!DEV_UNLOCKED && !isPremium() && !cppUsage.canUse) {
+      setConditions(prev => prev.map((c, i) =>
+        i === idx ? { ...c, error: `Daily limit reached — ${cppUsage.dailyLimit} free sessions used. Upgrade to Premium for unlimited.`, expanded: true } : c
+      ));
+      return;
+    }
+    cppUsage.increment();
     setConditions(prev => prev.map((c, i) => i === idx ? { ...c, loading: true, expanded: true, error: null } : c));
 
     try {
@@ -366,6 +378,14 @@ export default function CppPrepPanel() {
                     <SparklesIcon className="h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />
                     Click any condition below to generate AI exam questions
                   </div>
+                )}
+                {!DEV_UNLOCKED && !isPremium() && (
+                  <p className="text-xs text-gray-400 text-right tabular-nums mb-1">
+                    {cppUsage.canUse
+                      ? `${cppUsage.remaining} of ${cppUsage.dailyLimit} free AI sessions remaining today`
+                      : `Daily limit reached — resets at midnight · `}
+                    {!cppUsage.canUse && <a href="/premium" className="text-[#EAB308] font-semibold hover:underline">Upgrade</a>}
+                  </p>
                 )}
                 <div className="space-y-3">
                   {conditions.map((cond, idx) => (
