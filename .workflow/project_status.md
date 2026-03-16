@@ -4,11 +4,40 @@
 - **Repo**: [github.com/spenn0331/Vet1Stop-2.0](https://github.com/spenn0331/Vet1Stop-2.0) (branch: `main`)
 - **Local Path**: `c:\Users\penny\Desktop\Vet1Stop`
 - **Primary Goal**: MVP Launch (Q2 2026)
-- **Current Phase**: Wellness Platform Sprints 1–4 COMPLETE (Mar 15, 2026)
-- **Dev Server**: `npm run dev` → http://localhost:3000
-- **Last Active Development**: Mar 15, 2026
+- **Current Phase**: Health Page Polish Complete (Mar 16, 2026)
+- **Dev Server**: `npm run dev` → http://localhost:3002 (port 3000 in use)
+- **Last Active Development**: Mar 16, 2026
 - **Latest Commits**: `0ae6bf0e` (Sprint 4 premium dashboard), `618fbee2` (Sprint 3 wearables), `0128162e` (Sprint 2 diary PDF), `ba466a3e` (Sprint 1 NVWI registry), `50c81067` (Phase 2 + Auto-Fill)
 - **Next Up**: Local VOB Directory (Leaflet + Real Estate) — Phase 1 item #2 per master strategy
+
+---
+
+## 🎯 Current Status: Health Page Polish — Mar 16, 2026
+
+### ✅ C&P Exam Prep — PDF Polish + UX Clarity
+
+**`src/app/health/components/CppPrepPanel.tsx`**
+- **PDF checkboxes redrawn**: Replaced unicode `☑`/`☐` characters (broken in many PDF viewers) with `jsPDF` `rect()` + `line()` drawn checkboxes. Checked items render a green checkmark; unchecked items render an open box. Checked labels render in gray to visually confirm state.
+- **"Generate questions →" badge**: Each condition row header now shows a green pill badge (`Generate questions →`) when questions haven't been loaded yet — makes the click action obvious at a glance.
+- **Instructional hint**: Emerald callout with sparkle icon appears above the conditions list until at least one question set is loaded: "Click any condition below to generate AI exam questions."
+- **Practice button promoted**: `Practice My Answer` changed from a small inline text link to a full-width navy button with icon — immediately visible below each question's Tip/Avoid cards.
+
+### ✅ Wellness Predictor — Dev Seed Tool
+
+**`src/app\health\components\WellnessPanel.tsx`**
+- **3-preset seed engine** (`generateSeedData()`): Only visible when `NEXT_PUBLIC_DEV_PREMIUM=true`. Injects 14 backdated entries; preserves today's entry if it exists. Re-randomizes on every click so tests aren't run on the same dataset twice.
+  - **Realistic Mixed** — sleep-correlated scores with natural noise (sleep drives mood/energy; pain is independent). Tests rendering on real-world imperfect data; correlation chart should produce values between −1 and +1, not trivially 1.0.
+  - **Declining Arc** — starts healthy (mood 8, pain 3), deteriorates over 14 days (mood 3, pain 8) with ±1.5pt noise. Tests warning state triggers, trend detection, and AI insight accuracy for negative patterns.
+  - **Recovery Arc** — starts low (mood 3, pain 8), climbs over 14 days (mood 7, pain 3) with ±1.5pt noise. Tests positive trend display and AI insight differentiation.
+- **Clear all seeded data** button resets localStorage to fresh state for clean retesting.
+- Panel renders in an amber dashed border to make dev-only status unmistakable.
+
+### 📋 Health Page — Remaining Gaps (not yet built)
+
+| Gap | Description |
+|-----|-------------|
+| **Scribe → C&P Bridge** | Scribe generates AI summaries with conditions/themes but has no "Send to C&P Prep" bridge button. Every other tool has a bridge; Scribe is the missing link. |
+| **Free tier rate limiting** | Premium annotations (`[PREMIUM: cpp_prep_unlimited]`, `[PREMIUM: scribe_unlimited]`) describe "3 sessions/day free" but zero enforcement logic exists. PremiumGate is all-or-nothing. Partial free-tier model not yet coded. |
 
 ---
 

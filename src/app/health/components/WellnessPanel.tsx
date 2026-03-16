@@ -113,6 +113,62 @@ function getDateStr(daysAgo: number): string {
   return d.toISOString().split('T')[0];
 }
 
+// ─── Dev Seed Tool ──────────────────────────────────────────────────────────
+
+type SeedPreset = 'mixed' | 'declining' | 'recovery';
+
+function clamp(v: number): number { return Math.max(1, Math.min(10, Math.round(v))); }
+function noise(range = 2): number { return (Math.random() - 0.5) * range; }
+
+function generateSeedData(preset: SeedPreset): WellnessEntry[] {
+  const DAYS = 14;
+  const entries: WellnessEntry[] = [];
+  for (let i = DAYS; i >= 1; i--) {
+    const t = 1 - (i - 1) / (DAYS - 1); // 0 = oldest day, 1 = most recent
+    let scores: WellnessScores;
+
+    if (preset === 'mixed') {
+      // Realistic: sleep drives mood/energy, pain is independent, social follows mood
+      const sleep  = clamp(4 + Math.random() * 4 + noise(1));
+      const mood   = clamp(sleep + noise(2.5));
+      const energy = clamp(sleep - 1 + noise(2));
+      const pain   = clamp(2 + Math.random() * 6 + noise(1.5));
+      const social = clamp(mood - 1 + noise(2));
+      scores = { mood, energy, sleep, pain, social };
+    } else if (preset === 'declining') {
+      // Starts OK, deteriorates — tests trend detection & warning states
+      const S = { mood: 8, energy: 7, sleep: 7, pain: 3, social: 7 };
+      const E = { mood: 3, energy: 2, sleep: 3, pain: 8, social: 3 };
+      scores = {
+        mood:   clamp(S.mood   + (E.mood   - S.mood)   * t + noise(1.5)),
+        energy: clamp(S.energy + (E.energy - S.energy) * t + noise(1.5)),
+        sleep:  clamp(S.sleep  + (E.sleep  - S.sleep)  * t + noise(1.5)),
+        pain:   clamp(S.pain   + (E.pain   - S.pain)   * t + noise(1.5)),
+        social: clamp(S.social + (E.social - S.social) * t + noise(1.5)),
+      };
+    } else {
+      // Recovery arc — starts low, climbs — tests positive trend & AI insight accuracy
+      const S = { mood: 3, energy: 2, sleep: 3, pain: 8, social: 2 };
+      const E = { mood: 7, energy: 7, sleep: 7, pain: 3, social: 6 };
+      scores = {
+        mood:   clamp(S.mood   + (E.mood   - S.mood)   * t + noise(1.5)),
+        energy: clamp(S.energy + (E.energy - S.energy) * t + noise(1.5)),
+        sleep:  clamp(S.sleep  + (E.sleep  - S.sleep)  * t + noise(1.5)),
+        pain:   clamp(S.pain   + (E.pain   - S.pain)   * t + noise(1.5)),
+        social: clamp(S.social + (E.social - S.social) * t + noise(1.5)),
+      };
+    }
+
+    entries.push({
+      date:    getDateStr(i),
+      scores,
+      notes:   '',
+      savedAt: new Date(Date.now() - i * 86_400_000).toISOString(),
+    });
+  }
+  return entries;
+}
+
 function detectCrisis(scores: WellnessScores, notes: string): boolean {
   if (scores.mood === 1) return true;
   const lower = notes.toLowerCase();
@@ -531,6 +587,24 @@ export default function WellnessPanel() {
       setIsExporting(false);
     }
   }, [log]);
+
+  const handleSeedData = useCallback((preset: SeedPreset) => {
+    const seeded = generateSeedData(preset);
+    setLog(prev => {
+      const todayEntry = prev.find(e => e.date === getTodayStr());
+      const merged = [...seeded, ...(todayEntry ? [todayEntry] : [])]
+        .sort((a, b) => a.date.localeCompare(b.date));
+      localStorage.setItem(WELLNESS_LOG_KEY, JSON.stringify(merged));
+      return merged;
+    });
+  }, []);
+
+  const handleClearData = useCallback(() => {
+    localStorage.removeItem(WELLNESS_LOG_KEY);
+    setLog([]);
+    setSavedToday(false);
+    setJustSaved(false);
+  }, []);
 
   const handleBridgeToCpp = useCallback(() => {
     if (log.length === 0) return;
@@ -1016,6 +1090,39 @@ export default function WellnessPanel() {
             Update Wellness Profile
           </Link>
         </div>
+
+        {/* ── DEV SEED TOOL (dev-only, never shows in prod) ──────────────── */}
+        {process.env.NEXT_PUBLIC_DEV_PREMIUM === 'true' && (
+          <div className="border border-dashed border-amber-300 bg-amber-50 rounded-2xl p-4">
+            <p className="text-[10px] font-bold text-amber-600 uppercase tracking-widest mb-2">🛠 Dev: Seed Test Data</p>
+            <p className="text-[10px] text-amber-500 mb-3 leading-relaxed">
+              Each preset injects 14 backdated entries with realistic noise so features are tested on imperfect data, not golden-path values.
+            </p>
+            <div className="grid grid-cols-3 gap-2 mb-2">
+              {(
+                [['mixed',     'Realistic Mixed',   'Correlated + noise, no trend'],
+                 ['declining', 'Declining Arc',      'Good → bad, tests warnings'],
+                 ['recovery',  'Recovery Arc',       'Bad → good, tests positives'],
+                ] as [SeedPreset, string, string][]
+              ).map(([preset, label, desc]) => (
+                <button
+                  key={preset}
+                  onClick={() => handleSeedData(preset)}
+                  className="flex flex-col items-start gap-0.5 p-2.5 rounded-xl border border-amber-200 bg-white hover:bg-amber-100 text-left transition-colors"
+                >
+                  <span className="text-[11px] font-bold text-amber-800">{label}</span>
+                  <span className="text-[9px] text-amber-500 leading-snug">{desc}</span>
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={handleClearData}
+              className="w-full text-[10px] text-red-400 hover:text-red-600 font-semibold transition-colors py-1"
+            >
+              Clear all seeded data
+            </button>
+          </div>
+        )}
 
         {/* ── Legal Disclaimer ─────────────────────────────────────────────── */}
         <div className="bg-gray-50 border border-gray-200 rounded-xl px-5 py-4 text-center">

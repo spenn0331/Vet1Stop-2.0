@@ -239,9 +239,23 @@ export default function CppPrepPanel() {
     write('Exam Day Checklist', { size: 14, bold: true });
     gap(6);
     CHECKLIST_ITEMS.forEach(item => {
-      const checked = checklist[item.id] ? '☑' : '☐';
-      write(`${checked} ${item.label}`, { size: 10 });
-      gap(4);
+      if (y + 16 > doc.internal.pageSize.getHeight() - 60) { doc.addPage(); y = 60; }
+      const isChecked = !!checklist[item.id];
+      doc.setDrawColor(120, 120, 120);
+      doc.setLineWidth(0.6);
+      doc.rect(margin, y - 8.5, 9, 9, 'S');
+      if (isChecked) {
+        doc.setDrawColor(22, 163, 74);
+        doc.setLineWidth(1.2);
+        doc.line(margin + 1.5, y - 3.5, margin + 3.5, y - 1.5);
+        doc.line(margin + 3.5, y - 1.5, margin + 7.5, y - 7.5);
+      }
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(...(isChecked ? [160, 160, 160] as [number,number,number] : [40, 40, 40] as [number,number,number]));
+      const clLines = doc.splitTextToSize(item.label, maxW - 16) as string[];
+      doc.text(clLines, margin + 14, y);
+      y += clLines.length * 14 + 2;
     });
 
     doc.save(`vet1stop-cpp-prep-${date.replace(/,?\s+/g, '-')}.pdf`);
@@ -346,6 +360,13 @@ export default function CppPrepPanel() {
                   No conditions yet — add one above or load from Records Recon
                 </div>
               ) : (
+                <>
+                {conditions.length > 0 && !conditions.some(c => c.questions) && (
+                  <div className="flex items-center gap-2 text-xs text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2 mb-3">
+                    <SparklesIcon className="h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />
+                    Click any condition below to generate AI exam questions
+                  </div>
+                )}
                 <div className="space-y-3">
                   {conditions.map((cond, idx) => (
                     <ConditionCard
@@ -358,6 +379,7 @@ export default function CppPrepPanel() {
                     />
                   ))}
                 </div>
+                </>
               )}
 
               {conditions.length > 0 && (
@@ -556,9 +578,13 @@ function ConditionCard({
         <div className="flex items-center gap-3">
           <span className="text-xs font-bold text-gray-400 tabular-nums w-5">{idx + 1}</span>
           <span className="text-sm font-semibold text-[#1A2C5B]">{cond.condition}</span>
-          {cond.questions && (
+          {cond.questions ? (
             <span className="text-[10px] text-emerald-600 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded-full font-semibold">
               {cond.questions.length} questions
+            </span>
+          ) : !cond.loading && (
+            <span className="text-[10px] font-semibold text-white bg-emerald-600 px-2 py-0.5 rounded-full">
+              Generate questions →
             </span>
           )}
         </div>
@@ -609,11 +635,11 @@ function ConditionCard({
 
               <button
                 onClick={() => onRolePlay(qi)}
-                className="flex items-center gap-1.5 text-[11px] font-semibold text-[#1A2C5B] hover:text-emerald-700 transition-colors"
+                className="w-full flex items-center justify-center gap-2 py-2.5 bg-[#1A2C5B] text-white rounded-xl font-bold text-xs hover:bg-[#0F1D3D] transition-colors focus:outline-none focus:ring-2 focus:ring-[#1A2C5B]/40"
                 aria-label={`Practice answering question ${qi + 1}`}
               >
-                <ChatBubbleLeftRightIcon className="h-3.5 w-3.5" aria-hidden="true" />
-                Practice Answer
+                <ChatBubbleLeftRightIcon className="h-4 w-4" aria-hidden="true" />
+                Practice My Answer
               </button>
             </div>
           ))}
