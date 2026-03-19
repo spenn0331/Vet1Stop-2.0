@@ -6,11 +6,12 @@ This document replaces the need for a traditional 30-page static business plan. 
 
 # **Vet1Stop: Living Master Strategy**
 
-**Founder:** Sean Patrick Penny
+**Founder:** Sean Patrick Penny (CEO) 
+  - Josh Diehl (CTO) 
 
 **Structure:** Limited Liability Company (LLC)
 
-**Last Updated:** February 28, 2026
+**Last Updated:** March 17, 2026
 
 **Status:** MVP Development / Pre-Seed
 
@@ -205,15 +206,35 @@ Net-income scenario planner by school/zip.
 
 #### **9. AI Wellness Predictor** – Daily check-ins + wearables → early spiral detection
 
-**How it works:** Short mood/symptom log → ML spots patterns → proactive resource suggestions.
+**How it works:** 5-slider daily check-in (Mood, Energy, Sleep, Pain, Social Connection 1–10) → 7-day inline SVG sparkline trend chart → Smart Insights engine surfaces mental health/physical/sleep resources based on threshold logic → crisis modal triggers on mood=1 or crisis keyword in notes (988 + Text 838255) → day streak counter + mini bar chart. 100% client-side; all data in `localStorage`. Legal "Not a medical device" disclaimer on every render.
+
+**Built Sub-Features (Phase 1–2 — Live):**
+
+* **Symptom Diary PDF Export:** VA-friendly 30-day dated log (date · all 5 scores · notes excerpt · footer disclaimer). Direct evidence for C&P appointments. *(Premium feature)*
+* **Wearable Integration:** Fitbit OAuth 2.0 PKCE + Garmin Health API OAuth 1.0a + Apple Health JSON import. Device data (sleep duration, resting HR, HRV, steps, active minutes) auto-populates Sleep and Energy sliders. Feeds NVWI cohort with richer biometric data. *(Premium feature)*
+* **Wellness Correlation Chart:** Pure SVG — 30-day 5-dimension trend lines + 5×5 Pearson correlation heatmap with blue/red gradient. Identifies which metrics drive each other (e.g., sleep → mood). Requires 7+ entries. *(Premium feature)*
+* **AI Insight Cards:** Grok-driven weekly pattern analysis — 4 typed cards (trend, correlation, warning/positive, recommendation) with lazy-load and refresh-on-demand. *(Premium feature)*
+* **Caregiver / VA Provider Report:** Two jsPDF modes — "VA Provider Brief" (30-day averages + trends + notes) and "Appointment Prep Packet" (same + tailored provider questions based on scores). Copy-text summary button. Built-in FAQ explainer. *(Premium feature)*
+* **Smart Bridge Sender → C&P Prep:** Calculates 7-day averages, builds wellness-based `ConditionPayload[]`, sends to C&P Exam Prep via `localStorage` bridge.
+* **NVWI Opt-In Consent:** After first check-in save, user is invited to join the National Veteran Wellness Index. Consent modal with dual checkboxes (wellness data + wearable data). Anonymized cohort upsert (`era/branch/age/region` + ISO week bucketing) — zero individual records ever stored. Registry Member badge displayed on panel.
 
 #### **10. Ambient Scribe Companion** – Voice journaling → therapist-ready summaries
 
-**How it works:** Speak freely → speech-to-text + NLP condenses notes → export PDF with consent.
+**How it works:** Web Speech API voice recording with live interim transcript display → text fallback textarea for unsupported browsers → AI (Grok-4) condenses notes into 3 sections (What I Described, Key Themes, Things to Follow Up On) → jsPDF export with branded header + 3-section summary + raw transcript + legal footer. Smart Bridge sender to C&P Exam Prep.
 
-#### **11. Virtual Appointment Prep** – C&P exam role-play simulator
+#### **11. Virtual Appointment Prep (C&P Exam Prep)** – C&P exam role-play simulator
 
-**How it works:** Upload records → AI generates likely questions → role-play practice + checklist.
+**How it works:** Smart Bridge receiver from Records Recon and Scribe — conditions auto-populate on arrival. Manual condition add/remove with accordion cards. AI generates 5 questions per condition with Tip + "Avoid" per question. Role-play mode: answer a question → Grok gives feedback + rating (good/needs-work/incomplete) + improvement angle. Exam Day Checklist (10 items + progress bar). jsPDF download of full prep sheet with all conditions, questions, checklist, and disclaimer.
+
+**Legal:** "Educational practice tool only — not official VA guidance or claims assistance."
+
+### **Phase 2 Health Tools Backlog (Buildable without live user data)**
+
+* **VA Combined Rating Calculator:** Pure client-side math using VA's "whole person" combined ratings formula. User enters conditions + individual % ratings → outputs combined rating. Zero API cost. Highest-demand VA topic online.
+* **Benefit Eligibility Checker:** Standalone 3-question quiz UI (zip, era, branch) that feeds the existing Symptom Finder AI backend — a clean new entry point for users who haven't been through the full wizard.
+* **Contract Highlighter (Overwatch Shield):** Upload lease/mortgage PDF → AI flags SCRA/MLA predatory lending violations → red/yellow highlights + CFPB pre-fill button. (See also: Life & Leisure page listing.)
+* **The Flare (Buddy Check):** One-tap crisis button. Up to 5 buddy contacts in `localStorage`. Press Flare → fires `sms:` links with pre-composed message + location. Zero backend. Sits beside 988 on the wellness hub. (See also: Community page listing.)
+* **Pension Poacher Detector:** Paste suspicious email/text → AI scans for veteran scam patterns → pre-filled FTC/VA OIG report button. (See also: Life & Leisure page listing.)
 
 ### **IV. The Financial & Career Layer – Phase 1–2**
 
@@ -306,18 +327,25 @@ This mapping shows exactly where every feature lives on the site/app and its tar
 
 ### **Health Page (/health)**
 
-* Symptom Finder (Core) – Conversational triage wizard (Phase 1, ★)  
-* Records Recon – Upload/scan VA notes for evidence flags \+ Personal Evidence Report (Phase 1, ★)  
-* AI Wellness Predictor – Daily check-ins \+ early spiral detection (Phase 1–2)  
-* Ambient Scribe Companion – Voice journaling → therapist summaries (Phase 1–2)  
-* Virtual Appointment Prep – C\&P exam role-play simulator (Phase 1–2)  
+* Symptom Finder (Core) – Conversational triage wizard with 3-track VA/NGO/State results, intent cards, preference learning (Phase 1, ★)
+* Records Recon – Upload/scan VA notes for evidence flags + Personal Evidence Report PDF + Smart Bridge → Symptom Finder + C&P Prep (Phase 1, ★)
+* AI Wellness Predictor – 5-slider daily check-in + trend sparklines + wearable sync + NVWI registry + premium dashboard (Phase 1–2, ★)
+* Ambient Scribe Companion – Voice journaling → AI summary → jsPDF export + Smart Bridge → C&P Prep (Phase 1–2)
+* C&P Exam Prep (Virtual Appointment Prep) – Smart Bridge receiver + AI questions + role-play mode + exam checklist + jsPDF (Phase 1–2)
+* Mission Briefings – 8 guided health missions × 5 steps, NGO partner cards, localStorage progress tracking (Phase 1–2)
+* NGO Spotlight + NGO of the Month – Featured NGO banner on Health hub; algorithmic pinning for paying partners (Phase 1, revenue)
+* Resource Browse – Full NGO/Federal/State resource grid with 7 mega-category filters, synonym search, thumbs up/down preference re-ranking (Phase 1)
 * Auto-Fill Engine (health/VA forms only) (Phase 1, ★)
+* VA Combined Rating Calculator – Client-side "whole person" combined ratings formula (Phase 2 backlog)
+* Benefit Eligibility Checker – 3-question quiz entry point into Symptom Finder AI (Phase 2 backlog)
 
 ### **Education Page (/education)**
 
-* GI Bill Pathfinder (Benefit Maximizer) – Net-income scenario planner (Phase 1, ★)  
-* School Finder & Comparison Tool – GI-Bill schools ranked by outcomes (Phase 1\)  
-* Benefit Maximizer & Family Benefit Transfer guides (Phase 1\)  
+* GI Bill Pathfinder (Benefit Maximizer) – Net-income scenario planner (Phase 1, ★)
+* School Finder & Comparison Tool – GI-Bill schools ranked by outcomes (Phase 1)
+* Education Advisor – Inline AI chat panel (Grok-4) with 3-track results (Federal/NGO/State) pulled from MongoDB; intent tap cards + cross-domain hints (Phase 1, ★)
+* MOS Skills Translator – Military-to-civilian keyword mapping *(also accessible from Careers page)* (Phase 1)
+* Benefit Maximizer & Family Benefit Transfer guides (Phase 1)
 * Auto-Fill Engine (education/school forms only) (Phase 1, ★)
 
 ### **Careers Page (/careers)**
@@ -408,7 +436,11 @@ While tools are connected via Bridges, they must remain fully capable of functio
 
 | Bridge | Node A (Sender) | Bridge Key | Node B (Receiver) | Status |
 |:-------|:----------------|:-----------|:-------------------|:-------|
-| Recon → Symptom | Records Recon (`/health`) | `vet1stop_recon_bridge_data` | Symptom Finder (`/health/symptom-finder`) | V1 Sender Active |
+| Recon → Symptom | Records Recon (`/health`) | `vet1stop_recon_bridge_data` | Symptom Finder (`/health/symptom-finder`) | ✅ Live |
+| Wellness → C&P | AI Wellness Predictor (`/health/wellness`) | `vet1stop_recon_bridge_data` | C&P Exam Prep (`/health/cpp-prep`) | ✅ Live |
+| Scribe → C&P | Ambient Scribe (`/health/scribe`) | `vet1stop_recon_bridge_data` | C&P Exam Prep (`/health/cpp-prep`) | ✅ Live |
+
+**Shared Bridge Key:** All three active bridges write to the same `vet1stop_recon_bridge_data` key using the standardized `ConditionPayload[]` interface. `ConditionPayload.sourceModule` field identifies the sender node (`'records-recon' | 'wellness' | 'scribe'`). C&P Prep reads whichever payload is present on mount.
 
 ### **Future Planned Bridges**
 
@@ -416,8 +448,101 @@ While tools are connected via Bridges, they must remain fully capable of functio
 * **Symptom Finder → Resource Pathways:** Auto-route matched resources based on triage results
 * **Auto-Fill Engine → Any Form Tool:** Pre-fill veteran profile data across all tools
 * **MOS Translator → Careers:** Pre-populate job search with translated skills
+* **Wellness → Persistent DB Profile (Phase 2):** Replace `localStorage` transport with `userProfiles` MongoDB collection for cross-device persistence
 
 ### **Phase Roadmap**
+
+---
+
+## **2c. Platform Infrastructure (Cross-Cutting Systems)**
+
+**Introduced:** March 2026 | **Status:** Live (Phase 1)
+
+These are platform-wide systems that underpin every feature. They are not user-facing pages but are essential architecture that must be understood when building or modifying any tool.
+
+---
+
+### **I. Premium Tier Gating System**
+
+**Purpose:** Enforce free-tier daily usage limits and gate premium features without requiring server-side auth on every request.
+
+**Architecture:**
+* `src/lib/premium.ts` — `PREMIUM_FEATURES` registry (14 feature keys), `FREE_TIER_LIMITS` map (scans per day by feature), `isPremium()` gate check (reads Firebase auth state).
+* `src/lib/useFreeTierUsage.ts` — `useFreeTierUsage(usageKey, dailyLimit)` hook. Reads/writes `localStorage` key `vet1stop_usage_<key>` with `{ count, date }`. Resets automatically on a new day. `DEV_UNLOCKED` bypass via `NEXT_PUBLIC_DEV_PREMIUM=true`.
+* `src/components/shared/PremiumGate.tsx` — `<PremiumGate feature="...">` React wrapper with two modes: full replacement card (locks entire section) and compact badge overlay. Used throughout Health tools.
+
+**Premium Feature Registry (Phase 1 — Live):**
+
+| Key | Feature |
+|:----|:--------|
+| `wellness_diary_export` | Symptom Diary PDF Export |
+| `wellness_wearable_sync` | Wearable Device Sync (Fitbit/Garmin/Apple) |
+| `wellness_correlation_chart` | 30-Day Trend Correlation Chart |
+| `wellness_insight_cards` | AI Weekly Insight Cards |
+| `wellness_caregiver_share` | Caregiver / VSO Share Link |
+| `scribe_unlimited` | Scribe: Unlimited AI Summaries |
+| `cpp_prep_unlimited` | C&P Prep: Unlimited Sessions |
+| `autofill_unlimited` | Auto-Fill: Unlimited Profiles |
+| `records_recon_unlimited` | Records Recon: Unlimited Scans |
+
+**Monetization Tie-In:** Free tier lets users experience every tool with daily limits. Premium ($9.99/mo) unlocks all features with no restrictions. This is the primary conversion driver at the feature level.
+
+---
+
+### **II. The Digital Sea Bag (Shared Resource Storage)**
+
+**Purpose:** A persistent, cross-tool `localStorage` store where veterans save resources they want to revisit — functioning as a personal curated list across the entire platform.
+
+**Key:** `vet1stop_sea_bag` (shared across Symptom Finder, Mission Briefings, Records Recon)
+
+**How it works:** Any resource card anywhere on the platform has a "Save to Sea Bag" action. Saved resources persist in `localStorage` and are accessible from any tool that reads the key. One-tap "Save All Recommended" available in Symptom Finder results.
+
+**Phase 2 upgrade:** Sea Bag migrates from `localStorage` to the `userProfiles` MongoDB collection, enabling cross-device access and AI-powered "you may also need" suggestions.
+
+---
+
+### **III. Mission Briefings System**
+
+**Purpose:** Structured, step-by-step health mission plans — moving beyond a resource directory to guided action paths. Replaces the older "Pathway" system.
+
+**Architecture:**
+* `src/data/missions.ts` — 8 full missions × 5 steps each, with NGO partner cards, action checklists, Records Recon deeplinks, and `vet1stopTip` callouts. Single source of truth.
+* `src/hooks/useMissionProgress.ts` — localStorage-backed progress hook (`vet1stop_mission_progress`). Methods: `markStepComplete`, `setCurrentStep`, `resetMission`.
+* `MissionStrip.tsx` — 4-card featured grid on Health page. Difficulty badges, NGO partner chips, progress bar if started.
+* `MissionPanel.tsx` — right-side drawer (desktop) / bottom sheet (mobile). Step timeline, key points, tips/warnings, action checklist, NGO partner cards, 988 crisis footer.
+
+**Current Missions (8):** VA Claims Navigation, Mental Health Recovery, Physical Rehabilitation, Sleep & Recovery, Financial Transition, Career Launch, Education Pathfinder, Community Reconnection.
+
+**Strategic Value:** Mission Briefings are the primary mechanism for transforming casual visitors into engaged, returning users. Progress tracking creates a habit loop.
+
+---
+
+### **IV. Resource Feedback & Preference Learning System**
+
+**Purpose:** Harvest anonymized resource quality signals from Day 1 to improve AI recommendations post-launch.
+
+**Architecture:**
+* `POST /api/feedback` — Validates payload, SHA-256 hashes `userId` + `sessionId` (zero PII stored), writes to MongoDB `ratings` collection.
+* `src/lib/feedback/ratingsSchema.ts` — `RatingDocument` interface: `resourceId`, `rating` (1–5), `thumbs` (up/down), `timestamp`, `userId` (hashed), `track`, `source`.
+* **In-card rating UI:** Thumbs up/down + clickable 1–5 star rating on every resource card in Symptom Finder results. Animated "Thank you" toast on submit.
+* **Preference Learning (Browse):** 👍/👎 buttons on Browse cards write to `localStorage` key `vet1stop_resource_prefs`. `HealthBrowseSection` listens for `vet1stop:pref-update` custom events and re-ranks liked resources to top + disliked to bottom in real-time without refetch.
+
+**Admin Tie-In:** Admin Dashboard (`/admin`) displays live Ratings Inbox — resource, track, thumbs, rating, timestamp. Data flows Day 1 and is ready for a post-launch team to analyze.
+
+---
+
+### **V. Admin Dashboard**
+
+**Purpose:** Internal operations portal for monitoring platform health, resource quality, and revenue signals.
+
+**Built (Phase 1 — Live):**
+* `/admin` — Live MongoDB stats: total resources by subcategory (federal/NGO/state), pathway count, ratings count + average, recent ratings inbox.
+* `/admin/ngos` — NGO directory management placeholder with Phase 1.5 roadmap.
+* `GET /api/admin/stats` — Queries MongoDB live for all stat cards.
+
+**Future (Phase 2):** NGO partner management portal (update listings, upload success stories, view click-through analytics), agent portal for real estate referral milestone tracking (Sent → Contacted → Closing), premium subscription management.
+
+---
 
 ## **3. Revenue Engine (The Hybrid Model)**
 
@@ -477,13 +602,13 @@ This network operates as a licensed real estate brokerage activity under Pennsyl
 
 This is a scalable, high-margin stream with minimal upfront costs, aligning with the "Zero-Burn" philosophy. Revenue flows through the LLC's escrow account managed by the broker-of-record.
 
-* **Revenue Model:** 25% of the agent's gross commission on closings from Vet1Stop leads. Example: For a $300,000 home at 3% commission ($9,000 agent side), Vet1Stop earns $2,250. Target: 3 closings in Year 1 Phase 3 (~$6,750–$11,250 revenue), scaling to 10–20/month in Year 2 ($22,500–$45,000/month).
-* **Profit Split:** Negotiate 80–90% to Vet1Stop (founder) and 10–20% to the broker-of-record, based on minimal oversight role (5–10 hours/month). Structure as employment/contract: Base fee ($500–$1,000/month) + percentage, with clauses for payment within 30 days of closing and audit rights for fee verification.
+* **Revenue Model:** 25% of the agent's gross commission on closings from Vet1Stop leads. Example: For a $300,000 home at 3% commission ($9,000 agent side), Vet1Stop earns $2,250. First closing projected Month 6; scaling to 15–20 closings/month in Year 2.
+* **Profit Split (Updated):** 80% Vet1Stop / 20% broker-of-record. **Negotiated retainer: $300/mo** (below industry standard of $750), offset by the higher 20% commission split. Retainer starts Month 3 when Local directory build begins. Target: $0 retainer with a mission-aligned semi-retired PA broker; $300/mo is the fallback ceiling. Renegotiate to 15% split once volume exceeds 10 closings/month.
 * **Costs:**
   * Setup: LLC brokerage registration (~$180 via PALS portal), attorney fees for contracts ($500–$1,500), E&O insurance ($500–$1,000/year).
-  * Ongoing: Broker compensation (~$5,000–$10,000/year initially), API/CRM tools (e.g., Stripe for billing, integrated into tech stack at ~$50/month).
-  * Breakeven: Covered by first 1–2 closings; use "Real Estate Cash" to fund dev hires per PM Analysis.
-* **Projections Integration:** Ties into Section 7—Phase 3 (Year 1): $15k–$25k/mo revenue, with this network contributing 40–60%. Scales to support Phase 5 physical assets.
+  * Ongoing: BOR retainer ($300/mo) + 20% commission split on closings. API/CRM tools integrated into existing tech stack.
+  * Breakeven: Covered by first 1–2 closings. Real Estate cash funds Junior Developer hire per CFO model in Section 7.
+* **Projections Integration:** See Section 7 full 12-month P&L. Real estate contributes $2,250 gross in Month 6, growing to $13,500/mo by Month 12 (6 closings). Year 2 target: 15–20 closings/month ($405k–$540k gross annually at 15% BOR split).
 
 **Implementation Plan:**
 
@@ -593,21 +718,29 @@ Transitions Vet1Stop from a "Website" to a "Movement." It provides a high-energy
 
 ### **Execution Roadmap**
 
-**Q1 (Feb - Mar): MVP Core**
-* [x] Project Setup & Auth
-* [x] Health Page (Symptom Finder)
-* [ ] **Action:** File LLC & Bank Account
-* [ ] **Dev:** Build "Resources" database schema
+**Q1 (Feb - Mar): MVP Core — ✅ COMPLETE (Mar 17, 2026)**
+* [x] Project Setup & Auth (Firebase + MongoDB Atlas)
+* [x] Health Page — Full MVP: Symptom Finder (AI triage, 3-track), Records Recon (OCR + AI), Auto-Fill Engine, Ambient Scribe, C&P Exam Prep
+* [x] Health Page — Phase 1–2 Tools: AI Wellness Predictor (+ wearables + NVWI + premium dashboard), Mission Briefings (8 missions), NGO Spotlight, Resource Browse with preference learning
+* [x] Education Page — GI Bill Pathfinder, School Finder, Education Advisor (AI), MOS Translator, NGO tab
+* [x] Smart Bridge Ecosystem — 3 active bridges (Recon→Symptom, Wellness→C&P, Scribe→C&P)
+* [x] Platform Infrastructure — Premium Gating, Digital Sea Bag, Feedback/Ratings system, Admin Dashboard
+* [x] **Dev:** Resources database schema + MongoDB seeding (218+ health resources, 23+ education NGOs)
+* [ ] **Action:** File LLC & Bank Account ← **NEXT LEGAL PRIORITY**
 
-**Q2 (Apr - Jun): Lifestyle & Local Launch**
-* [ ] **Dev:** Build "Life & Leisure" page (Space-A guides)
-* [ ] **Dev:** Build "Local" directory (Real Estate MVP)
-* [ ] **Revenue:** Sell first "Featured Business" listings
+**Q2 (Apr - Jun): Local Launch + Golden Goose 🔥**
+* [ ] **Dev:** Build "Local" VOB Directory — Leaflet map + Real Estate & Housing category (Phase 1 #2 priority per strategy)
+* [ ] **Legal:** File LLC as Broker Corporation/LLC (PA PALS portal) + hire broker-of-record
+* [ ] **Dev:** Lead-Routing API + Agent Portal (milestone tracking: Sent → Contacted → Closing)
+* [ ] **Revenue:** Sign first 3–5 VA-loan partner agents; sell first "Featured Business" listings ($100/mo)
+* [ ] **Dev:** Build "Life & Leisure" page (Home Base Gantt chart, Contract Highlighter, Space-A guides)
+* [ ] **Dev:** Health Phase 2 backlog — VA Combined Rating Calculator, Benefit Eligibility Checker
 
-**Q3 (Jul - Sep): Education & Shop**
-* [ ] **Dev:** Launch Education portal (GI Bill tools)
-* [ ] **Dev:** Launch "Shop" with initial affiliate products
-* [ ] **Gov:** Register SAM.gov / VetBiz
+**Q3 (Jul - Sep): Community, Shop & Scale**
+* [ ] **Dev:** Launch "Shop" with initial affiliate/veteran-seller products
+* [ ] **Dev:** Community page Phase 2 (The Flare, The Sentinel, Homefront Mode)
+* [ ] **Gov:** Register SAM.gov / VetBiz; submit 1–2 micro-purchase DoD bids
+* [ ] **Revenue:** Scale to 15–25 Featured Partner NGOs; target 1st real estate closing ($2,250 fee)
 
 **Q4 (Oct - Dec): Scale & App**
 * [ ] **Product:** Mobile App Beta
@@ -643,95 +776,166 @@ Transitions Vet1Stop from a "Website" to a "Movement." It provides a high-energy
 
 ---
 
-### **Phase 1: The Beachhead (Months 1–6)**
+### **Team & Compensation Structure (Year 1)**
 
-**Theme:** The "Valley of Death." Focus is on survival, local validation, and securing high-margin revenue through real estate referrals. Negative cash flow is expected for Months 1–4.
-
-| Month | Primary Objective | Key Milestones | Financials & KPIs |
-| :---- | :---- | :---- | :---- |
-| **1** | **Foundation** | File PA LLC & open bank account (~$125-200); initiate SAM.gov (UEI); ship Local Directory MVP. Sign with broker partner for Real Estate Network | **Rev:** $0; **Burn:** ~$400; **KPI:** 10 beta signups |
-| **2** | **Soft Launch** | Physical outreach (VFW/Legion); launch "Founding Member" tier ($5/mo); test real estate agent | **Rev:** ~$100; **Burn:** ~$150; **KPI:** 50 users, 1 test lead |
-| **3** | **"Golden Goose"** | Identify 2–3 veteran housing leads; code Health Command Center beta; contact 5–10 NGOs for beta profiles | **Rev:** ~$100; **Burn:** ~$200; **KPI:** 100 users, 1–2 leads |
-| **4** | **The "Dip"** | Release Symptom Finder (SEO); publish 2–3 SEO guides; apply for veteran-specific grants ($5k–10k) | **Rev:** ~$150; **Burn:** ~$250; **KPI:** 200 users, 500 views |
-| **5** | **Proof of Concept** | **1–2 Real Estate Closings ($2k–4.5k total)**; reinvest 40% of profit into ads; test Education Lead Gen | **Net Profit:** +$1,900–4,400; **KPI:** 300 users, 5–10 leads |
-| **6** | **Validation** | Convert 5–8 NGOs/Businesses to "Featured" ($50-100/mo); secure 2–3 additional leads; polish UI | **Rev:** ~$1k–2k; **Burn:** ~$400; **Status:** Positive Cash Flow |
-
-**Phase 1 Personnel:** Sean Penny (Founder/Dev)
+| Role | Year 1 Compensation | Notes |
+| :--- | :--- | :--- |
+| Sean Penny (CEO/Founder) | $0 salary | Deferred; modest draw (~$2,500–$3,000/mo) begins Month 8–9 per hiring rule |
+| Josh (CTO/Co-Founder) | $0 salary | Equity: 10–15% (finalize before LLC filing). Salary begins Year 2. |
+| Junior Developer | $4,000/mo (starts Month 3) | Full-time or contractor |
+| CPA / Bookkeeper | $350/mo (Months 1–3 only) | Transitions to Fractional CFO in Month 4 |
+| Fractional CFO | $2,500/mo (Month 4+) | Part-time strategic finance. No full-time CFO until $500k+ ARR. |
+| Broker-of-Record (BOR) | $300/mo retainer + 20% split | Retainer starts Month 3. See BOR note in Section 3. |
 
 ---
 
-### **Phase 2: The "Dig In" (Months 7–12)**
+### **Partner Tier Pricing Ladder**
 
-**Objective:** Transition from "Project" to "Business" with stabilized cash flow.
+| Tier | Monthly Price | Audience | Core Value |
+| :--- | :--- | :--- | :--- |
+| VOB Directory — Verified | $49/mo | Veteran-owned businesses | Directory listing + Vet1Stop Verified badge |
+| VOB Directory — Featured | $199/mo | Veteran-owned businesses | Priority placement + analytics |
+| NGO Spotlight | $125–$500/mo | Nonprofits (501c3 verified) | Featured placement + algorithmic priority + NGO dashboard |
+| **Verified Business Partner** | **$499/mo** | For-profit companies targeting veterans | Cross-platform placement + monthly analytics dashboard + Verified badge |
+| **Mission Sponsor (Tier 2)** | **$1,500/mo** (12-mo) | Banks, lenders, universities, national VSOs | Named sponsor of 1 of 8 Mission Briefings; category exclusivity; quarterly Impact Report PDF |
+| **Anchor Partner (Tier 3)** | **$2,500–$5,000/mo** | USAA, Veterans United, major national brands | All Tier 2 + homepage hero + monthly newsletter feature + bi-weekly analytics call |
 
-**Product Focus:** Full Health Command Center and Education Lead Gen
-
-**Operational Milestones:**
-* Partner with 2–3 vocational schools ($50–150 per qualified lead)
-* Scale to 15–25 paying "Featured Partner" NGOs
-* Finalize SAM.gov; submit 1–2 micro-purchase bids (<$10k)
-
-**Personnel:** Sean Penny (CEO) + Part-time CPA/Virtual Assistant ($500/mo, profit-contingent)
-
-**Financials:**
-* **Revenue:** $4,000–$8,000/mo (40% Referrals, 40% Leads, 20% Subs)
-* **Burn Rate:** ~$1,000–$1,500/mo (Tech, ads, compliance)
-* **KPIs:** 2,000 MAUs, 20 leads/mo, $2k MRR
+**Sales Note:** Mission Sponsorships are the primary $1,000+ product. Only 8 slots exist — category exclusivity is the core value prop. First 3 pitch targets: (1) Veterans United Home Loans, (2) USAA, (3) major regional PA employer (UPMC, defense contractors near Carlisle). The Partner Analytics Dashboard (see `.workflow/partner-analytics-dashboard.md`) must be built before pitching Tier 2+ deals.
 
 ---
 
-### **Phase 3: Community & Scale (Year 2)**
+### **Additional Revenue Streams (Year 1 Active)**
 
-**Objective:** Ecosystem activation and recurring revenue growth.
+* **Founding Member Lifetime Deal ($99 one-time):** Cap 65 spots, Months 1–3 only. Creates early cash cushion and evangelist user base.
+* **Affiliate Links (USAA, TurboTax Military, Hire Heroes):** Apply Week 1. Passive income from Day 1 with zero dev work.
+* **Employer Job Board ($199/posting):** Companies post veteran-targeted listings. Scales with Local directory traffic.
+* **Transition Concierge ($299/session):** Sean personally delivers 1:1 veteran transition coaching. Cap: 5 sessions/month.
+* **Newsletter Sponsorships:** Flat-rate sponsors in bi-weekly "Veteran Intel" newsletter. Platform: beehiiv. Activates ~Month 6 at 2,000+ subscribers.
 
-**Product Focus:** Social Feed (DD214 Verified) and Shop Marketplace
+---
+
+### **Phase 1: Year 1 — Full 12-Month P&L**
+
+**Theme:** Founding Member deal builds the cash cushion. NGO subscriptions build the floor. Golden Goose activates in Month 6. The cumulative position never goes negative.
+
+#### Revenue by Month
+
+| Stream | M1 | M2 | M3 | M4 | M5 | M6 | M7 | M8 | M9 | M10 | M11 | M12 |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Premium Subs | $200 | $450 | $799 | $1,299 | $1,898 | $2,647 | $3,596 | $4,695 | $5,894 | $7,193 | $8,592 | $10,090 |
+| Founding Member ($99) | $1,980 | $2,970 | $1,485 | — | — | — | — | — | — | — | — | — |
+| NGO Featured | $125 | $525 | $1,200 | $2,250 | $3,300 | $4,500 | $5,850 | $7,000 | $8,250 | $9,600 | $10,000 | $10,000 |
+| Verified Biz Partner ($499) | — | — | $499 | $998 | $1,497 | $1,996 | $2,495 | $3,493 | $4,491 | $5,489 | $6,487 | $7,485 |
+| Real Estate (Gross) | — | — | — | — | — | $2,250 | $4,500 | $6,750 | $9,000 | $11,250 | $11,250 | $13,500 |
+| Affiliate Links | — | $50 | $100 | $200 | $350 | $500 | $700 | $900 | $1,100 | $1,300 | $1,500 | $1,750 |
+| VOB Directory | — | — | — | $98 | $395 | $790 | $1,185 | $1,580 | $1,975 | $2,618 | $3,261 | $3,904 |
+| Transition Concierge | — | — | $299 | $598 | $897 | $1,196 | $1,495 | $1,495 | $1,495 | $1,495 | $1,495 | $1,495 |
+| Employer Job Board | — | — | — | $199 | $398 | $796 | $1,194 | $1,592 | $1,990 | $2,388 | $2,388 | $2,786 |
+| Education Lead Gen | — | — | $200 | $400 | $700 | $1,000 | $1,500 | $2,000 | $2,500 | $3,000 | $3,000 | $3,000 |
+| Mission Sponsors | — | — | — | — | — | $1,500 | $3,000 | $4,500 | $4,500 | $6,000 | $6,000 | $7,500 |
+| Newsletter Sponsors | — | — | — | — | — | $500 | $1,000 | $1,500 | $1,500 | $2,000 | $2,000 | $2,500 |
+| **TOTAL REVENUE** | **$2,305** | **$3,995** | **$4,582** | **$6,042** | **$9,435** | **$17,675** | **$26,515** | **$35,505** | **$42,695** | **$52,333** | **$55,973** | **$64,010** |
+
+#### Costs by Month
+
+| Line Item | M1 | M2 | M3 | M4 | M5 | M6 | M7 | M8 | M9 | M10 | M11 | M12 |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Tech Stack | $130 | $200 | $350 | $450 | $550 | $700 | $800 | $900 | $1,000 | $1,100 | $1,200 | $1,300 |
+| LLC Filing (one-time) | $175 | — | — | — | — | — | — | — | — | — | — | — |
+| CPA / Bookkeeper | $350 | $350 | $350 | — | — | — | — | — | — | — | — | — |
+| Fractional CFO | — | — | — | $2,500 | $2,500 | $2,500 | $2,500 | $2,500 | $2,500 | $2,500 | $2,500 | $2,500 |
+| BOR Retainer* | — | — | $300 | $300 | $300 | $300 | $300 | $300 | $300 | $300 | $300 | $300 |
+| BOR Commission* (20% RE) | — | — | — | — | — | $450 | $900 | $1,350 | $1,800 | $2,250 | $2,250 | $2,700 |
+| Junior Developer | — | — | $4,000 | $4,000 | $4,000 | $4,000 | $4,000 | $4,000 | $4,000 | $4,000 | $4,000 | $4,000 |
+| E&O Insurance | $84 | $84 | $84 | $84 | $84 | $84 | $84 | $84 | $84 | $84 | $84 | $84 |
+| Marketing | — | — | — | — | $200 | $350 | $500 | $500 | $750 | $750 | $750 | $1,000 |
+| Misc / Legal / Tools | $100 | $150 | $200 | $250 | $300 | $400 | $500 | $600 | $600 | $700 | $700 | $800 |
+| **TOTAL COSTS** | **$839** | **$784** | **$5,284** | **$7,584** | **$7,934** | **$8,784** | **$9,584** | **$10,234** | **$11,034** | **$11,684** | **$11,784** | **$12,684** |
+
+#### Net Summary
+
+| | M1 | M2 | M3 | M4 | M5 | M6 | M7 | M8 | M9 | M10 | M11 | M12 |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| **Revenue** | $2,305 | $3,995 | $4,582 | $6,042 | $9,435 | $17,675 | $26,515 | $35,505 | $42,695 | $52,333 | $55,973 | $64,010 |
+| **Costs** | $839 | $784 | $5,284 | $7,584 | $7,934 | $8,784 | $9,584 | $10,234 | $11,034 | $11,684 | $11,784 | $12,684 |
+| **Net** | +$1,466 | +$3,211 | -$702 | -$1,542 | +$1,501 | +$8,891 | +$16,931 | +$25,271 | +$31,661 | +$40,649 | +$44,189 | +$51,326 |
+| **Cumulative** | +$1,466 | +$4,677 | +$3,975 | +$2,433 | +$3,934 | +$12,825 | +$29,756 | +$55,027 | +$86,688 | +$127,337 | +$171,526 | **+$222,852** |
+
+**Year 1 Scorecard:**
+* **Total Revenue:** $321,065 | **Total Costs:** $98,213 | **Net Profit:** $222,852
+* **Month 12 MRR:** $64,010 (~$768k annualized run rate)
+* **Deepest cumulative dip:** +$2,433 (Month 4) — never goes negative
+* **Monthly break-even:** Month 5
+* **Founder draws begin:** ~Month 8–9 (~$2,500–$3,000/mo each)
+* **Second hire eligible:** Month 8 (net clears 2x threshold for $4–5k/mo hire)
+
+> **⚠️ Critical:** The Founding Member deal ($1,980 M1 + $2,970 M2) is the primary buffer for the M3–M4 burn dip. A weak launch removes the cushion. Launch it aggressively on Day 1.
+
+---
+
+### **Phase 2: Year 2 — "Scaling the Machine"**
+
+**Objective:** Grow from $64k/mo MRR to $100k–$180k/mo. Platform is established, trust compounding.
+
+**Product Focus:** Mobile App Beta, Shop Marketplace, full Social Feed (DD214 Verified)
 
 **Operational Milestones:**
-* Win first DoD/VA pilot (Digital TAPS sub-contract: $50k–$100k)
-* Launch Shop with 10–20 verified sellers (drop-shipping model)
-* Trigger first full-time hires based on the profit rule
+* Real estate scales to 15–20 closings/month; renegotiate BOR to 15% split at this volume
+* All 8 Mission Sponsor slots filled ($12,000–$20,000/mo from sponsorships alone)
+* VBP subscriptions grow from 15 to 40+ companies
+* Submit SDVOSB/SAM.gov bids; pursue first SBIR Phase I application (~$150k non-dilutive)
+* Launch Shop with 10–20 verified veteran sellers
 
 **Personnel:**
-* Hire #1: Community Manager / Customer Success (~$4k/mo)
-* Hire #2: Sales/Partnership Manager (Commission-based)
+* Sean and Josh begin real salaries (~$6,000–$8,000/mo each)
+* Hire #1: Community Manager / Customer Success (~$4,500/mo)
+* Hire #2: Sales/Partnership Manager (commission-based + $3,000 base)
 
 **Financials:**
-* **Revenue:** $15,000–$30,000/mo ($180k–$360k ARR)
-* **Burn Rate:** ~$8,000–$12,000/mo
-* **KPIs:** 10,000 MAUs, $10k MRR
+* **Annual Revenue:** $1,200,000–$1,560,000
+* **Annual Costs:** ~$480,000–$600,000 (includes founder salaries, two new hires, scaled tech)
+* **Net Profit:** **$500,000–$750,000**
+* **KPIs:** 8,000–12,000 MAUs, 2,500–3,500 premium subscribers, 15–20 RE closings/mo
 
 ---
 
-### **Phase 4: Institutional Expansion (Year 3)**
+### **Phase 3: Institutional Expansion (Year 3)**
 
-**Objective:** Scale to $750k+ ARR and pivot to physical assets.
+**Objective:** Reach $1.2M–$2M net profit; pivot toward physical assets and government scale.
 
-**Product Focus:** "Base-Camp" Co-Living Integration
+**Product Focus:** "Base-Camp" Co-Living pilot, Vet1Stop Telehealth planning, TAPS Digital Curriculum
 
 **Operational Milestones:**
-* **Real Estate:** Down-payment on first PA property (~$200k–$300k asset) using platform profits
-* **Lending:** Partner for VA Loan origination (points/fees)
+* Real estate: 30–50 closings/month; down-payment on first PA property (~$200k–$300k)
+* First SDVOSB contract ($100k–$500k) — DoD TAPS digital curriculum or VA data insights
+* Mobile app live and driving new acquisition channel
+* Partner for VA Loan origination (points/fees model)
 
-**Personnel:** Core Team of 5–8 (Ops, Tech Lead, Real Estate Manager)
+**Personnel:** Core team of 6–8 (Tech Lead, Ops Manager, Real Estate Manager, Sales)
 
 **Financials:**
-* **Annual Run Rate (ARR):** $750k+
+* **Annual Revenue:** $2,500,000–$4,000,000
+* **Annual Costs:** ~$1,000,000–$1,500,000
+* **Net Profit:** **$1,200,000–$2,000,000**
 * **Asset Value:** $400k+ in Real Estate Holdings
-* **KPIs:** 50,000 MAUs, multi-state directory expansion
+* **KPIs:** 25,000–50,000 MAUs, multi-state directory expansion
+
+> **Wildcard:** A single SDVOSB DoD contract ($250k–$500k) pushes Year 3 net well past $2M. Treat government contracting as a parallel workstream starting Year 2, not an afterthought.
 
 ---
 
-### **Phase 5: The Total Ecosystem (Year 5)**
+### **Phase 4: The Total Ecosystem (Year 5)**
 
 **Objective:** National dominance and multi-million dollar scale.
 
-**Product Focus:** Vet1Stop Telehealth and National Housing Network
+**Product Focus:** Vet1Stop Telehealth, National Housing Network, VetFest Annual Convention
 
 **Operational Milestones:**
 * Multi-state Co-Living hubs (3–5 properties)
-* API Integrations: VA Blue Button for seamless data transfer
+* API integrations: VA Blue Button for seamless data transfer
+* VetFest annual convention (ticket sales + vendor registration through platform)
 
-**Personnel:** 20+ Employees (Full departments: Tech, Ops, Sales)
+**Personnel:** 20+ employees (full departments: Tech, Ops, Real Estate, Sales, Gov Affairs)
 
 **Financials:**
 * **Revenue:** $8M–$20M (30% Gov, 30% Referrals/Leads, 20% Subs, 20% Physical Assets)
@@ -739,7 +943,12 @@ Transitions Vet1Stop from a "Website" to a "Movement." It provides a high-energy
 
 ---
 
-### **PM Analysis: Path to Success**
+### **CFO Analysis: The Critical Path**
 
-To hit these numbers, the immediate priority in **Q2 2026** must be the **Real Estate Referral Network**. This is your fastest path to high-margin revenue without needing a massive user base. A single $300,000 home closing generates a \~$2,250 referral fee—equivalent to 225 premium subscribers. Use this "Real Estate Cash" to fund the hiring of your first developer, allowing you to focus on the DoD contracting side.
+1. **The Founding Member deal** keeps cumulative cash positive through the M3–M4 burn dip. Launch Day 1, cap at 65 spots, price at $99.
+2. **The Golden Goose** (real estate) is the highest-margin single stream. One closing ($2,250) = 225 premium subscribers. BOR infrastructure must be built in parallel with the Local directory — not after.
+3. **NGO + VBP subscriptions** are the predictable floor. Not market-dependent. Scale these aggressively in Months 1–6 before real estate revenue arrives.
+4. **Real estate is the swing variable.** 2 closings in M6 instead of 1 materially improves the half-year net. A housing slowdown can trim Year 2 net by $150k–$300k. The diversified 12-stream model is the hedge.
+5. **Renegotiate BOR to 15% split** once closings consistently exceed 10/month. That change alone adds ~$2,700/mo at 12 closings/month.
+6. **The Partner Analytics Dashboard** (see `.workflow/partner-analytics-dashboard.md`) must be built before the first Mission Sponsor pitch. It is the sales tool that closes $1,500–$5,000/mo deals.
 
