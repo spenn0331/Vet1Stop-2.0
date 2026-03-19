@@ -12,6 +12,46 @@
 
 ---
 
+## 🗓️ Confirmed Build Queue (Do Not Reorder Without CFO Sign-Off)
+
+| Order | Feature | Status | Notes |
+| :--- | :--- | :--- | :--- |
+| ✅ 1 | Health Page MVP | Complete | All sprints shipped Mar 15–16 |
+| ✅ 2 | Education Page | Complete | Shipped Mar 16, 2026 |
+| 🔲 3 | **Life & Leisure Page** | Next after Local | Veteran recreation, travel, discounts |
+| 🔲 4 | **Local VOB Directory** | In planning | Leaflet + Real Estate + Golden Goose pipeline |
+| 🔲 5 | **Partner Analytics Dashboard** | Planned post-Life/Leisure | See blueprint below ⬇️ |
+| 🔲 6 | PCS Commander + Smart Bridge | Year 1 Q3 | Relocation tool integration |
+
+---
+
+## 📌 Partner Analytics Dashboard — Planned Feature Reminder
+
+> **🔔 REMINDER FOR CASCADE:** When Life & Leisure page and Local VOB Directory are both marked complete, immediately surface this reminder to Sean: *"It's time to build the Partner Analytics Dashboard — this must be live before pitching the first Mission Sponsor ($1,500/mo). See `.workflow/partner-analytics-dashboard.md` for the full blueprint."*
+
+**What it is:** A read-only, role-gated portal for paying partners (NGO Spotlight, Verified Business Partner $499/mo, Mission Sponsors $1,500/mo, Anchor Partners $2,500–$5,000/mo) to see their ROI on the platform — clicks, Sea Bag saves, demographic breakdowns, mission step completions, and quarterly Impact Report PDFs.
+
+**Why it matters financially:** This is the sales tool that closes $1,500–$5,000/mo corporate deals. Without it, you're asking companies to trust you blindly. With it, you're a media company selling measurable ROI. It must exist before the first Mission Sponsor pitch.
+
+**Full blueprint:** `c:\Users\penny\Desktop\Vet1Stop\.workflow\partner-analytics-dashboard.md`
+
+**Implementation phases (from blueprint):**
+- **Phase 1 (Month 3–4):** Firebase `partner` role + `PartnerGuard` + `/api/partner/stats` + basic dashboard with MetricCards
+- **Phase 2 (Month 5–6, before first Mission Sponsor pitch):** Demographics chart, Mission Funnel chart, quarterly Impact Report PDF (`@react-pdf/renderer`)
+- **Phase 3 (Month 8+):** Self-service onboarding, Anchor Partner API key, benchmark comparisons
+
+**Key files to create when ready:**
+- `src/app/partner/page.tsx` — `PartnerDashboard` main page (role-gated)
+- `src/components/partner/MetricCard.tsx`
+- `src/components/partner/DemographicsChart.tsx`
+- `src/components/partner/MissionFunnelChart.tsx`
+- `src/components/partner/ImpactReportButton.tsx`
+- `src/components/common/PartnerGuard.tsx`
+- `/api/partner/stats` and `/api/partner/impact-report` routes
+- `/api/admin/partners` admin management route
+
+---
+
 ## 🎯 Current Status: Education Page — Education Advisor Shipped — Mar 16, 2026
 
 ### ✅ Education Advisor (AI inline panel — Mar 16, 2026)
