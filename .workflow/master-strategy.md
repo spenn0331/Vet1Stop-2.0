@@ -153,10 +153,7 @@ AI extracts data from DD-214/uploads to pre-populate any form.
 Uncovers hidden benefits and potential retroactive pay by identifying relevant evidence in clinical notes. (Strictly informational — never files claims or gives medical advice.)
 
 **How it Works (Phase 1 MVP – Upload-First "Scan & Flag" Mode):**
-1. User uploads their own VA medical records (PDFs, screenshots, or Blue Button export)
-2. Secure on-the-fly processing with OpenAI Vision + PDF-Lib + targeted NLP
-3. AI scans for 25+ high-value flags (sleep apnea, tinnitus, migraines, PTSD markers, PACT Act presumptives, "ruled out"/"suspected"/"service-connected" language, etc.)
-4. Instantly generates clean "Personal Evidence Report" PDF with highlighted excerpts, dates/context, suggested claim categories, and "Next Step: Share with your VSO" button.
+User uploads their VA medical records. Secure on-the-fly server-side processing now uses enhanced rule-based extraction (300+ keywords, VA abbreviations, synonym clusters, medication inference, ICD-10 lookup, negation detection). Only structured condition labels + metadata are sent to Grok for final report polishing. Instantly generates a clean "Personal Evidence Report" PDF with highlighted excerpts, timeline, source tags, and "Next Step: Share with your VSO" button. Zero PHI ever leaves our stack.
 
 **Safety & Compliance Design (Zero HIPAA Exposure in Phase 1):**
 1. Raw files never permanently stored

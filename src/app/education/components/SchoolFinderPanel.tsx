@@ -10,6 +10,7 @@
  */
 
 import React, { useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   AcademicCapIcon,
   FunnelIcon,
@@ -192,6 +193,7 @@ function SchoolCard({ school, isSelected, canSelect, onToggleSelect }: SchoolCar
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function SchoolFinderPanel() {
+  const router = useRouter();
   const [stateFilter,   setStateFilter]   = useState('');
   const [yrOnly,        setYrOnly]         = useState(false);
   const [degreeFilter,  setDegreeFilter]  = useState<DegreeType | ''>('');
@@ -239,10 +241,8 @@ export default function SchoolFinderPanel() {
     };
     try { localStorage.setItem(EDU_BRIDGE_KEY, JSON.stringify(payload)); } catch { /* non-fatal */ }
     setBridgeSent(true);
-    setTimeout(() => {
-      document.getElementById('gi-bill')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 100);
-  }, []);
+    router.push('/education/gi-bill');
+  }, [router]);
 
   return (
     <section

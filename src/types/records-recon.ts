@@ -5,6 +5,8 @@
 //   - route.ts (backend API)
 //   - Smart Bridge ecosystem (cross-tool handoff)
 
+export type DetectionSource = 'keyword' | 'abbrev' | 'synonym' | 'medication' | 'icd10' | 'section';
+
 export interface ReconExtractedItem {
   itemId: string;
   condition: string;
@@ -15,6 +17,7 @@ export interface ReconExtractedItem {
   sectionFound: string | null;
   provider: string | null;
   confidence: 'high' | 'medium' | 'low';
+  source?: DetectionSource;
 }
 
 export interface ReconTimelineEntry {
@@ -34,6 +37,7 @@ export interface ReconCondition {
   mentionCount: number;
   pagesFound: number[];
   excerpts: Array<{ text: string; page: number | null; date: string | null }>;
+  source?: DetectionSource;
 }
 
 export interface ReconKeywordFrequency {
@@ -129,6 +133,7 @@ export interface KeywordFlag {
   dateFound?: string;
   pageNumber?: number;
   sectionFound?: string;
+  source?: DetectionSource;
 }
 
 // Bridge localStorage key constant

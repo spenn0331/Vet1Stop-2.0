@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { ClipboardDocumentIcon, CheckIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
-import type { ReconCondition } from '@/types/records-recon';
+import type { ReconCondition, DetectionSource } from '@/types/records-recon';
 
 interface ConditionsIndexProps {
   conditions: ReconCondition[];
@@ -10,6 +10,15 @@ interface ConditionsIndexProps {
   onCopy: (text: string, id: string) => void;
   copiedId: string | null;
 }
+
+const SOURCE_LABELS: Record<DetectionSource, { label: string; icon: string; style: string }> = {
+  'keyword': { label: 'Keyword', icon: '🔍', style: 'bg-blue-50 text-blue-700' },
+  'abbrev': { label: 'Abbreviation', icon: '📋', style: 'bg-slate-50 text-slate-700' },
+  'synonym': { label: 'Synonym', icon: '🔗', style: 'bg-violet-50 text-violet-700' },
+  'medication': { label: 'Medication', icon: '💊', style: 'bg-green-50 text-green-700' },
+  'icd10': { label: 'ICD-10', icon: '🏥', style: 'bg-amber-50 text-amber-700' },
+  'section': { label: 'Section', icon: '📄', style: 'bg-gray-50 text-gray-700' },
+};
 
 const CATEGORY_STYLES: Record<string, string> = {
   'Musculoskeletal': 'bg-orange-100 text-orange-800',
@@ -95,6 +104,11 @@ export default function ConditionsIndex({ conditions, onPageClick, onCopy, copie
                   <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${CATEGORY_STYLES[cond.category] || 'bg-gray-100 text-gray-700'}`}>
                     {cond.category}
                   </span>
+                  {cond.source && SOURCE_LABELS[cond.source] && (
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${SOURCE_LABELS[cond.source].style}`} title={`Detected via ${SOURCE_LABELS[cond.source].label}`}>
+                      {SOURCE_LABELS[cond.source].icon} {SOURCE_LABELS[cond.source].label}
+                    </span>
+                  )}
                   <span className="text-[#1A2C5B] text-xs font-mono">
                     {cond.mentionCount} mention{cond.mentionCount !== 1 ? 's' : ''}
                   </span>

@@ -3,7 +3,6 @@ import {
   CheckCircleIcon,
   LockClosedIcon,
   ShieldCheckIcon,
-  MapPinIcon,
 } from '@heroicons/react/24/solid';
 import {
   AcademicCapIcon,
@@ -15,66 +14,77 @@ import {
   MapIcon,
   ClockIcon,
   CheckCircleIcon as CheckOutline,
-  GlobeAltIcon,
   DocumentTextIcon,
   StarIcon,
+  BeakerIcon,
+  BuildingLibraryIcon,
 } from '@heroicons/react/24/outline';
 import Link from 'next/link';
-import SchoolFinderPanel from './components/SchoolFinderPanel';
-import GiBillPanel from './components/GiBillPanel';
 import EducationBrowseSection from './components/EducationBrowseSection';
 import MOSTranslatorCard from './components/MOSTranslatorCard';
 import AutoFillButton from '@/components/shared/AutoFillButton';
-import EducationAdvisorPanel from './components/EducationAdvisorPanel';
 
 export const metadata: Metadata = {
   title: 'Education Benefits & Resources | Vet1Stop',
-  description: 'GI Bill Pathfinder, School Finder, scholarships, and 102+ vetted education programs â€” free tools built for veterans.',
+  description: 'GI Bill Pathfinder, School Finder, scholarships, and 102+ vetted education programs — free tools built for veterans.',
   keywords: 'GI Bill calculator, veteran education benefits, yellow ribbon schools, scholarships for veterans, MOS translator, school comparison, post-9/11 GI bill',
 };
 
-// â”€â”€â”€ Education Pathways (static, no MissionPanel needed for MVP) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Education Pathways (static mission briefing cards) ──────────────────────
 
-const EDUCATION_PATHS = [
+type PathIconType = 'cap' | 'building' | 'briefcase' | 'beaker';
+
+const EDUCATION_PATHS: {
+  id: string;
+  iconType: PathIconType;
+  title: string;
+  objective: string;
+  estimatedMins: number;
+  steps: string[];
+}[] = [
   {
     id: 'gi-bill-activation',
-    icon: 'ðŸŽ“', title: 'Activate Your Post-9/11 GI Bill',
+    iconType: 'cap',
+    title: 'Activate Your Post-9/11 GI Bill',
     objective: 'Get your GI Bill entitlement live and your Certificate of Eligibility in hand.',
     estimatedMins: 90,
     steps: [
-      'Verify active service duration â†’ determines your entitlement %',
+      'Verify active service duration — determines your entitlement %',
       'Apply online using VA Form 22-1990 at VA.gov',
       'Receive Certificate of Eligibility (COE) by mail',
-      'Deliver COE to your school\'s Veterans Certifying Official',
+      "Deliver COE to your school's Veterans Certifying Official",
     ],
   },
   {
     id: 'school-comparison',
-    icon: 'ðŸ«', title: 'Compare Schools & Maximize BAH',
+    iconType: 'building',
+    title: 'Compare Schools & Maximize BAH',
     objective: 'Find the highest-value school for your goals and lock in your monthly housing income.',
     estimatedMins: 60,
     steps: [
-      'Use School Finder below to filter Yellow Ribbon schools',
-      'Select up to 3 schools â†’ compare tuition, debt, vet services',
+      'Use School Finder to filter Yellow Ribbon schools',
+      'Select up to 3 schools — compare tuition, debt, vet services',
       'Bridge to GI Bill Pathfinder to see net monthly income',
       'Confirm school is approved at VA WEAM lookup tool',
     ],
   },
   {
     id: 'voc-rehab',
-    icon: 'âš™ï¸', title: 'Apply for Vocational Rehab (Ch. 31)',
+    iconType: 'briefcase',
+    title: 'Apply for Vocational Rehab (Ch. 31)',
     objective: 'Secure full tuition + living stipend for a new career path through VA VR&E.',
     estimatedMins: 120,
     steps: [
       'Confirm service-connected disability rating (any % qualifies)',
-      'Apply online at VA.gov â†’ select Chapter 31 VR&E',
+      'Apply online at VA.gov — select Chapter 31 VR&E',
       'Attend Initial Evaluation appointment with a VR&E counselor',
       'Develop Individual Plan for Employment (IPE) with your counselor',
     ],
   },
   {
     id: 'stem-scholarship',
-    icon: 'ðŸ”¬', title: 'STEM Scholarship Pathway',
+    iconType: 'beaker',
+    title: 'STEM Scholarship Pathway',
     objective: 'Stack VA STEM extension with top scholarships for a fully-funded STEM degree.',
     estimatedMins: 180,
     steps: [
@@ -84,12 +94,20 @@ const EDUCATION_PATHS = [
       'Supplement with Pat Tillman, SVA, or branch-specific scholarship',
     ],
   },
-] as const;
+];
 
+function PathIcon({ type }: { type: PathIconType }) {
+  const cls = 'h-5 w-5 text-[#EAB308]';
+  if (type === 'cap')      return <AcademicCapIcon className={cls} aria-hidden="true" />;
+  if (type === 'building') return <BuildingLibraryIcon className={cls} aria-hidden="true" />;
+  if (type === 'briefcase') return <BriefcaseIcon className={cls} aria-hidden="true" />;
+  return <BeakerIcon className={cls} aria-hidden="true" />;
+}
 
 export default function EducationPage() {
   return (
     <main className="bg-white min-h-screen" role="main">
+      {/* ─── Hero ──────────────────────────────────────────────────────────────── */}
 
       {/* â”€â”€â”€ Hero â”€â”€â”€ */}
       <section aria-labelledby="education-hero-heading" className="bg-gradient-to-br from-[#0F1D3D] via-[#1A2C5B] to-[#1e3a7a] text-white relative overflow-hidden">
@@ -104,24 +122,24 @@ export default function EducationPage() {
               <span className="text-[#EAB308]">Your Benefits. Your Future.</span>
             </h1>
             <p className="text-lg text-white/80 mb-2 max-w-2xl leading-relaxed">
-              GI Bill calculator, school comparison, 102+ vetted scholarships and VA programs â€” free tools built for veterans.
+              GI Bill calculator, school comparison, 102+ vetted scholarships and VA programs &mdash; free tools built for veterans.
             </p>
             <p className="text-sm text-white/50 italic mb-8">
               &ldquo;Education is the most powerful weapon which you can use to change the world.&rdquo;
             </p>
             <div className="flex flex-wrap gap-4">
-              <a href="#school-finder" className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-[#EAB308] text-[#0F1D3D] font-bold hover:bg-[#FACC15] focus:outline-none focus:ring-4 focus:ring-yellow-300 transition-all duration-200 shadow-lg hover:shadow-xl hover:-translate-y-0.5" aria-label="Go to School Finder">
+              <Link href="/education/school-finder" className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-[#EAB308] text-[#0F1D3D] font-bold hover:bg-[#FACC15] focus:outline-none focus:ring-4 focus:ring-yellow-300 transition-all duration-200 shadow-lg hover:shadow-xl hover:-translate-y-0.5" aria-label="Go to School Finder">
                 <AcademicCapIcon className="h-5 w-5" aria-hidden="true" />
                 School Finder
-              </a>
-              <a href="#gi-bill" className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-white/10 border border-white/20 text-white font-bold hover:bg-white/20 focus:outline-none focus:ring-4 focus:ring-white/30 transition-all duration-200 backdrop-blur-sm" aria-label="Go to GI Bill Pathfinder">
+              </Link>
+              <Link href="/education/gi-bill" className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-white/10 border border-white/20 text-white font-bold hover:bg-white/20 focus:outline-none focus:ring-4 focus:ring-white/30 transition-all duration-200 backdrop-blur-sm" aria-label="Go to GI Bill Pathfinder">
                 <CalculatorIcon className="h-5 w-5" aria-hidden="true" />
                 GI Bill Pathfinder
-              </a>
-              <a href="#edu-advisor" className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-white/10 border border-white/20 text-white font-bold hover:bg-white/20 focus:outline-none focus:ring-4 focus:ring-white/30 transition-all duration-200 backdrop-blur-sm" aria-label="Go to Education Advisor AI">
+              </Link>
+              <Link href="/education/advisor" className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-white/10 border border-white/20 text-white font-bold hover:bg-white/20 focus:outline-none focus:ring-4 focus:ring-white/30 transition-all duration-200 backdrop-blur-sm" aria-label="Go to Education Advisor AI">
                 <SparklesIcon className="h-5 w-5 text-[#EAB308]" aria-hidden="true" />
                 Education Advisor
-              </a>
+              </Link>
             </div>
           </div>
         </div>
@@ -134,7 +152,7 @@ export default function EducationPage() {
             { Icon: CheckCircleIcon, text: '102+ Vetted Resources' },
             { Icon: LockClosedIcon,  text: 'GI Bill Eligible Programs' },
             { Icon: StarIcon,        text: 'Yellow Ribbon Schools Tracked' },
-            { Icon: ShieldCheckIcon, text: 'Free Tools â€” No Account Required' },
+            { Icon: ShieldCheckIcon, text: 'Free Tools — No Account Required' },
           ] as const).map(({ Icon, text }) => (
             <span key={text} className="flex items-center gap-1.5 text-xs text-slate-500">
               <Icon className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" aria-hidden="true" />
@@ -152,7 +170,7 @@ export default function EducationPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {/* School Finder */}
-            <a href="#school-finder" className="group relative bg-gradient-to-br from-blue-50 to-slate-100 rounded-2xl p-6 border border-blue-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2" aria-label="Go to School Finder">
+            <Link href="/education/school-finder" className="group relative bg-gradient-to-br from-blue-50 to-slate-100 rounded-2xl p-6 border border-blue-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2" aria-label="Go to School Finder">
               <div className="flex justify-between items-start mb-4">
                 <div className="h-12 w-12 rounded-xl bg-[#1A2C5B] flex items-center justify-center shadow-md group-hover:scale-110 transition-transform duration-200">
                   <AcademicCapIcon className="h-6 w-6 text-[#EAB308]" aria-hidden="true" />
@@ -160,7 +178,7 @@ export default function EducationPage() {
                 <ArrowRightIcon className="h-5 w-5 text-gray-400 group-hover:text-[#1A2C5B] group-hover:translate-x-1 transition-all duration-200" aria-hidden="true" />
               </div>
               <h3 className="text-lg font-extrabold text-[#1A2C5B] mb-2">School Finder</h3>
-              <p className="text-sm text-gray-600 leading-relaxed mb-4">Filter 20 top veteran-friendly schools by state, Yellow Ribbon status, and degree type â€” then compare up to 3 side-by-side.</p>
+              <p className="text-sm text-gray-600 leading-relaxed mb-4">Filter 20 top veteran-friendly schools by state, Yellow Ribbon status, and degree type &mdash; then compare up to 3 side-by-side.</p>
               <ul className="space-y-1.5">
                 {['State + Yellow Ribbon filter', 'Side-by-side comparison table', 'Bridge to GI Bill calculator'].map(f => (
                   <li key={f} className="flex items-center gap-2 text-xs text-gray-500">
@@ -172,10 +190,10 @@ export default function EducationPage() {
               <div className="mt-5 pt-4 border-t border-blue-100">
                 <span className="text-sm font-bold text-[#1A2C5B] group-hover:text-blue-700 inline-flex items-center gap-1">Find My School <ArrowRightIcon className="h-4 w-4" aria-hidden="true" /></span>
               </div>
-            </a>
+            </Link>
 
             {/* GI Bill Pathfinder */}
-            <a href="#gi-bill" className="group relative bg-gradient-to-br from-blue-50 to-slate-100 rounded-2xl p-6 border border-blue-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2" aria-label="Go to GI Bill Pathfinder">
+            <Link href="/education/gi-bill" className="group relative bg-gradient-to-br from-blue-50 to-slate-100 rounded-2xl p-6 border border-blue-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2" aria-label="Go to GI Bill Pathfinder">
               <div className="flex justify-between items-start mb-4">
                 <div className="h-12 w-12 rounded-xl bg-[#1A2C5B] flex items-center justify-center shadow-md group-hover:scale-110 transition-transform duration-200">
                   <CalculatorIcon className="h-6 w-6 text-[#EAB308]" aria-hidden="true" />
@@ -183,7 +201,7 @@ export default function EducationPage() {
                 <ArrowRightIcon className="h-5 w-5 text-gray-400 group-hover:text-[#1A2C5B] group-hover:translate-x-1 transition-all duration-200" aria-hidden="true" />
               </div>
               <h3 className="text-lg font-extrabold text-[#1A2C5B] mb-2">GI Bill Pathfinder</h3>
-              <p className="text-sm text-gray-600 leading-relaxed mb-4">Enter your service months, school state, and tuition â€” see your exact monthly net income and 3-year degree projection.</p>
+              <p className="text-sm text-gray-600 leading-relaxed mb-4">Enter your service months, school state, and tuition &mdash; see your exact monthly net income and 3-year degree projection.</p>
               <ul className="space-y-1.5">
                 {['Live BAH + stipend calculation', 'Post-9/11 & Montgomery chapters', 'Downloadable GI Bill Plan PDF'].map(f => (
                   <li key={f} className="flex items-center gap-2 text-xs text-gray-500">
@@ -195,7 +213,7 @@ export default function EducationPage() {
               <div className="mt-5 pt-4 border-t border-blue-100">
                 <span className="text-sm font-bold text-[#1A2C5B] group-hover:text-blue-700 inline-flex items-center gap-1">Calculate My Income <ArrowRightIcon className="h-4 w-4" aria-hidden="true" /></span>
               </div>
-            </a>
+            </Link>
 
             {/* VA Education Benefits */}
             <div className="group bg-gradient-to-br from-blue-50 to-slate-100 rounded-2xl p-6 border border-blue-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
@@ -205,7 +223,7 @@ export default function EducationPage() {
                 </div>
               </div>
               <h3 className="text-lg font-extrabold text-[#1A2C5B] mb-2">VA Education Benefits</h3>
-              <p className="text-sm text-gray-600 leading-relaxed mb-4">Explore every VA education program â€” Post-9/11, Montgomery, Voc Rehab, Survivor benefits, and more.</p>
+              <p className="text-sm text-gray-600 leading-relaxed mb-4">Explore every VA education program &mdash; Post-9/11, Montgomery, Voc Rehab, Survivor benefits, and more.</p>
               <ul className="space-y-1.5">
                 {['All GI Bill chapters explained', 'Transferability to dependents', 'Chapter 35 survivor benefits'].map(f => (
                   <li key={f} className="flex items-center gap-2 text-xs text-gray-500">
@@ -224,7 +242,7 @@ export default function EducationPage() {
 
           {/* Education Advisor tool card */}
           <div className="mt-8 mb-2">
-            <a href="#edu-advisor" className="group relative flex items-start gap-5 bg-gradient-to-br from-[#0F1D3D] to-[#1A2C5B] rounded-2xl p-6 border border-[#1A2C5B] shadow-sm hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2" aria-label="Go to AI Education Advisor">
+            <Link href="/education/advisor" className="group relative flex items-start gap-5 bg-gradient-to-br from-[#0F1D3D] to-[#1A2C5B] rounded-2xl p-6 border border-[#1A2C5B] shadow-sm hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2" aria-label="Go to AI Education Advisor">
               <div className="h-12 w-12 rounded-xl bg-[#EAB308]/20 flex items-center justify-center flex-shrink-0 shadow-md group-hover:scale-110 transition-transform duration-200">
                 <SparklesIcon className="h-6 w-6 text-[#EAB308]" aria-hidden="true" />
               </div>
@@ -244,7 +262,7 @@ export default function EducationPage() {
                 </ul>
               </div>
               <ArrowRightIcon className="h-5 w-5 text-white/40 group-hover:text-[#EAB308] group-hover:translate-x-1 transition-all duration-200 flex-shrink-0 self-center" aria-hidden="true" />
-            </a>
+            </Link>
           </div>
 
           {/* Secondary tool cards */}
@@ -294,7 +312,6 @@ export default function EducationPage() {
         </div>
       </section>
 
-      {/* â”€â”€â”€ School Finder Panel (inline, anchor #school-finder) â”€â”€â”€ */}
       {/* ─── Mission Briefing ─── */}
       <section aria-labelledby="mission-briefing-heading" className="py-12 bg-slate-50 border-t border-slate-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -310,7 +327,9 @@ export default function EducationPage() {
               <div key={path.id} className="group text-left bg-white rounded-2xl border border-gray-200 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 overflow-hidden flex flex-col">
                 <div className="h-1.5 w-full bg-gradient-to-r from-[#1A2C5B] to-[#2d4d99]" />
                 <div className="p-5 flex flex-col flex-1">
-                  <span className="text-2xl mb-3 block" role="img" aria-hidden="true">{path.icon}</span>
+                  <div className="h-9 w-9 rounded-xl bg-[#1A2C5B] flex items-center justify-center mb-3 group-hover:scale-110 transition-transform duration-200">
+                    <PathIcon type={path.iconType} />
+                  </div>
                   <h3 className="text-sm font-extrabold text-[#1A2C5B] leading-snug mb-1 group-hover:text-blue-700 transition-colors">
                     {path.title}
                   </h3>
@@ -346,25 +365,6 @@ export default function EducationPage() {
         </div>
       </section>
 
-      <SchoolFinderPanel />
-
-      {/* â”€â”€â”€ GI Bill Pathfinder (inline, anchor #gi-bill, Smart Bridge receiver) â”€â”€â”€ */}
-      <GiBillPanel />
-
-      {/* ─── Education Advisor (AI resource matching) ─── */}
-      <section id="edu-advisor" aria-labelledby="edu-advisor-heading" className="py-12 bg-slate-50 border-t border-slate-100">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-2 mb-1">
-            <SparklesIcon className="h-5 w-5 text-[#EAB308]" aria-hidden="true" />
-            <h2 id="edu-advisor-heading" className="text-2xl font-extrabold text-[#1A2C5B] tracking-tight">Education Advisor</h2>
-          </div>
-          <p className="text-sm text-gray-500 mb-8 max-w-xl">
-            Tell us your education goal and our AI instantly matches you with VA, scholarship, and state programs from our vetted database.
-          </p>
-          <EducationAdvisorPanel />
-        </div>
-      </section>
-
       {/* ─── Browse Education Resources ─── */}
       <EducationBrowseSection />
 
@@ -379,13 +379,13 @@ export default function EducationPage() {
             {([
               {
                 title: 'How to Apply for GI Bill Benefits',
-                desc: 'Confirm eligibility â†’ gather DD-214 â†’ submit VA Form 22-1990 online â†’ deliver Certificate of Eligibility to your school\'s Veterans Certifying Official.',
+                desc: "Confirm eligibility — gather DD-214 — submit VA Form 22-1990 online — deliver Certificate of Eligibility to your school's Veterans Certifying Official.",
                 href: 'https://www.va.gov/education/how-to-apply/',
                 cta: 'Apply on VA.gov',
               },
               {
                 title: 'Transfer GI Bill Benefits to Dependents',
-                desc: 'Active-duty members with 6+ years of service can transfer unused GI Bill entitlement to a spouse or child â€” requires 4-year service commitment extension.',
+                desc: "Active-duty members with 6+ years of service can transfer unused GI Bill entitlement to a spouse or child — requires 4-year service commitment extension.",
                 href: 'https://www.va.gov/education/transfer-post-9-11-gi-bill-benefits/',
                 cta: 'Transfer Benefits',
               },
@@ -411,9 +411,9 @@ export default function EducationPage() {
               { title: 'VA Education Benefits',   desc: 'Complete guide to all GI Bill chapters, eligibility, and how to apply.',           url: 'https://www.va.gov/education/' },
               { title: 'Student Veterans of America', desc: 'Network of 1,500+ campus chapters providing peer support and advocacy for student vets.', url: 'https://studentveterans.org/' },
               { title: 'Pat Tillman Foundation',  desc: 'Scholarship + leadership network for military and veteran scholars (undergrad through grad).', url: 'https://pattillmanfoundation.org/', phone: '480-621-4074' },
-              { title: 'FAFSA for Veterans',       desc: 'Federal student aid â€” veterans may qualify for additional Pell Grants and work-study.', url: 'https://studentaid.gov/apply-for-aid/fafsa/filling-out/military' },
-              { title: 'Scholarship America',      desc: 'Largest private scholarship network â€” veteran-specific awards available year-round.',  url: 'https://scholarshipamerica.org/' },
-              { title: 'VET TEC Program',          desc: 'VA-funded tech training: coding bootcamps, cybersecurity certs, data science â€” no GI Bill needed.', url: 'https://www.va.gov/education/about-gi-bill-benefits/how-to-use-benefits/vettec-high-tech-program/' },
+              { title: 'FAFSA for Veterans',       desc: 'Federal student aid — veterans may qualify for additional Pell Grants and work-study.', url: 'https://studentaid.gov/apply-for-aid/fafsa/filling-out/military' },
+              { title: 'Scholarship America',      desc: 'Largest private scholarship network — veteran-specific awards available year-round.',  url: 'https://scholarshipamerica.org/' },
+              { title: 'VET TEC Program',          desc: 'VA-funded tech training: coding bootcamps, cybersecurity certs, data science — no GI Bill needed.', url: 'https://www.va.gov/education/about-gi-bill-benefits/how-to-use-benefits/vettec-high-tech-program/' },
               { title: 'Hire Heroes USA',          desc: 'Free career coaching and job placement services for transitioning veterans and spouses.', url: 'https://www.hireheroesusa.org/', phone: '1-800-915-4976' },
               { title: 'American Corporate Partners', desc: 'Free mentoring from business professionals to help veterans build civilian careers.',  url: 'https://www.acp-usa.org/' },
             ] as const).map(r => (
