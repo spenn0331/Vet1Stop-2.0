@@ -9,6 +9,9 @@
 - **Last Active Development**: Mar 25, 2026
 - **Latest Commits**: Records Recon v5.0 (label-only PHI elimination — Mar 25), `88e97e91` (Education hub), `1b4097ce` (Health Phase 2 backlog), `ee14d022` (Scribe→C&P bridge)
 - **Next Up**: Life & Leisure Page — after Local VOB Directory polish
+- **Parallel Dev Guide**: `.workflow/supercharge-mode-v2.md` — lane map, nightly build workflow, n8n operations, golden rules
+- **n8n Status**: Immediate setup planned — commit reminders, content freshness, build health, lead capture
+- **CTO Onboarding**: `.workflow/cto-onboarding-and-collaboration.md` — Josh setup, branch workflow, golden rules
 
 ---
 

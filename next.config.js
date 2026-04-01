@@ -14,11 +14,10 @@ const nextConfig = {
     imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
   },
   reactStrictMode: true,
-  // Add experimental features to improve compatibility
-  experimental: {
-    // Disable type checking during build to avoid issues
-    typedRoutes: false,
-  },
+  // Allow dev proxy origins (Windsurf browser preview, etc.)
+  allowedDevOrigins: ['http://127.0.0.1:*', 'http://localhost:*', '127.0.0.1', 'localhost'],
+  // Disable typed routes
+  typedRoutes: false,
   // Improve compatibility with older TypeScript versions
   serverExternalPackages: ['pdf-parse', 'pdfjs-dist'],
   // Increase timeout for builds
@@ -26,8 +25,10 @@ const nextConfig = {
   // Disable source maps in production
   productionBrowserSourceMaps: false,
   // Increase body size limit for Medical Detective large PDF uploads (50MB base64)
-  serverActions: {
-    bodySizeLimit: '50mb',
+  experimental: {
+    serverActions: {
+      bodySizeLimit: '50mb',
+    },
   },
   webpack: (config, { isServer }) => {
     config.resolve.alias.canvas = false;
