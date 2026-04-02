@@ -65,7 +65,7 @@ export default function BusinessCard({ business, isHighlighted, onSelect }: Busi
 
   return (
     <article
-      className={`group bg-white rounded-2xl border shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 overflow-hidden cursor-pointer ${
+      className={`group bg-white rounded-2xl border shadow-sm hover:shadow-lg hover:-translate-y-1 active:scale-[0.98] transition-all duration-200 overflow-hidden cursor-pointer ${
         isHighlighted ? 'border-[#1A2C5B] ring-2 ring-[#1A2C5B]/20' : 'border-gray-100'
       }`}
       onClick={() => onSelect?.(business)}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useLayoutEffect, useEffect, useRef } from 'react';
+import { useLayoutEffect, useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import type { Business } from '@/data/businesses';
 import { CATEGORY_ICONS } from '@/data/businesses';
@@ -28,13 +28,13 @@ function makeIcon(category: Business['category'], featured: boolean): L.DivIcon 
 
 function makePopupHtml(b: Business): string {
   return `
-    <div style="font-family:sans-serif;font-size:12px;max-width:220px">
-      <p style="font-weight:800;color:#1A2C5B;font-size:13px;margin:0 0 2px">${b.name}</p>
-      <p style="color:#6b7280;margin:0 0 4px">${b.category} · ${b.city}, ${b.stateCode}</p>
-      <p style="color:#374151;margin:0 0 6px;line-height:1.4">${b.description.slice(0, 100)}…</p>
-      ${b.veteranDiscount ? `<p style="color:#b45309;font-weight:600;margin:0 0 4px">🎖️ ${b.veteranDiscount}</p>` : ''}
-      <p style="color:#9ca3af;margin:0 0 6px">⭐ ${b.rating.toFixed(1)} (${b.reviewCount} reviews)</p>
-      <a href="tel:${b.phone.replace(/\D/g, '')}" style="color:#1A2C5B;font-weight:700;text-decoration:none">📞 ${b.phone}</a>
+    <div style="font-family:system-ui,sans-serif;font-size:12px;max-width:240px;padding:4px">
+      <p style="font-weight:800;color:#1A2C5B;font-size:14px;margin:0 0 4px;line-height:1.3">${b.name}</p>
+      <p style="color:#6b7280;margin:0 0 6px;font-size:11px">${b.category} · ${b.city}, ${b.stateCode}</p>
+      <p style="color:#374151;margin:0 0 8px;line-height:1.5;font-size:12px">${b.description.slice(0, 120)}…</p>
+      ${b.veteranDiscount ? `<p style="background:#FEF3C7;padding:4px 8px;border-radius:6px;color:#92400E;font-weight:600;margin:0 0 6px;font-size:11px">🎖️ ${b.veteranDiscount}</p>` : ''}
+      <p style="color:#EAB308;margin:0 0 6px;font-size:11px">⭐ ${b.rating.toFixed(1)} <span style="color:#9ca3af">(${b.reviewCount} reviews)</span></p>
+      <a href="tel:${b.phone.replace(/\D/g, '')}" style="color:#1A2C5B;font-weight:700;text-decoration:none;font-size:12px">📞 ${b.phone}</a>
     </div>`;
 }
 
@@ -48,6 +48,7 @@ export default function VOBMap({ businesses, highlighted, onSelect }: VOBMapProp
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef       = useRef<L.Map | null>(null);
   const markersRef   = useRef<L.Marker[]>([]);
+  const [mapReady, setMapReady]  = useState(false);
 
   // ── Map initialisation — useLayoutEffect so cleanup runs before
   //    React 18 Strict Mode's reappearLayoutEffects, preventing the
@@ -66,11 +67,13 @@ export default function VOBMap({ businesses, highlighted, onSelect }: VOBMapProp
     }).addTo(map);
 
     mapRef.current = map;
+    map.whenReady(() => setMapReady(true));
 
     return () => {
       // Clear _leaflet_id BEFORE reappearLayoutEffects fires on remount
       map.remove();
       mapRef.current = null;
+      setMapReady(false);
     };
   }, []);
 
@@ -101,11 +104,21 @@ export default function VOBMap({ businesses, highlighted, onSelect }: VOBMapProp
   }, [highlighted]);
 
   return (
-    <div
-      ref={containerRef}
-      style={{ height: '100%', width: '100%', borderRadius: '1rem' }}
-      aria-label="Veteran-owned business map"
-      role="application"
-    />
+    <div className="relative" style={{ height: '100%', width: '100%' }}>
+      {!mapReady && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-slate-100 rounded-2xl">
+          <div className="text-center">
+            <div className="animate-spin h-8 w-8 border-4 border-[#1A2C5B] border-t-transparent rounded-full mx-auto mb-3" />
+            <p className="text-sm text-gray-500">Initializing map...</p>
+          </div>
+        </div>
+      )}
+      <div
+        ref={containerRef}
+        style={{ height: '100%', width: '100%', borderRadius: '1rem' }}
+        aria-label="Veteran-owned business map"
+        role="application"
+      />
+    </div>
   );
 }
