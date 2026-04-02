@@ -154,8 +154,8 @@ export async function POST(request: NextRequest) {
       category: r.category,
       subcategory: r.subcategory,
       // Use top-level url/phone (real DB schema) with legacy contact fallback
-      url: r.url || r.contact?.website,
-      phone: r.phone || r.contact?.phone,
+      url: r.url || (typeof r.contact === 'object' ? r.contact?.website : undefined),
+      phone: r.phone || (typeof r.contact === 'object' ? r.contact?.phone : undefined),
       resourceType: r.resourceType,
       rating: r.rating,
       isFree: r.isFree,
