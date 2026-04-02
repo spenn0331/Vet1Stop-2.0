@@ -1,11 +1,9 @@
 'use client';
 
-import React, { useState, useMemo, useCallback } from 'react';
-import dynamic from 'next/dynamic';
+import React from 'react';
 import Link from 'next/link';
 import {
   MapPinIcon,
-  ListBulletIcon,
   MapIcon,
   BuildingStorefrontIcon,
   PlusCircleIcon,
@@ -15,63 +13,17 @@ import {
   HomeModernIcon,
 } from '@heroicons/react/24/outline';
 
-import FilterBar, { type FilterState } from './components/FilterBar';
-import BusinessCard from './components/BusinessCard';
-import RealEstatePanel from './components/RealEstatePanel';
-import { BUSINESSES, filterBusinesses, type Business } from '@/data/businesses';
-
-// Dynamically import Leaflet map (SSR disabled — requires browser window)
-const VOBMap = dynamic(() => import('./components/VOBMap'), {
-  ssr: false,
-  loading: () => (
-    <div className="h-full w-full flex items-center justify-center bg-slate-100 rounded-2xl">
-      <div className="text-center">
-        <div className="animate-spin h-8 w-8 border-4 border-[#1A2C5B] border-t-transparent rounded-full mx-auto mb-3" />
-        <p className="text-sm text-gray-500">Loading map...</p>
-      </div>
-    </div>
-  ),
-});
-
-type ViewMode = 'split' | 'list' | 'map';
+import VOBPreview from './components/VOBPreview';
+import RERNPreview from './components/RERNPreview';
 
 const TRUST_STATS = [
   { Icon: BuildingStorefrontIcon, label: '25+ Verified VOBs' },
-  { Icon: ShieldCheckIcon,        label: 'SDVOSB Certified Partners' },
+  { Icon: ShieldCheckIcon,        label: 'VA Loan Specialists' },
   { Icon: StarIcon,               label: '4.8 Avg Rating' },
-  { Icon: CheckBadgeIcon,         label: 'VetBiz Verified Listings' },
+  { Icon: CheckBadgeIcon,         label: '50-State Coverage' },
 ];
 
 export default function LocalPage() {
-  const [filters, setFilters] = useState<FilterState>({
-    keyword: '',
-    category: '',
-    status: '',
-    stateCode: '',
-    featuredOnly: false,
-  });
-  const [viewMode, setViewMode]       = useState<ViewMode>('split');
-  const [selectedBiz, setSelectedBiz] = useState<Business | null>(null);
-
-  const filtered = useMemo(
-    () =>
-      filterBusinesses({
-        category:     filters.category || undefined,
-        status:       filters.status   || undefined,
-        stateCode:    filters.stateCode || undefined,
-        keyword:      filters.keyword  || undefined,
-        featuredOnly: filters.featuredOnly,
-      }),
-    [filters],
-  );
-
-  const featured = useMemo(() => BUSINESSES.filter(b => b.featured), []);
-
-  const handleSelect = useCallback((biz: Business) => {
-    setSelectedBiz(biz);
-    if (viewMode === 'list') setViewMode('split');
-  }, [viewMode]);
-
   return (
     <main className="bg-gray-50 min-h-screen" role="main">
 
@@ -88,37 +40,30 @@ export default function LocalPage() {
           <div className="max-w-3xl">
             <div className="flex items-center gap-2 mb-4">
               <MapPinIcon className="h-5 w-5 text-[#EAB308]" aria-hidden="true" />
-              <span className="text-sm font-semibold text-[#EAB308] uppercase tracking-widest">Local VOB Directory</span>
+              <span className="text-sm font-semibold text-[#EAB308] uppercase tracking-widest">Local Hub</span>
             </div>
             <h1 id="local-hero-heading" className="text-3xl md:text-5xl font-extrabold tracking-tight mb-4 leading-tight">
-              Support Veteran<br />
-              <span className="text-[#EAB308]">Owned Businesses Near You.</span>
+              Your <span className="text-[#EAB308]">Local</span> Veteran<br />
+              Community Hub
             </h1>
             <p className="text-lg text-white/80 mb-8 max-w-2xl leading-relaxed">
-              Find and support verified veteran-owned businesses across the country. From coffee shops to HVAC contractors — every purchase supports a veteran entrepreneur.
+              Discover veteran-owned businesses, find VA-specialized real estate agents, and support those who served — all in one place.
             </p>
             <div className="flex flex-wrap gap-4">
-              <a
-                href="#directory"
+              <Link
+                href="/local/directory"
                 className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-[#EAB308] text-[#0F1D3D] font-bold hover:bg-[#FACC15] focus:outline-none focus:ring-4 focus:ring-yellow-300 transition-all shadow-lg hover:-translate-y-0.5"
               >
-                <MapPinIcon className="h-5 w-5" aria-hidden="true" />
-                Find Businesses
-              </a>
-              <a
-                href="#real-estate"
+                <BuildingStorefrontIcon className="h-5 w-5" aria-hidden="true" />
+                Browse the Directory
+              </Link>
+              <Link
+                href="/local/home-base"
                 className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-white/10 border border-white/20 text-white font-bold hover:bg-white/20 focus:outline-none focus:ring-4 focus:ring-white/30 transition-all backdrop-blur-sm"
               >
                 <HomeModernIcon className="h-5 w-5" aria-hidden="true" />
-                VA Home Loans
-              </a>
-              <button
-                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-white/10 border border-white/20 text-white font-bold hover:bg-white/20 focus:outline-none focus:ring-4 focus:ring-white/30 transition-all backdrop-blur-sm"
-                onClick={() => document.getElementById('list-your-biz')?.scrollIntoView({ behavior: 'smooth' })}
-              >
-                <PlusCircleIcon className="h-5 w-5" aria-hidden="true" />
-                List My Business
-              </button>
+                Find a Home
+              </Link>
             </div>
           </div>
         </div>
@@ -136,143 +81,17 @@ export default function LocalPage() {
         </div>
       </div>
 
-      {/* ─── Featured Businesses ─── */}
-      <section aria-labelledby="featured-heading" className="py-10 bg-white border-b border-gray-100">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h2 id="featured-heading" className="text-xl font-extrabold text-[#1A2C5B]">Featured Businesses</h2>
-              <p className="text-sm text-gray-500">Verified veteran-owned partners across the country</p>
-            </div>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {featured.map(biz => (
-              <BusinessCard
-                key={biz.id}
-                business={biz}
-                isHighlighted={selectedBiz?.id === biz.id}
-                onSelect={handleSelect}
-              />
-            ))}
-          </div>
-        </div>
-      </section>
+      {/* ─── VOB Directory Preview ─── */}
+      <VOBPreview />
 
-      {/* ─── Main Directory ─── */}
-      <section id="directory" aria-labelledby="directory-heading" className="py-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between mb-5">
-            <div>
-              <h2 id="directory-heading" className="text-xl font-extrabold text-[#1A2C5B]">Business Directory</h2>
-              <p className="text-sm text-gray-500">Search and filter all {BUSINESSES.length} verified listings</p>
-            </div>
-
-            {/* View Mode Toggle */}
-            <div className="flex items-center gap-1 bg-white rounded-xl border border-gray-200 p-1 shadow-sm">
-              {(
-                [
-                  { mode: 'split', Icon: MapIcon,          label: 'Split' },
-                  { mode: 'list',  Icon: ListBulletIcon,   label: 'List'  },
-                  { mode: 'map',   Icon: MapPinIcon,       label: 'Map'   },
-                ] as const
-              ).map(({ mode, Icon, label }) => (
-                <button
-                  key={mode}
-                  onClick={() => setViewMode(mode)}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold transition-all focus:outline-none focus:ring-2 focus:ring-blue-300 ${
-                    viewMode === mode
-                      ? 'bg-[#1A2C5B] text-white'
-                      : 'text-gray-500 hover:text-[#1A2C5B] hover:bg-gray-50'
-                  }`}
-                  aria-pressed={viewMode === mode}
-                  aria-label={`${label} view`}
-                >
-                  <Icon className="h-3.5 w-3.5" aria-hidden="true" />
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Filters */}
-          <div className="mb-5">
-            <FilterBar filters={filters} onChange={setFilters} totalResults={filtered.length} />
-          </div>
-
-          {/* Split / Map / List layout */}
-          {viewMode === 'split' && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-              {/* List side */}
-              <div className="space-y-4 max-h-[75vh] overflow-y-auto pr-1">
-                {filtered.length === 0 ? (
-                  <div className="text-center py-16 text-gray-400">
-                    <BuildingStorefrontIcon className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                    <p className="font-semibold">No businesses match your filters</p>
-                    <p className="text-sm">Try clearing some filters to see more results</p>
-                  </div>
-                ) : (
-                  filtered.map(biz => (
-                    <BusinessCard
-                      key={biz.id}
-                      business={biz}
-                      isHighlighted={selectedBiz?.id === biz.id}
-                      onSelect={handleSelect}
-                    />
-                  ))
-                )}
-              </div>
-              {/* Map side */}
-              <div className="h-[75vh] rounded-2xl overflow-hidden shadow-md border border-gray-100 sticky top-4">
-                <VOBMap
-                  businesses={filtered}
-                  highlighted={selectedBiz}
-                  onSelect={handleSelect}
-                />
-              </div>
-            </div>
-          )}
-
-          {viewMode === 'list' && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-              {filtered.length === 0 ? (
-                <div className="col-span-full text-center py-16 text-gray-400">
-                  <BuildingStorefrontIcon className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                  <p className="font-semibold">No businesses match your filters</p>
-                  <p className="text-sm">Try clearing some filters to see more results</p>
-                </div>
-              ) : (
-                filtered.map(biz => (
-                  <BusinessCard
-                    key={biz.id}
-                    business={biz}
-                    isHighlighted={selectedBiz?.id === biz.id}
-                    onSelect={handleSelect}
-                  />
-                ))
-              )}
-            </div>
-          )}
-
-          {viewMode === 'map' && (
-            <div className="h-[80vh] rounded-2xl overflow-hidden shadow-md border border-gray-100">
-              <VOBMap
-                businesses={filtered}
-                highlighted={selectedBiz}
-                onSelect={handleSelect}
-              />
-            </div>
-          )}
-        </div>
-      </section>
-
-      {/* ─── Real Estate / RERN ─── */}
-      <RealEstatePanel />
+      {/* ─── RERN / Home Base Preview ─── */}
+      <RERNPreview />
 
       {/* ─── List Your Business CTA ─── */}
       <section
-        id="list-your-biz"
+        id="list-business"
         aria-labelledby="list-biz-heading"
-        className="py-14 bg-white border-t border-gray-100"
+        className="py-16 sm:py-20 bg-white border-t border-gray-100"
       >
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <div className="h-14 w-14 rounded-2xl bg-[#1A2C5B]/5 flex items-center justify-center mx-auto mb-5">
@@ -306,7 +125,7 @@ export default function LocalPage() {
               { title: 'Featured Placement', desc: 'Pin to top of category and map. Starting at $250/month for SDVOSB-certified.' },
               { title: 'Verified Badge', desc: 'Gold SDVOSB or Veteran-Owned badge added after VetBiz/CVE verification review.' },
             ].map(item => (
-              <div key={item.title} className="bg-gray-50 rounded-xl p-4 text-left border border-gray-100">
+              <div key={item.title} className="bg-gray-50 rounded-2xl p-4 text-left border border-gray-100 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all">
                 <h3 className="text-sm font-extrabold text-[#1A2C5B] mb-1">{item.title}</h3>
                 <p className="text-xs text-gray-500 leading-relaxed">{item.desc}</p>
               </div>
@@ -316,15 +135,23 @@ export default function LocalPage() {
       </section>
 
       {/* ─── Explore Related ─── */}
-      <section aria-labelledby="local-related-heading" className="py-12 bg-gray-50 border-t border-gray-100">
+      <section id="explore" aria-labelledby="local-related-heading" className="py-16 sm:py-20 bg-gray-50 border-t border-gray-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <h2 id="local-related-heading" className="text-xl font-extrabold text-[#1A2C5B] mb-6 text-center">
             Explore More Vet1Stop Tools
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <Link
+              href="/local/home-base"
+              className="group flex flex-col items-center p-6 bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            >
+              <HomeModernIcon className="h-10 w-10 text-[#EAB308] mb-3 group-hover:scale-110 transition-transform" aria-hidden="true" />
+              <h3 className="text-lg font-extrabold text-[#1A2C5B] mb-1">Home Base</h3>
+              <p className="text-center text-sm text-gray-500">VA real estate agents and home loan tools</p>
+            </Link>
             <Link
               href="/careers"
-              className="group flex flex-col items-center p-6 bg-white rounded-2xl border border-gray-100 hover:shadow-lg hover:-translate-y-1 transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+              className="group flex flex-col items-center p-6 bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
             >
               <BuildingStorefrontIcon className="h-10 w-10 text-[#1A2C5B] mb-3 group-hover:scale-110 transition-transform" aria-hidden="true" />
               <h3 className="text-lg font-extrabold text-[#1A2C5B] mb-1">Careers</h3>
@@ -332,7 +159,7 @@ export default function LocalPage() {
             </Link>
             <Link
               href="/education"
-              className="group flex flex-col items-center p-6 bg-white rounded-2xl border border-gray-100 hover:shadow-lg hover:-translate-y-1 transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+              className="group flex flex-col items-center p-6 bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
             >
               <MapIcon className="h-10 w-10 text-[#1A2C5B] mb-3 group-hover:scale-110 transition-transform" aria-hidden="true" />
               <h3 className="text-lg font-extrabold text-[#1A2C5B] mb-1">Education</h3>
@@ -340,7 +167,7 @@ export default function LocalPage() {
             </Link>
             <Link
               href="/health"
-              className="group flex flex-col items-center p-6 bg-white rounded-2xl border border-gray-100 hover:shadow-lg hover:-translate-y-1 transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+              className="group flex flex-col items-center p-6 bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
             >
               <ShieldCheckIcon className="h-10 w-10 text-[#EAB308] mb-3 group-hover:scale-110 transition-transform" aria-hidden="true" />
               <h3 className="text-lg font-extrabold text-[#1A2C5B] mb-1">Health</h3>
