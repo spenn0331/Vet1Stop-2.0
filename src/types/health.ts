@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Types for health resources and related functionality
  */

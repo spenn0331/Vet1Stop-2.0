@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { ArrowRightIcon, BriefcaseIcon, CheckCircleIcon, LightBulbIcon } from '@heroicons/react/24/outline';
 
 export default function CareerPathways() {

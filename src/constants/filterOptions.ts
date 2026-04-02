@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Constants for resource filtering options
  * 

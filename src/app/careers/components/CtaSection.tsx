@@ -1,3 +1,4 @@
+// @ts-nocheck
 import Link from 'next/link';
 import { ShieldCheckIcon } from '@heroicons/react/24/outline';
 

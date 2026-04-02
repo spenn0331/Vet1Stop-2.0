@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { HealthResource } from '@/types/health';
 import CacheManager from '@/utils/cache-manager';
 

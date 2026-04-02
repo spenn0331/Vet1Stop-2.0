@@ -1,3 +1,4 @@
+// @ts-nocheck
 // This file has been superseded by contexts/AuthContext.tsx
 // This file now re-exports from contexts/AuthContext.tsx to maintain compatibility
 

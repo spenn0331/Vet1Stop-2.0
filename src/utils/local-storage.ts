@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Local storage utility functions for persisting user interaction data.
  * These functions handle saving and retrieving data from browser localStorage

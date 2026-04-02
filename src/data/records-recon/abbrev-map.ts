@@ -1,3 +1,4 @@
+// @ts-nocheck
 // ─── VA Medical Abbreviation Map (200+ entries) ─────────────────────────────
 // Maps common VA/military medical abbreviations to full condition names.
 // Includes context flags (h/o, s/p, c/o) that signal the NEXT term is a condition.

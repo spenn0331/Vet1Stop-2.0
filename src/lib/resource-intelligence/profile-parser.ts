@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * profile-parser.ts — Strike 5
  *

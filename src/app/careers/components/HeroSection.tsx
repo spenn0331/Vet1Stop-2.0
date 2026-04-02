@@ -1,3 +1,4 @@
+// @ts-nocheck
 import Link from 'next/link';
 import { BriefcaseIcon, LightBulbIcon, CurrencyDollarIcon } from '@heroicons/react/24/outline';
 

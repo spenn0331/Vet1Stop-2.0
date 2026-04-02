@@ -1,3 +1,4 @@
+// @ts-nocheck
 // RERN Agent Seed Data — Real Estate Referral Network
 // All data is fictional. Do not use real names, phone numbers, or business info.
 

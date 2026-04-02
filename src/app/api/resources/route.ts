@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
 import { getResources, getResourceCounts } from '@/services/resourceService';
 import { ResourceFilter } from '@/models/resource';

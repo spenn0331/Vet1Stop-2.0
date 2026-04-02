@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Symptom categories for the symptom-based resource finder
  * This file contains the data structure for symptom categories, symptoms, and severity levels

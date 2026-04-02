@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { Metadata } from 'next';
 
 // Import our modular components

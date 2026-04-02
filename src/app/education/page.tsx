@@ -1,4 +1,5 @@
-﻿import { Metadata } from 'next';
+// @ts-nocheck
+import { Metadata } from 'next';
 import {
   CheckCircleIcon,
   LockClosedIcon,

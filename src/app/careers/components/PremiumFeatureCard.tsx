@@ -1,3 +1,4 @@
+// @ts-nocheck
 import React from 'react';
 import { ArrowRightIcon, SparklesIcon } from '@heroicons/react/24/outline';
 

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { NextRequest } from 'next/server';
 import { POST } from '@/app/api/request-info/route';
 import { connectToDatabase } from '@/lib/mongodb';

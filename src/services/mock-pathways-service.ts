@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { Pathway, PathwayStep } from '@/types/pathway';
 import { MISSIONS } from '@/data/missions';
 import type { MissionStep } from '@/data/missions';

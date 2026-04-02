@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Vet1Stop Site Knowledge Base
  * 

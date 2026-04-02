@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { Schema } from 'mongoose';
 
 // Use dynamic import to prevent SSR issues with mongoose

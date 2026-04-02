@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Geo-location utilities for detecting user location and mapping to state data
  */

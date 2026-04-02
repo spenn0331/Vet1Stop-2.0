@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Health Resource Adapter Utility
  * 

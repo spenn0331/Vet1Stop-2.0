@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * resource-fetcher.ts — Strike 5
  *

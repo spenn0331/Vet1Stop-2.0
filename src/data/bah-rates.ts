@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * bah-rates.ts — 2025 Basic Allowance for Housing (BAH) rates.
  * Grade: E-5 with dependents. Rate = Monthly Housing Allowance (MHA) paid

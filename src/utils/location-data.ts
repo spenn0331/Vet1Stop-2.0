@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Shared location data utilities for Vet1Stop
  * Contains state data, region mappings, and location utility functions

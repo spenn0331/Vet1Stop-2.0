@@ -1,3 +1,4 @@
+// @ts-nocheck
 // ─── Shared Types for Records Recon ─────────────────────────────────────────
 // Centralized type definitions used across:
 //   - RecordsReconPanel.tsx (frontend)

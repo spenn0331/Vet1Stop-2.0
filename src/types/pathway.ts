@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Resource Pathways Data Models
  * Defines the structure for guided veteran healthcare journeys

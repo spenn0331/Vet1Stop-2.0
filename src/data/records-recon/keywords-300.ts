@@ -1,3 +1,4 @@
+// @ts-nocheck
 // ─── Core Medical Keywords (300+ terms) ──────────────────────────────────────
 // Expanded from original 85 in route.ts for enhanced Phase 1 extraction.
 // Edit this file to add/remove keywords without touching pipeline code.

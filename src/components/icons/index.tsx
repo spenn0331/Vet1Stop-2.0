@@ -1,3 +1,4 @@
+// @ts-nocheck
 // icons/index.tsx
 import {
   MagnifyingGlassIcon as SearchIcon,

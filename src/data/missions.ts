@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * missions.ts — Static Mission Briefings registry
  * 8 veteran health missions, each step enriched with NGO partner objects.

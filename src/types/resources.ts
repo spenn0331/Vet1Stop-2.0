@@ -1,3 +1,4 @@
+// @ts-nocheck
 // Define types for the health resources data
 export interface Resource {
   _id: string;

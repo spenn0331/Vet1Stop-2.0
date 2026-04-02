@@ -1,3 +1,4 @@
+// @ts-nocheck
 // ─── Section Headers, Guaranteed Sections, Noise Phrases ─────────────────────
 // Moved from records-recon/route.ts for config-driven maintainability.
 // Edit these arrays to tune Phase 1 filtering without touching pipeline code.

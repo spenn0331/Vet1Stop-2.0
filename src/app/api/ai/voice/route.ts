@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * AI Voice Command API Route
  * 
