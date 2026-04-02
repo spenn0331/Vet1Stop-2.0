@@ -22,7 +22,7 @@
 | ✅ 1 | Health Page MVP | Complete | All sprints shipped Mar 15–16 |
 | ✅ 2 | Education Page | Complete | Shipped Mar 16, 2026 |
 | 🔲 3 | **Life & Leisure Page** | Next after Local | Veteran recreation, travel, discounts |
-| 🟡 4 | **Local VOB Directory** | In Progress — Mar 21, 2026 | Leaflet map + 25 seed businesses + Golden Goose VA loan panel built |
+| 🟡 4 | **Local VOB Directory** | In Progress — Mar 21, 2026 | Leaflet map + 25 seed businesses + RERN VA loan panel built |
 | 🔲 5 | **Partner Analytics Dashboard** | Planned post-Life/Leisure | See blueprint below ⬇️ |
 | 🔲 6 | PCS Commander + Smart Bridge | Year 1 Q3 | Relocation tool integration |
 

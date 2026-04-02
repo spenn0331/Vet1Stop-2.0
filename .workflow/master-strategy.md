@@ -235,7 +235,7 @@ Net-income scenario planner by school/zip.
 
 ### **IV. The Financial & Career Layer – Phase 1–2**
 
-#### **12. Home Base** – Full relocation Gantt chart + broker referral (Golden Goose revenue)
+#### **12. Home Base** – Full relocation Gantt chart + broker referral (RERN revenue)
 
 **How it works:** Enter move details → auto-pulls BAH/schools/housing → interactive timeline. "Find Housing" triggers vetted VA-loan broker pop-up and lead capture.
 
@@ -290,7 +290,7 @@ Vet1Stop is designed to be the premier digital social ecosystem exclusively for 
 ### **Monetization Ties (Built-In from Day 1)**
 
 * **Premium ($9.99/mo or $99/yr):** Unlimited AI scans, priority exports, ad-free experience
-* **Golden Goose Referral Fees:** Home Base + Local Directory → vetted VA-loan brokers (~$2,250 per $300k closing)
+* **RERN Referral Fees:** Home Base + Local Directory → vetted VA-loan brokers (~$2,250 per $300k closing)
 * **Featured NGO/Business Spotlight:** $250–$1,000/mo algorithmic pinning
 * **Education Lead-Gen:** $50–$200 per qualified match. Core platform remains 100% free
 
@@ -311,7 +311,7 @@ This mapping shows exactly where every feature lives on the site/app and its tar
 ★ = Highest priority (revenue drivers + core user value)
 
 * Health page (Symptom Finder + Records Recon) ★
-* Home Base + Real Estate Referral Network (Golden Goose revenue engine) ★
+* Home Base + Real Estate Referral Network (RERN revenue engine) ★
 * Local VOB Directory with Real Estate & Housing category ★
 * Auto-Fill Engine, Contract Highlighter, Smart Matching (quick utility wins) ★
 * GI Bill Pathfinder & School Finder (Education page)
@@ -354,7 +354,7 @@ This mapping shows exactly where every feature lives on the site/app and its tar
 
 ### **Life & Leisure Page (/life)**
 
-* Home Base – Relocation Gantt chart \+ VA-loan broker referral (Golden Goose revenue) (Phase 1, ★)  
+* Home Base – Relocation Gantt chart \+ VA-loan broker referral (RERN revenue) (Phase 1, ★)  
 * Contract Highlighter (Overwatch Shield) – SCRA/MLA violation scanner (Phase 1, ★)  
 * Pension Poacher Detector – Scam email/text scanner \+ report generator (Phase 1\)  
 * Tax Shield Optimizer – Combat-zone refund finder \+ pre-filled IRS forms (Phase 1\)  
@@ -363,7 +363,7 @@ This mapping shows exactly where every feature lives on the site/app and its tar
 
 ### **Local Page (/local)**
 
-* Local VOB Directory – Interactive Google Maps for verified veteran-owned businesses (Phase 1, ★) (Includes dedicated Real Estate & Housing category for Golden Goose referrals)
+* Local VOB Directory – Interactive Google Maps for verified veteran-owned businesses (Phase 1, ★) (Includes dedicated Real Estate & Housing category for RERN referrals)
 
 ### **Shop Page (/shop)**
 
@@ -563,7 +563,7 @@ This pillar leverages Vet1Stop’s role as a "Verified Gateway." We monetize the
   * **Trust Badge**: Organizations undergo a basic vetting process (IRS 501(c)(3) status verification) and receive a "Vet1Stop Verified" badge, increasing their credibility with the user base.  
   * **Billing**: Automated recurring billing facilitated via **Stripe Billing**.
 
-#### **2. Veteran Home-Front Referral Network (Real Estate) "The GOLDEN GOOSE"**
+#### **2. Veteran Home-Front Referral Network (Real Estate) "The RERN"**
 
 **Model:** Referral Fee (Industry Standard: 25% of the agent's Gross Commission Income) upon closing. This positions the network as a high-margin, low-overhead revenue driver, generating ~$2,250 per $300,000 home closing—equivalent to 225 premium subscribers at $9.99/mo. It leverages Vet1Stop's veteran-focused user base for qualified, high-intent leads in VA Loans and housing.
 
@@ -641,7 +641,7 @@ Rollout in Q2 2026 (April–June) per Operations Timeline, integrated into "Loca
 
   * Quarterly reviews with broker for compliance; adjust split if role expands.
 
-This "Golden Goose" accelerates bootstrapped growth by turning platform traffic into immediate cash flow, funding dev without equity dilution. **Prioritize broker hire**
+This "RERN" accelerates bootstrapped growth by turning platform traffic into immediate cash flow, funding dev without equity dilution. **Prioritize broker hire**
 
 #### **C. Education & Trade Lead Gen**
 
@@ -725,7 +725,7 @@ Transitions Vet1Stop from a "Website" to a "Movement." It provides a high-energy
 * [x] **Dev:** Resources database schema + MongoDB seeding (218+ health resources, 23+ education NGOs)
 * [ ] **Action:** File LLC & Bank Account ← **NEXT LEGAL PRIORITY**
 
-**Q2 (Apr - Jun): Local Launch + Golden Goose 🔥**
+**Q2 (Apr - Jun): Local Launch + RERN 🔥**
 * [ ] **Dev:** Build "Local" VOB Directory — Leaflet map + Real Estate & Housing category (Phase 1 #2 priority per strategy)
 * [ ] **Legal:** File LLC as Broker Corporation/LLC (PA PALS portal) + hire broker-of-record
 * [ ] **Dev:** Lead-Routing API + Agent Portal (milestone tracking: Sent → Contacted → Closing)
@@ -813,7 +813,7 @@ Transitions Vet1Stop from a "Website" to a "Movement." It provides a high-energy
 
 ### **Phase 1: Year 1 — Full 12-Month P&L**
 
-**Theme:** Founding Member deal builds the cash cushion. NGO subscriptions build the floor. Golden Goose activates in Month 6. The cumulative position never goes negative.
+**Theme:** Founding Member deal builds the cash cushion. NGO subscriptions build the floor. RERN activates in Month 6. The cumulative position never goes negative.
 
 #### Revenue by Month
 
@@ -943,7 +943,7 @@ Transitions Vet1Stop from a "Website" to a "Movement." It provides a high-energy
 ### **CFO Analysis: The Critical Path**
 
 1. **The Founding Member deal** keeps cumulative cash positive through the M3–M4 burn dip. Launch Day 1, cap at 65 spots, price at $99.
-2. **The Golden Goose** (real estate) is the highest-margin single stream. One closing ($2,250) = 225 premium subscribers. BOR infrastructure must be built in parallel with the Local directory — not after.
+2. **The RERN** (real estate) is the highest-margin single stream. One closing ($2,250) = 225 premium subscribers. BOR infrastructure must be built in parallel with the Local directory — not after.
 3. **NGO + VBP subscriptions** are the predictable floor. Not market-dependent. Scale these aggressively in Months 1–6 before real estate revenue arrives.
 4. **Real estate is the swing variable.** 2 closings in M6 instead of 1 materially improves the half-year net. A housing slowdown can trim Year 2 net by $150k–$300k. The diversified 12-stream model is the hedge.
 5. **Renegotiate BOR to 15% split** once closings consistently exceed 10/month. That change alone adds ~$2,700/mo at 12 closings/month.

@@ -265,7 +265,7 @@ export default function LocalPage() {
         </div>
       </section>
 
-      {/* ─── Real Estate / Golden Goose ─── */}
+      {/* ─── Real Estate / RERN ─── */}
       <RealEstatePanel />
 
       {/* ─── List Your Business CTA ─── */}

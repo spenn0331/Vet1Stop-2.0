@@ -20,7 +20,7 @@ const VA_LOAN_BENEFITS = [
   { title: 'Streamline Refinance (IRRRL)', desc: 'Refinance your VA loan with minimal paperwork and no appraisal required.' },
 ];
 
-const GOLDEN_GOOSE_BROKERS = [
+const RERN_AGENTS = [
   {
     id: 'gg-001',
     name: 'Delta Realty Group',
@@ -198,33 +198,33 @@ export default function RealEstatePanel() {
             </div>
           </div>
 
-          {/* Right: Golden Goose Broker Cards */}
+          {/* Right: RERN Agent Cards */}
           <div className="lg:col-span-1">
             <h3 className="text-sm font-extrabold text-[#EAB308] uppercase tracking-widest mb-4">Veteran VA Loan Partners</h3>
             <div className="space-y-3">
-              {GOLDEN_GOOSE_BROKERS.map(broker => (
+              {RERN_AGENTS.map(agent => (
                 <div
-                  key={broker.id}
+                  key={agent.id}
                   className="bg-white/10 backdrop-blur-sm rounded-2xl border border-white/15 p-4 hover:bg-white/15 transition-colors"
                 >
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <div>
-                      <h4 className="text-sm font-extrabold text-white">{broker.name}</h4>
-                      <p className="text-xs text-white/60">{broker.title} · {broker.city}</p>
+                      <h4 className="text-sm font-extrabold text-white">{agent.name}</h4>
+                      <p className="text-xs text-white/60">{agent.title} · {agent.city}</p>
                     </div>
                     <span className="flex-shrink-0 px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold border border-emerald-500/30">
-                      {broker.badge}
+                      {agent.badge}
                     </span>
                   </div>
-                  <p className="text-xs text-[#EAB308] font-semibold mb-1">{broker.specialty}</p>
-                  <p className="text-xs text-white/50 mb-3">{broker.closings} VA closings · {broker.highlight}</p>
+                  <p className="text-xs text-[#EAB308] font-semibold mb-1">{agent.specialty}</p>
+                  <p className="text-xs text-white/50 mb-3">{agent.closings} VA closings · {agent.highlight}</p>
                   <a
-                    href={`tel:${broker.phone.replace(/\D/g, '')}`}
+                    href={`tel:${agent.phone.replace(/\D/g, '')}`}
                     className="flex items-center gap-2 w-full py-2 px-4 rounded-xl bg-white/10 border border-white/20 text-white text-xs font-bold hover:bg-white/20 transition-colors focus:outline-none focus:ring-2 focus:ring-white/30 justify-center"
-                    aria-label={`Call ${broker.name}`}
+                    aria-label={`Call ${agent.name}`}
                   >
                     <PhoneIcon className="h-3.5 w-3.5" aria-hidden="true" />
-                    {broker.phone}
+                    {agent.phone}
                   </a>
                 </div>
               ))}

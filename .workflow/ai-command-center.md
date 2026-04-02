@@ -171,7 +171,7 @@ Result:   Every tool has a fresh snapshot every morning
 | Git Commit Reminder | Cron (every 3 hrs) | Alert if no commits in 3+ hours | 🔥 Immediate |
 | Content Freshness | Cron (weekly) | Ping all resource URLs, flag 404s | 🔥 Immediate |
 | Build Health Monitor | GitHub webhook (push) | Alert if build fails | 🔥 Immediate |
-| Real Estate Lead Capture | Webhook (form submit) | Save lead → notify broker → confirm veteran | ★ Before Golden Goose live |
+| Real Estate Lead Capture | Webhook (form submit) | Save lead → notify broker → confirm veteran | ★ Before RERN live |
 | NVWI Data Pipeline | Cron (weekly) | Aggregate wellness cohort data | After 10 opt-ins |
 | NGO of the Month | Cron (monthly) | Auto-select top-rated NGO | After 10+ NGOs |
 | Partner Analytics Digest | Cron (weekly) | Stats email to paying partners | After Partner Dashboard |

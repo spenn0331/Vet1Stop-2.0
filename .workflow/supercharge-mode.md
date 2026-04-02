@@ -421,7 +421,7 @@ n8n is being set up NOW as a core infrastructure tool — not deferred to post-l
 
 - Automates repetitive dev operations (commit reminders, build checks)
 - Content freshness monitoring prevents stale resources from shipping in MVP
-- Lead capture infrastructure must be wired before Golden Goose real estate panel goes live
+- Lead capture infrastructure must be wired before RERN real estate panel goes live
 - Partner data pipelines should be tested before the first pitch
 - Low cost ($5/mo self-hosted) fits bootstrap budget
 - n8n connects natively to MongoDB, Firebase, GitHub, and email — the entire Vet1Stop stack
@@ -452,11 +452,11 @@ n8n is being set up NOW as a core infrastructure tool — not deferred to post-l
 **Value:** Prevents embarrassing broken links in the MVP demo
 
 #### Workflow 3: Real Estate Lead Capture Pipeline
-**Trigger:** Webhook — fires when Golden Goose real estate form is submitted on Local page
+**Trigger:** Webhook — fires when RERN real estate form is submitted on Local page
 **Logic:** Validate form data → save to MongoDB `leads` collection → send notification to partnered VA loan broker → send confirmation email to veteran
 **Output:** Lead in DB + broker notified + veteran gets "We'll be in touch" email
 **Effort:** Medium — 3-4 hours setup
-**Value:** Revenue-generating — this is the Golden Goose that funds the platform
+**Value:** Revenue-generating — this is the RERN that funds the platform
 
 #### Workflow 4: NVWI Data Pipeline
 **Trigger:** Cron — weekly (Monday 6 AM)
@@ -498,7 +498,7 @@ n8n is being set up NOW as a core infrastructure tool — not deferred to post-l
 | 🔥 1 | Git Commit Reminder | This week | Enforces the 3-hour commit rule for both devs |
 | 🔥 2 | Content Freshness Monitor | This week | Catch broken resource links before MVP demo |
 | 🔥 3 | Build Health Monitor | This week | Know instantly when a Cascade breaks the build |
-| ★ 4 | Real Estate Lead Capture | Before Golden Goose panel goes live | Revenue pipeline |
+| ★ 4 | Real Estate Lead Capture | Before RERN panel goes live | Revenue pipeline |
 | 5 | NVWI Data Pipeline | After first 10 wellness opt-ins | Data product foundation |
 | 6 | NGO of the Month | After 10+ NGOs in system | Automation convenience |
 | 7 | New Resource Notification | After 100+ resources | Admin convenience |
