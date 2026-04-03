@@ -1,3 +1,4 @@
+<!-- Status: ACTIVE | Last Updated: 2026-04-02 -->
 # Health Page Documentation Index
 
 ## Overview
@@ -10,8 +11,8 @@ This document serves as a central index for all documentation related to the Vet
 | [Health Page UX Implementation Plan](./health-page-ux-implementation-plan.md) | Comprehensive guide for all UX improvements | Implementation steps, UX principles, feature priorities |
 | [Health Page Blueprint](./pages-health.md) | Core structure and technical architecture | Page organization, component structure, core features |
 | [Health Page Refactoring Documentation](./health-page-refactoring-documentation.md) | Comprehensive refactoring details | Component improvements, type consolidation, technical debt reduction |
-| [Resource UX/UI Recommendations](./resource-ux-ui-recommendations.md) | Guidelines for resource presentation | Card design, filtering mechanisms, search functionality |
-| [NGO Resources Enhancement Implementation](./ngos-resources-enhancement-implementation.md) | Implementation of NGO resources section | NGO resource display, filtering, search |
+| [Resource UX/UI Recommendations](./_archive/resource-ux-ui-recommendations.md) | *(Archived 2026-04-02 — completed items baked into codebase, pending items migrating to Notion)* | Card design, filtering mechanisms, search functionality |
+| [NGO Resources Enhancement Implementation](./_archive/ngos-resources-enhancement-implementation.md) | *(Archived 2026-04-02 — key details merged into pages-health.md)* | NGO resource display, filtering, search |
 | [Health Page UX Implementation Progress](./health-page-ux-implementation-progress.md) | Implementation progress and status | Implementation status, completed tasks, pending tasks |
 
 ## Feature-Specific Implementation Guides

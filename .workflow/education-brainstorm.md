@@ -1,3 +1,4 @@
+<!-- Status: ACTIVE | Last Updated: 2026-03-21 -->
 # Education Page — Brainstorm & Feature Vision
 **Session Date:** March 21, 2026
 **Status:** Brainstorming / Pre-Sprint Planning

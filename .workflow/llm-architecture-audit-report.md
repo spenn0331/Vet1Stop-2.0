@@ -1,3 +1,4 @@
+<!-- Status: ACTIVE | Last Updated: 2026-03-04 -->
 # Vet1Stop LLM Architecture Audit Report
 
 **Date:** March 4, 2026  

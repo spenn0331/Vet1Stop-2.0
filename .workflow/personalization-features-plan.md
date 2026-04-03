@@ -1,3 +1,4 @@
+<!-- Status: ACTIVE | Last Updated: 2026-04-02 -->
 # Personalization Features Plan for Vet1Stop Health Page
 
 ## Objective

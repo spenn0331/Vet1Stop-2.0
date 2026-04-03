@@ -1,3 +1,4 @@
+<!-- Status: ACTIVE | Last Updated: 2026-04-02 -->
 # Vercel Deployment Guide for Vet1Stop Next.js Application
 
 ## Overview

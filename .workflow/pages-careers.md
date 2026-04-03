@@ -1,3 +1,4 @@
+<!-- Status: ACTIVE | Last Updated: 2026-04-02 -->
 # Careers & Entrepreneurship Page Blueprint
 
 ## Purpose & Goals

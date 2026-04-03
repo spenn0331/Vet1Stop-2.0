@@ -1,3 +1,4 @@
+<!-- Status: ACTIVE | Last Updated: 2026-04-02 -->
 # Grok AI Integration Strategy for Vet1Stop
 
 ## Overview

@@ -1,3 +1,4 @@
+<!-- Status: ACTIVE | Last Updated: 2026-04-02 -->
 # Health Page Blueprint
 
 ## Purpose & Goals
@@ -234,7 +235,7 @@ Resources for managing prescriptions, understanding medication interactions, and
 - ✅ Resource feedback and tracking system
 - ✅ Advanced filtering with state selection and veteran-specific criteria
 - ✅ Tabbed navigation for content organization
-- ⬜ NGO/Non-profit dedicated section
+- ✅ NGO/Non-profit dedicated section (shipped April 2025 — advanced filtering by service type/branch/era, full-text search, service type icons, org badges, high-contrast mode, contact modal, share functionality, success stories, save-for-later; API: `/api/ngos` with MongoDB filter handling; Component: `NGOResourcesSection.tsx`)
 - ⬜ State-specific resource integration with geo-location
 - ⬜ Resource personalization features
 

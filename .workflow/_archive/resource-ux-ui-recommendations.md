@@ -1,3 +1,19 @@
+<!-- ARCHIVED 2026-04-02 — Completed items baked into codebase. Pending items below need Notion backlog cards (CoS will handle). -->
+<!-- PENDING FOR NOTION MIGRATION:
+  - Rec #6: Personalized Recommendation System (in progress)
+  - Rec #7: Resource Pathways (in progress)
+  - Rec #8: Interactive Filtering (pending)
+  - Rec #9: Needs-Based Navigation (pending)
+  - Rec #12: "Similar To" Recommendations (pending)
+  - Rec #13: NGO Spotlights & Success Stories (in progress)
+  - Rec #14: Visual Resource Map (pending)
+  - Rec #15: Guided Resource Wizard (pending)
+  - Rec #16: Resource Comparison Tool (pending)
+  - Rec #17: Resource Journey Timeline (pending)
+  - Rec #18: AI-Powered Resource Chat (pending)
+  - Rec #19: Resource Bundles for Common Scenarios (pending)
+  - Rec #20: Veteran Peer Reviews (pending)
+-->
 # Resource Section UX/UI Recommendations for Vet1Stop
 
 ## Implementation Status (Updated April 22, 2025)

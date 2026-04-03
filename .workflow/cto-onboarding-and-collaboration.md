@@ -1,3 +1,4 @@
+<!-- Status: ACTIVE | Last Updated: 2026-03-27 -->
 # CTO Onboarding & Two-Person Collaboration Guide
 
 **Created:** March 27, 2026

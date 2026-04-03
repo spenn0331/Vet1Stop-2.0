@@ -1,3 +1,4 @@
+<!-- Status: ACTIVE | Last Updated: 2026-04-02 -->
 # Health Page UX Implementation Plan for Vet1Stop
 
 ## Overview
@@ -63,7 +64,7 @@ The Health page on Vet1Stop contains a significant amount of information that ca
 
 This implementation plan works in conjunction with the following documentation files:
 
-1. **Resource UX/UI Recommendations**: `.workflow/resource-ux-ui-recommendations.md`
+1. **Resource UX/UI Recommendations**: `.workflow/_archive/resource-ux-ui-recommendations.md` *(archived 2026-04-02 — completed items baked into codebase, pending items migrating to Notion)*
    - Contains all UX/UI improvement recommendations for resource sections
    - Serves as the primary reference for feature implementation priorities
    - Defines detailed specifications for resource display and interaction
@@ -83,7 +84,7 @@ This implementation plan works in conjunction with the following documentation f
    - Documents start dates, completion dates, and key decisions
    - Provides a high-level overview of progress across all pages
 
-5. **Database Reformulation Plan**: `.workflow/database-reformulation-plan.md`
+5. **Database Reformulation Plan**: `.workflow/_archive/database-reformulation-plan.md` *(archived 2026-04-02 — April 2025 one-time migration plan)*
    - Details the plan for migrating from static to dynamic data
    - Provides specifications for health resource data schema
    - Includes considerations for preserving existing resource data
@@ -147,7 +148,7 @@ This implementation plan works in conjunction with the following documentation f
   - Multiple filter criteria can be combined for precise resource discovery
   - Improved user experience with visual filtering tools that are intuitive to use
   - Enhanced accessibility for users with disabilities
-- **Related Documentation**: See `resource-ux-ui-recommendations.md` (Recommendation #8: Interactive Filtering)
+- **Related Documentation**: See `_archive/resource-ux-ui-recommendations.md` (Recommendation #8: Interactive Filtering)
 - **Date Completed**: 2025-04-15
 
 ### Tab Navigation System (COMPLETED)
@@ -161,7 +162,7 @@ This implementation plan works in conjunction with the following documentation f
   - Keyboard navigation (arrow keys, home/end)
   - Focus management for screen readers
 - **Related Files**: 
-  - Implementation referenced in `.workflow/resource-ux-ui-recommendations.md` (Recommendation #3)
+  - Implementation referenced in `.workflow/_archive/resource-ux-ui-recommendations.md` (Recommendation #3)
   - Progress tracked in `.workflow/ux-ui-progress-log.md`
 
 ### Card View vs. List View Toggle (COMPLETED)
@@ -176,7 +177,7 @@ This implementation plan works in conjunction with the following documentation f
   - Consistent interaction patterns across both views
   - Proper ARIA controls for accessibility
 - **Related Files**:
-  - Implementation based on `.workflow/resource-ux-ui-recommendations.md` (Recommendation #4)
+  - Implementation based on `.workflow/_archive/resource-ux-ui-recommendations.md` (Recommendation #4)
   - Progress tracked in `.workflow/ux-ui-progress-log.md`
 
 ### Save/Favorite Functionality (COMPLETED)
@@ -192,8 +193,8 @@ This implementation plan works in conjunction with the following documentation f
   - Analytics tracking for save/unsave actions
   - Visual indicators for saved status on resource cards/list items
 - **Related Files**:
-  - Implementation based on `.workflow/resource-ux-ui-recommendations.md` (Recommendation #5)
-  - Follows database patterns in `.workflow/database-reformulation-plan.md`
+  - Implementation based on `.workflow/_archive/resource-ux-ui-recommendations.md` (Recommendation #5)
+  - Follows database patterns in `.workflow/_archive/database-reformulation-plan.md`
   - Progress tracked in `.workflow/ux-ui-progress-log.md`
 
 ### Resource Normalization (COMPLETED)
@@ -205,7 +206,7 @@ This implementation plan works in conjunction with the following documentation f
   - Ensures type safety across components
   - Simplifies component logic by centralizing data normalization
 - **Related Files**:
-  - Data structure aligns with `.workflow/database-reformulation-plan.md`
+  - Data structure aligns with `.workflow/_archive/database-reformulation-plan.md`
 
 ## Progress Update
 
@@ -500,7 +501,7 @@ This plan will be updated as each step progresses, with status changes and notes
 
 ## UX/UI Recommendations Implemented
 
-From `resource-ux-ui-recommendations.md`, we have now implemented:
+From `_archive/resource-ux-ui-recommendations.md`, we have now implemented:
 
 1. **Tabbed Navigation** (Recommendation #3)
    - Separated resources by major categories

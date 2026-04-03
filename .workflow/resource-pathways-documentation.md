@@ -1,3 +1,4 @@
+<!-- Status: ACTIVE | Last Updated: 2026-04-02 -->
 # Resource Pathways Feature Documentation
 
 *Last Updated: April 17, 2025*

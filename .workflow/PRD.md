@@ -1,3 +1,4 @@
+<!-- Status: ACTIVE | Last Updated: 2026-04-02 -->
 # Product Requirements Document (PRD)
 
 > **IMPORTANT: PRE-LAUNCH PLANNING DOCUMENT**  

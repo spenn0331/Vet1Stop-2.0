@@ -1,3 +1,4 @@
+<!-- Status: ACTIVE | Last Updated: 2026-04-02 -->
 # Vet1Stop Project Status — March 2026
 
 ## Quick Reference

@@ -1,3 +1,4 @@
+<!-- Status: ACTIVE | Last Updated: 2026-04-02 -->
 # MongoDB Resource Integration Issue and Resolution Plan
 
 ## Issue Overview
