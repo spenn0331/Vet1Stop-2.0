@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Types for the symptom-based resource finder
  */

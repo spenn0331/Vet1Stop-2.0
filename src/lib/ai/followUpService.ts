@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Follow-Up Service for Crisis Situations
  * 

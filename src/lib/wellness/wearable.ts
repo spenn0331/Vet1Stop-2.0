@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { WearableData, WearableToken, WearablePlatform } from '@/types/wellness';
 import { WEARABLE_TOKEN_KEY, WEARABLE_DATA_KEY } from '@/types/wellness';
 

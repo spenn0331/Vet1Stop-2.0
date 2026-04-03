@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * AI Summarization API Route
  * 

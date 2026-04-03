@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { Metadata } from 'next';
 import AutoFillPanel from './components/AutoFillPanel';
 

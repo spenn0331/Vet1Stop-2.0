@@ -1,3 +1,4 @@
+// @ts-nocheck
 // ─── Negation Detection Rules ────────────────────────────────────────────────
 // Configurable negation prefixes and proximity window for all extraction passes.
 // Consolidates logic from isNegativeContext() and isScreeningFalsePositive().

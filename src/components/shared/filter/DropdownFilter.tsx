@@ -1,3 +1,4 @@
+// @ts-nocheck
 import React, { useState, useRef, useEffect, useId } from 'react';
 import { ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/outline';
 

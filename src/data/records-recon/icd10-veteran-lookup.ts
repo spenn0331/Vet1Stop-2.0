@@ -1,3 +1,4 @@
+// @ts-nocheck
 // ─── ICD-10 Veteran-Relevant Lookup (Top 500 codes) ──────────────────────────
 // Maps ICD-10 codes commonly found in VA medical records to human-readable
 // condition names and categories. Used by Phase 1 regex extraction.

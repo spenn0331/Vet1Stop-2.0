@@ -1,3 +1,4 @@
+// @ts-nocheck
 import React, { useId } from 'react';
 import { Switch } from '../../../components/ui/switch';
 

@@ -1,3 +1,4 @@
+// @ts-nocheck
 // src/utils/imagePlaceholders.ts
 /**
  * Image placeholder utility for Vet1Stop

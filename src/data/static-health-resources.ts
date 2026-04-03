@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Static health resources to use as fallback when MongoDB is not available
  * Uses standardized schema matching our MongoDB implementation

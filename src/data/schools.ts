@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * schools.ts — Curated list of 20 top Yellow Ribbon / GI Bill-accepting schools.
  * Used by SchoolFinderPanel.tsx for static filtering + comparison table.

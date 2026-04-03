@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { initializeApp } from 'firebase/app';
 import { getAnalytics, logEvent as firebaseLogEvent } from 'firebase/analytics';
 

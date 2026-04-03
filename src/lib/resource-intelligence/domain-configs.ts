@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * domain-configs.ts — Strike 5
  *

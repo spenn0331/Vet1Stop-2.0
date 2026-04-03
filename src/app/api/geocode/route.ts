@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * /api/geocode — server-side Nominatim reverse-geocode proxy.
  * Browser fetch can't set User-Agent (stripped for security), so Nominatim

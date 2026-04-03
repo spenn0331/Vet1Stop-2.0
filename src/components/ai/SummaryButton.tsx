@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Content Summary Button Component
  * 

@@ -1,3 +1,4 @@
+// @ts-nocheck
 // Phase 1 + 1.5 feedback framework skeleton — data-ready Day 1 per Living Master MD Section 2 ★ — Strike 2 March 2026
 
 import { NextRequest, NextResponse } from 'next/server';

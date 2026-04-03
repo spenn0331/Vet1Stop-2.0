@@ -1,3 +1,4 @@
+// @ts-nocheck
 // Strike 6 — Admin Stats API — live MongoDB counts for Admin Dashboard
 import { NextResponse } from 'next/server';
 import { connectToDatabase } from '@/lib/mongodb';

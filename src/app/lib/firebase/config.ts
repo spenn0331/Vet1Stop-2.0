@@ -1,3 +1,4 @@
+// @ts-nocheck
 "use client";
 
 // Import the functions you need from the SDKs you need

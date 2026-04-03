@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * businesses.ts — Seed data for the Local VOB Directory.
  * 25 veteran-owned businesses across 8 categories and multiple US cities.

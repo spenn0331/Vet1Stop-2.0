@@ -65,7 +65,7 @@ export default function FilterBar({ filters, onChange, totalResults }: FilterBar
       </div>
 
       {/* Filter Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 transition-all duration-200">
         {/* Category */}
         <div>
           <label htmlFor="filter-category" className="block text-xs font-semibold text-gray-500 mb-1.5">
@@ -147,8 +147,8 @@ export default function FilterBar({ filters, onChange, totalResults }: FilterBar
 
       {/* Active filter summary */}
       <div className="mt-4 flex items-center justify-between">
-        <p className="text-xs text-gray-500">
-          <span className="font-bold text-[#1A2C5B]">{totalResults}</span> {totalResults === 1 ? 'business' : 'businesses'} found
+        <p className="text-lg font-semibold text-[#1A2C5B]">
+          {totalResults} {totalResults === 1 ? 'business' : 'businesses'} found
         </p>
         {hasActiveFilters && (
           <button
@@ -161,6 +161,52 @@ export default function FilterBar({ filters, onChange, totalResults }: FilterBar
           </button>
         )}
       </div>
+
+      {/* Active filter tags */}
+      {hasActiveFilters && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {filters.category && (
+            <button
+              onClick={() => set({ category: '' })}
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#1A2C5B]/10 text-[#1A2C5B] hover:bg-[#1A2C5B]/20 transition-colors"
+              aria-label={`Remove category filter: ${filters.category}`}
+            >
+              Category: {filters.category}
+              <XMarkIcon className="h-3 w-3" />
+            </button>
+          )}
+          {filters.status && (
+            <button
+              onClick={() => set({ status: '' })}
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#1A2C5B]/10 text-[#1A2C5B] hover:bg-[#1A2C5B]/20 transition-colors"
+              aria-label={`Remove status filter: ${filters.status}`}
+            >
+              Status: {filters.status}
+              <XMarkIcon className="h-3 w-3" />
+            </button>
+          )}
+          {filters.stateCode && (
+            <button
+              onClick={() => set({ stateCode: '' })}
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#1A2C5B]/10 text-[#1A2C5B] hover:bg-[#1A2C5B]/20 transition-colors"
+              aria-label={`Remove state filter: ${filters.stateCode}`}
+            >
+              State: {filters.stateCode}
+              <XMarkIcon className="h-3 w-3" />
+            </button>
+          )}
+          {filters.featuredOnly && (
+            <button
+              onClick={() => set({ featuredOnly: false })}
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#EAB308]/15 text-amber-800 hover:bg-[#EAB308]/25 transition-colors"
+              aria-label="Remove featured only filter"
+            >
+              Featured Only
+              <XMarkIcon className="h-3 w-3" />
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Category quick-filter pills */}
       <div className="mt-3 flex flex-wrap gap-2">

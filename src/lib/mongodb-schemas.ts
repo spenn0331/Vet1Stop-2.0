@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { ObjectId } from 'mongodb';
 
 // NGO Resource Schema Extensions

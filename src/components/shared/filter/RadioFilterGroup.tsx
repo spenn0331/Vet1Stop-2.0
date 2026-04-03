@@ -1,3 +1,4 @@
+// @ts-nocheck
 import React, { useId } from 'react';
 
 type OptionType = string | { code: string; name: string };

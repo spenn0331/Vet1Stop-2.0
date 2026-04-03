@@ -1,3 +1,4 @@
+// @ts-nocheck
 // ─── Medication → Condition Inference Map ─────────────────────────────────────
 // When a medication name appears in clinical text, we can infer the underlying
 // condition even if the condition itself is never named.

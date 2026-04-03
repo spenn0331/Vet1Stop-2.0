@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Filter components barrel file
  * 

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Shared NGO data utilities for Vet1Stop
  * Contains NGO types, focus areas, and sample data

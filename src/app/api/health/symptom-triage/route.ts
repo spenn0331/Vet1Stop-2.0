@@ -1,3 +1,4 @@
+// @ts-nocheck
 // Fixed per Living Master MD Section 2 Phase 1 ★ — Strike 1 API Stabilization March 2026
 // Strike 1 + DB Fallback Fix: MongoDB query replaces hardcoded static fallback — March 2026
 

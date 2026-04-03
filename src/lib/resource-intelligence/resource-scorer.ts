@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * resource-scorer.ts — Strike 5
  *

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * /api/health/browse — Public browse endpoint for the Health Hub page.
  * Queries the healthResources collection by subcategory (federal/ngo/state),

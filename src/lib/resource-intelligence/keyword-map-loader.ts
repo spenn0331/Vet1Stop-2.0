@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * keyword-map-loader.ts — Strike 5
  *

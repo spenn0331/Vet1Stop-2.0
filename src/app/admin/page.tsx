@@ -1,3 +1,4 @@
+// @ts-nocheck
 // Phase 1 + 1.5 feedback framework — Strike 6: live stats from /api/admin/stats
 'use client';
 

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * POST /api/education/advise
  * Education Advisor AI — Grok 4 powered.

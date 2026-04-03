@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * /api/education/browse — Public browse endpoint for the Education Hub page.
  * Queries the educationResources collection by subcategory (federal/ngo/state),

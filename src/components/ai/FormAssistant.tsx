@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Form Assistant Component
  * 

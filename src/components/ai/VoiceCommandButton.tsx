@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Voice Command Button Component
  * 

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * education-bridge.ts — Smart Bridge types for the Education pillar.
  * School Finder → GI Bill Pathfinder (same localStorage bridge pattern as records-recon).

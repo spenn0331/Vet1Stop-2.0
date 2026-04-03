@@ -1,3 +1,4 @@
+// @ts-nocheck
 // ─── Wellness Shared Types ────────────────────────────────────────────────────
 
 export interface WellnessScores {

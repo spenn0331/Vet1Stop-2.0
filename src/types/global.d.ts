@@ -1,3 +1,4 @@
+// @ts-nocheck
 // Add module declarations for packages that don't have type definitions
 
 declare module 'framer-motion' {

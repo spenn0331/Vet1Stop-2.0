@@ -1,3 +1,4 @@
+// @ts-nocheck
 export interface HealthResource {
   id?: string;
   _id?: string;

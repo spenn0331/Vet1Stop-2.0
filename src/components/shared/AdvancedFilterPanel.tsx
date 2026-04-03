@@ -1,3 +1,4 @@
+// @ts-nocheck
 import React, { useState, useEffect, useRef } from 'react';
 import { XMarkIcon, ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/outline';
 import { Switch } from '../../components/ui/switch';

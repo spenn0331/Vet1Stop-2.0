@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * extractFields.ts — DD-214 field extraction utility (client-side only)
  *

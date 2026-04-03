@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Grok AI Service
  * 

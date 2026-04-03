@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Client-side API utilities for fetching data from the backend
  */

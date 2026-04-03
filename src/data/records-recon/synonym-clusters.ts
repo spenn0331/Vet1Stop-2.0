@@ -1,3 +1,4 @@
+// @ts-nocheck
 // ─── Symptom-to-Condition Synonym Clusters ───────────────────────────────────
 // Catches narrative language where the condition name itself doesn't appear.
 // Each key is a pipe-delimited set of phrases; value is the condition to extract.

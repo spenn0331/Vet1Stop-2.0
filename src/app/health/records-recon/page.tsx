@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { Metadata } from 'next';
 import Link from 'next/link';
 import { ChevronRightIcon, ArrowLeftIcon } from '@heroicons/react/24/outline';

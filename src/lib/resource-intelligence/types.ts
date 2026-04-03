@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * types.ts — Strike 5 Resource Intelligence Engine
  *

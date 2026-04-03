@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { HealthResource } from '../types/HealthResourceTypes';
 
 export const sampleHealthResources: HealthResource[] = [

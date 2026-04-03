@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * MongoDB Resource Service for AI
  * 

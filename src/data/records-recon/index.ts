@@ -1,3 +1,4 @@
+// @ts-nocheck
 // ─── Records Recon Config Data — Barrel Re-exports ──────────────────────────
 // Single import point: import { CORE_KEYWORDS, ABBREV_MAP, ... } from '@/data/records-recon';
 

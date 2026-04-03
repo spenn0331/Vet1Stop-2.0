@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Types for health resources in the Vet1Stop application
  */

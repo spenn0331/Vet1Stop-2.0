@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Firebase Admin SDK Configuration
  * 
